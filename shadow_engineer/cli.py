@@ -16,7 +16,7 @@ def main():
     if args.command == "demo":
         runner = LocalFixtureRunner()
     else:
-        from contree_client.httpx import ContreeSyncClient
+        from contree_client.httpx import ContreeClient as ContreeSyncClient
         from contree_sdk import ContreeSync
         from .model import generate
         client = ContreeSyncClient(os.environ["NEBIUS_API_KEY"], base_url=os.environ["CONTREE_BASE_URL"])
