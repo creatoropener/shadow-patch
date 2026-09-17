@@ -16,11 +16,9 @@ def main():
     if args.command == "demo":
         runner = LocalFixtureRunner()
     else:
-        from contree_client.httpx import ContreeClient as ContreeSyncClient
-        from contree_sdk import ContreeSync
+        from .external_runners import build_sdk
         from .model import generate
-        client = ContreeSyncClient(os.environ["NEBIUS_API_KEY"], base_url=os.environ["CONTREE_BASE_URL"])
-        sdk = ContreeSync(client)
+        sdk = build_sdk()
         image = sdk.images.use(os.environ["CONTREE_IMAGE"], strict=True)
         runner = NebiusRunner(sdk, image)
         regression, candidates, model = generate(ISSUE, SOURCE)

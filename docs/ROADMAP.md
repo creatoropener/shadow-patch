@@ -1,5 +1,13 @@
 # Implementation milestones
 
+## 0.2 update — external repository readiness (delivered)
+
+Immutable base/head intake, separately drafted tests, locks, source allowlists,
+pytest/Node adapters, case identity checks and reports are implemented. The SDK
+constructor is corrected and pinned. 26 local tests pass; cloud calls remain unvalidated.
+The QR repository URL/ZIP is still needed. See EXTERNAL_REPOSITORY.md and QR_TEST_PLAN.md.
+Live account validation and GitHub publication below remain outstanding.
+
 ## M1 — Verification foundation (delivered)
 
 Executable seeded Python/pytest demo, candidate rejection, fresh replay,

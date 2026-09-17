@@ -1,0 +1,18 @@
+{
+  "schema": 2,
+  "base_commit": "737eeb2ebc48caee636856ad5e16debae604ebde",
+  "base_snapshot_sha256": "6708e0b8d0bb247ec124cb1b58d00e972991d05d0dc78952c9a404dff83b2b5b",
+  "runtime": "pytest",
+  "issue": "Shipping: 1\u20131000g costs 100; 1001\u20132000g costs 150. Exactly 1000g is overcharged.",
+  "suite": [
+    "tests/test_existing.py"
+  ],
+  "writable": [
+    "shipping.py"
+  ],
+  "regression_path": "tests/test_patchproof_locked.py",
+  "regression": "from shipping import shipping_rate\ndef test_reported_bug():\n    assert shipping_rate(1000) == 100\ndef test_next_gram():\n    assert shipping_rate(1001) == 150\n",
+  "regression_sha256": "3671982cfcca8a81929f4c687f30bc734a64848e236369750c0c38b3f906d6dd",
+  "test_provenance": "scripted fixture; not AI-generated",
+  "independence_claim": "separate test input; author independence not attested"
+}

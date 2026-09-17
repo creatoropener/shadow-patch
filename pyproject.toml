@@ -4,16 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shadow-engineer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Evidence-first Python repair prototype powered by PatchProof"
 requires-python = ">=3.11"
 dependencies = ["pytest>=8,<10"]
 
 [project.optional-dependencies]
-cloud = ["contree-sdk", "contree-client"]
+cloud = ["contree-sdk==0.3.6"]
 
 [project.scripts]
 shadow-engineer = "shadow_engineer.cli:main"
+patchproof = "shadow_engineer.patchproof_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["shadow_engineer*"]
