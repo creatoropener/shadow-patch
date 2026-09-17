@@ -23,6 +23,7 @@ def build_sdk():
     from contree_sdk.config import ContreeConfig
     return ContreeSync(ContreeConfig(
         auth=IAMAuth(token=os.environ.get("CONTREE_TOKEN") or os.environ["NEBIUS_API_KEY"],
+                     project_id=os.environ["NEBIUS_PROJECT_ID"],
                      base_url=os.environ["CONTREE_BASE_URL"]),
         transport_timeout=15, operation_timeout=90, operation_run_timeout=90))
 
@@ -50,6 +51,5 @@ class NebiusExternalRunner:
             raise RuntimeError("Nebius execution harness failed")
         parsed = json.loads(result.stdout)
         if not isinstance(parsed, dict): raise ValueError("Invalid provider evidence")
-        # Disposable executions may not retain a resulting image UUID.
         parsed["result_image_uuid"] = str(result.uuid) if result.uuid else None
         return parsed
