@@ -1,118 +1,119 @@
-# PatchProof / Shadow Engineer — v0.2.0
+# Shadow Engineer
 
-PatchProof verifies candidate fixes. Shadow Engineer remains the optional repair
-layer. This release adds external Git commit verification to the original demo.
+**Label a bug. Review a repair backed by independent test evidence.**
 
-## Status
+Shadow Engineer is a GitHub Actions MVP. Its PatchProof engine generates a
+regression before asking a solver for a patch, evaluates three repair candidates
+in isolated Nebius Token Factory sandbox branches, and replays the winner from a
+clean base image before opening a pull request. A human decides whether to merge.
 
-- Local end-to-end verification works for pytest and Node's built-in test runner.
-- Base/head commits, patch content, locked tests and policy are hashed.
-- Direct test edits and changes outside an application-file allowlist are blocked.
-- Tests can be supplied separately or drafted from base files through Token Factory.
-- JSON and Markdown reports record exact commits, case identities and replay outcomes.
-- SDK 0.3.6 construction has been checked against the installed package. Live Nebius
-  authentication, inference and VM execution have **not** been validated.
-- No QR-code repository has been received or tested. No PR/comment is posted.
+**Release: v0.5.5 · Track: Coding and Agentic Engineering**
 
-## Install
+[Setup](docs/SETUP.md) · [Architecture](docs/ARCHITECTURE.md) ·
+[Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
+[Submission text](docs/SUBMISSION.md)
 
-Python 3.11+ and Git are required. Node 24 is needed for Node fixtures/tests.
+![Recorded PatchProof evidence](docs/visuals/01-verification.png)
+
+## A demonstrated repair
+
+The file-sharing app displayed JavaScript expression fragments where users should
+see file sizes such as `1.0 KB`. Its speed display inherited the same defect.
+
+- [Bug report: file-sharing-app #1](https://github.com/creatoropener/file-sharing-app/issues/1)
+- [Generated repair: PR #2](https://github.com/creatoropener/file-sharing-app/pull/2)
+- [Successful workflow run](https://github.com/creatoropener/file-sharing-app/actions/runs/35464615209)
+
+The green run records **three candidates evaluated, two passing and one rejected**,
+an unchanged regression hash, and clean replay with **three baseline tests plus
+two regression tests**. Candidate 1 won. The rejected candidate omitted the space
+in `1.0 KB`, which the hidden regression caught. An earlier v0.5.5 run had different
+counts and is retained separately. These are recorded results, not fresh tests run during release packaging.
+See [evidence provenance](docs/EVIDENCE.md) for the distinct runs and their sources.
+
+## Why the verification is separate
+
+Generating a plausible patch is only part of repair. A maintainer also needs to
+know that the bug existed, that the patch addresses it, and that existing behavior
+survives. PatchProof makes those steps explicit and keeps the new regression out
+of solver prompts. The verifier and solver use separate calls to the configured
+model; they are not independent model vendors or a formal proof system.
+
+1. A user adds `shadow-fix` to an issue in an installed target repository.
+2. The verifier drafts a regression and demonstrates a real assertion failure.
+3. Three solver strategies propose small, exact-match source edits.
+4. Each candidate must pass existing tests and the frozen regression.
+5. The selected patch must pass again from a clean sandbox image.
+6. The workflow creates or updates one PR per issue, with the verification report.
+
+Candidates run **sequentially in separate branches**, not concurrently. Existing
+baseline failures can be supplied for one bounded correction. Hidden-regression
+results are never fed back to a solver. Details: [architecture](docs/ARCHITECTURE.md).
+
+## Install in a target repository
+
+Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python -m venv .venv
-# Linux/macOS:
-source .venv/bin/activate
-# Windows PowerShell instead: .venv\Scripts\Activate.ps1
-python -m pip install -e .
+python3 tools/export_target.py --output ../patchproof-target-v0.5.5.zip
 ```
 
-## Run the external-commit demo
+Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
+sandbox image; commit the workflows to the default branch; then apply the issue
+label. Repository-specific test setup is described in [SETUP.md](docs/SETUP.md).
+The file-sharing example needs its baseline tests and TypeScript loader; those
+setup files are included under `examples/file-sharing-setup/`.
 
-```bash
-python -m shadow_engineer.demo_external --output artifacts/python-demo
-python -m shadow_engineer.demo_external --runtime node-test --output artifacts/node-demo
-python -m unittest discover -s tests -v
-```
+This main repository contains the engine. The linked file-sharing repository is
+the demonstrated target. Installing a GitHub App from a marketplace is not part
+of this MVP.
 
-Each demo creates a disposable real Git repository with the known shipping fixture,
-locks its test before creating candidate commits, and evaluates those commits.
-Expected: `flawed rejected`, `corrected passed-checks`.
-Open `VERIFICATION_REPORT.md` and `proof.json` under each candidate's output directory.
-Use a new directory each run; reports and locks are never silently overwritten.
-Each demo also saves fixture.bundle, preserving the exact Git commits named in its
-reports. Restore it with `git clone /path/to/fixture.bundle fixture-repo`.
+## Runtime scope
 
-These are authored fixtures, not the QR project and not AI-generated repairs.
-Local execution uses temporary directories, not Nebius VMs. The external verification
-CLI exposes only the Nebius provider, so it does not silently execute arbitrary
-repository code on the orchestrator.
+| Adapter | Toolchain | Evidence in this release |
+| --- | --- | --- |
+| `node-package` | Package baseline + Node test runner | Live TypeScript utility repair demonstrated |
+| `python-pytest` | Python + pytest | Adapter included; no current-release live evidence bundled |
+| `static-web` | Syntax check + Node/jsdom regression | Adapter included; QRcrafts verification remained unresolved |
+| `web-playwright` | Python pytest + Playwright | Adapter included; no live evidence bundled |
+| `java-junit` | javac + standalone JUnit | Adapter included; no live evidence bundled |
+| `java-maven` | Maven + JUnit reports | Adapter included; no live evidence bundled |
+| `java-gradle` | Gradle wrapper + JUnit reports | Adapter included; no live evidence bundled |
+| `go` | Go modules + native tests | Adapter included; no live evidence bundled |
+| `rust` | Cargo integration tests | Adapter included; no live evidence bundled |
 
-The older demo remains available with `python -m shadow_engineer.cli demo`.
-It uses the simpler v0.1 policy, not the external repository workflow.
+One build root is selected per run. The TypeScript helper loads standalone `.ts`
+utilities; it does not implement TSX rendering or an arbitrary import graph.
+Passing the small baseline does not establish that the entire Next.js app builds
+or works. Known limits and trust boundaries are in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## External repository workflow
+## Nebius and NVIDIA
 
-Read [docs/EXTERNAL_REPOSITORY.md](docs/EXTERNAL_REPOSITORY.md) for commands.
+`proof.py` calls the Nebius Token Factory inference API. The demonstrated model is
+`nvidia/Nemotron-3_5-Lightning`. Repository bootstrap commands, test execution,
+candidate evaluation, and clean replay use Nebius Sandboxes through `contree-sdk`.
+The GitHub runner orchestrates requests and handles the resulting PR.
 
-1. Inspect a full base commit SHA without executing repository code.
-2. Draft or supply a separate regression and review its expected behaviour.
-3. Lock the test, issue, existing test-file list and writable source-file list.
-4. Retain the printed lock digest in verifier-controlled configuration.
-5. Verify a descendant candidate commit on a prepared Nebius image.
-6. Review the report; a future PR integration must compare current base/head SHAs
-   before attaching it or deciding a status check.
+The model emits edit instructions; Python validates and assembles those edits on
+the runner before sending candidate files to the sandbox. This is not a claim
+that all orchestration or patch assembly executes inside Nebius.
 
-`passed-checks` means the observed gates passed. It is not a correctness proof,
-a security certificate or permission to auto-merge.
+## Repository map
 
-## Gates
+- `proof.py`: inference, validation, candidates, replay and reports.
+- `runtimes.py`: runtime detection, commands and native-result classification.
+- `patchproof_runtime/`: sandbox helpers and standalone TypeScript loader.
+- `.github/workflows/`: image preparation and issue-to-PR orchestration.
+- `docs/`: setup, architecture, recorded evidence and submission materials.
+- `legacy/v0.2/`: preserved prototype, CLI, tests and historical fixtures; not the
+  current release entry point or evidence for today's hosted workflow.
 
-Baseline passes → locked regression fails on base → regression passes on head
-→ existing suite passes → combined suite passes → fresh combined replay passes.
+## Verification status and license
 
-Test identities must match. Empty/malformed/duplicate evidence, skips, errors,
-changed inputs, timeouts and replay failures prevent acceptance. Each cloud stage
-starts from the same immutable prepared image.
+The demonstrated target ran on Nebius. Consolidation checks are limited to source
+review, Python syntax/imports, workflow parsing, and document rendering. No new
+application tests or paid inference runs were executed during consolidation.
 
-## Scope
-
-- Maximum 1000 tracked files / 10 MiB. Symlinks and submodules are unsupported.
-- Source deletions, new application files and mode changes are currently rejected.
-- Dirty/untracked worktree files are ignored; snapshots come from Git objects.
-- Test files and writable application files must be explicitly selected.
-- pytest and node:test are supported. Jest, Vitest, TypeScript builds and browser
-  automation need a repository-specific adapter. HTML detection is only an inventory hint.
-- Dependencies must already exist in a clean image; no repository install script
-  runs automatically. Node dependencies requiring local node_modules need a prepared
-  resolution strategy before this narrow runner can support them.
-- Cloud input files are read-only and the test child drops to an unprivileged UID.
-  Live enforcement is untested; an image that cannot provide it fails closed.
-- Malicious code can still manipulate in-process assertions or fabricate reports.
-  File hashes and read-only files do not establish independent ground truth.
-- No signed attestations, automatic image preparation, webhooks, repository download,
-  PR posting or fix generation are included in the external workflow.
-
-See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) and [docs/QR_TEST_PLAN.md](docs/QR_TEST_PLAN.md).
-
-## Code map
-
-| Module | Role |
-|---|---|
-| repository.py | Git snapshots, path policy, lock and patch checks |
-| regression_author.py | NVIDIA test drafting from selected base files |
-| external_proof.py | Verification gates and reports |
-| execution_harness.py | Fixed commands, timeout, input checks and evidence |
-| external_runners.py | Trusted local fixture / Nebius provider |
-| patchproof_cli.py | Inspect, draft-test, lock and verify commands |
-| demo_external.py | Shipping fixture in a disposable Git repository |
-
-## References
-
-- [Nebius SDK commands](https://docs.tokenfactory.nebius.com/sandboxes/sdk/python_sdk/running-commands)
-- [Token Factory inference](https://docs.tokenfactory.nebius.com/quickstart)
-- [Node test runner](https://nodejs.org/api/test.html)
-- [Hackathon rules](https://nebiusglobalaihackathon.devpost.com/rules)
-
-The installed `contree-sdk==0.3.6` takes ContreeConfig/IAMAuth directly, unlike the
-client constructor in our earlier prototype. This version is pinned and its
-construction was smoke-tested without network calls. Live cloud validation is pending.
+The engine is released under the existing [MIT license](LICENSE), copyright
+Tabloop. This is a reproducible MVP with recorded evidence, not a production
+service, security audit, or guarantee that generated tests cover every bug.

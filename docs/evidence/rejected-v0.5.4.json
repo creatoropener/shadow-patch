@@ -1,0 +1,95 @@
+{
+  "app_version": "0.5.4",
+  "baseline": {
+    "command": "CI=1 npm test",
+    "existing_suite_passed": true,
+    "image": "23b2b0ca-3b1a-47e0-be7e-507b603565f3",
+    "output": "> cometfile@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.460383\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 0.177226\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.176154\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 316.028829",
+    "tests_passed": 3
+  },
+  "candidates": [
+    {
+      "candidate": 1,
+      "changed_files": [
+        "lib/utils/format.ts"
+      ],
+      "changed_lines": 7,
+      "command": "CI=1 npm test && echo PATCHPROOF_REGRESSION_START && node --test --test-reporter=tap test_patchproof_issue_1.test.mjs",
+      "duration_seconds": 11.551,
+      "exit_code": 1,
+      "generation_attempts": 2,
+      "image": "a8503245-d378-4434-bc49-b1df2b2b8950",
+      "output": "> cometfile@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.226411\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nnot ok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 1.503817\n  location: '/workspace/repo/tests/format-baseline.test.mjs:15:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + '0.5 KB/s'\n    - '512 B/s'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '512 B/s'\n  actual: '0.5 KB/s'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/tests/format-baseline.test.mjs:16:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.155343\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 2\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 315.802119\n\nPATCHPROOF_TEST_HASH_BEFORE=1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd\nPATCHPROOF_TEST_HASH_AFTER=1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd",
+      "passed": false,
+      "strategy": "minimal targeted correction",
+      "summary": "Fix formatBytes template literal interpolation syntax and ensure correct decimal formatting rules, and fix formatSpeed to use formatBytes output correctly.",
+      "test_protected": true,
+      "tests_passed": 2
+    },
+    {
+      "candidate": 2,
+      "duration_seconds": 7.254,
+      "error": "Candidate generation failed twice: Candidate edit does not change the source.",
+      "passed": false,
+      "strategy": "defensive edge-case correction",
+      "test_protected": false
+    },
+    {
+      "candidate": 3,
+      "duration_seconds": 7.365,
+      "error": "Candidate generation failed twice: Candidate edit does not change the source.",
+      "passed": false,
+      "strategy": "maintainable behavior-preserving correction",
+      "test_protected": false
+    }
+  ],
+  "error": "Only 1 of 3 candidates completed isolated Sandbox evaluation.",
+  "issue": {
+    "number": 1,
+    "title": "File sizes and transfer speeds display JavaScript text instead of readable units",
+    "url": "https://github.com/creatoropener/file-sharing-app/issues/1"
+  },
+  "model": "nvidia/Nemotron-3_5-Lightning",
+  "regression_test": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "classification": "accepted assertion failure reproduced the issue",
+        "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { loadStandaloneTypeScript } from './patchproof_runtime/typescript_module.mjs';\n\nconst { formatBytes, formatSpeed, formatEta } = loadStandaloneTypeScript('lib/utils/format.ts');\n\ntest('formatBytes returns literal fragments on values >= 1024', () => {\n  assert.equal(formatBytes(512), '512 B');\n  assert.equal(formatBytes(1024), '1.0 KB');\n  assert.equal(formatBytes(1536), '1.5 KB');\n  assert.equal(formatBytes(102400), '100 KB');\n  assert.equal(formatBytes(1048576), '1.0 MB');\n  assert.equal(formatBytes(1073741824), '1.0 GB');\n});\n\ntest('formatSpeed inherits literal fragments', () => {\n  assert.equal(formatSpeed(1536), '1.5 KB/s');\n});\n\ntest('formatEta remains unaffected', () => {\n  assert.equal(formatEta(0), '0s');\n  assert.equal(formatEta(1.2), '2s');\n  assert.equal(formatEta(Infinity), '\u2014');\n});\n",
+        "exit_code": 1,
+        "image": "d4e73fe2-4bc8-4547-9ab4-9b96cae4d385",
+        "output": "TAP version 13\n# Subtest: formatBytes returns literal fragments on values >= 1024\nnot ok 1 - formatBytes returns literal fragments on values >= 1024\n  ---\n  duration_ms: 2.835045\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:7:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n    - '1.0 KB'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.0 KB'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: formatSpeed inherits literal fragments\nnot ok 2 - formatSpeed inherits literal fragments\n  ---\n  duration_ms: 0.239098\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n    - '1.5 KB/s'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.5 KB/s'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:17:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n# Subtest: formatEta remains unaffected\nok 3 - formatEta remains unaffected\n  ---\n  duration_ms: 0.20663\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 1\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 327.347136\n\nPATCHPROOF_TEST_HASH_BEFORE=1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd\nPATCHPROOF_TEST_HASH_AFTER=1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd",
+        "protected": true,
+        "rationale": "The test imports the actual repository's format.ts via the TypeScript loader and verifies the reported formatting defect: formatBytes and formatSpeed return literal JavaScript fragments instead of human-readable unit strings. formatEta is included to confirm unrelated behavior is preserved. The assertions match the expected output table from the issue.",
+        "sha256": "1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd"
+      }
+    ],
+    "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { loadStandaloneTypeScript } from './patchproof_runtime/typescript_module.mjs';\n\nconst { formatBytes, formatSpeed, formatEta } = loadStandaloneTypeScript('lib/utils/format.ts');\n\ntest('formatBytes returns literal fragments on values >= 1024', () => {\n  assert.equal(formatBytes(512), '512 B');\n  assert.equal(formatBytes(1024), '1.0 KB');\n  assert.equal(formatBytes(1536), '1.5 KB');\n  assert.equal(formatBytes(102400), '100 KB');\n  assert.equal(formatBytes(1048576), '1.0 MB');\n  assert.equal(formatBytes(1073741824), '1.0 GB');\n});\n\ntest('formatSpeed inherits literal fragments', () => {\n  assert.equal(formatSpeed(1536), '1.5 KB/s');\n});\n\ntest('formatEta remains unaffected', () => {\n  assert.equal(formatEta(0), '0s');\n  assert.equal(formatEta(1.2), '2s');\n  assert.equal(formatEta(Infinity), '\u2014');\n});\n",
+    "created_before_candidates": true,
+    "failed_before_fix": true,
+    "path": "test_patchproof_issue_1.test.mjs",
+    "pre_fix_exit_code": 1,
+    "pre_fix_image": "d4e73fe2-4bc8-4547-9ab4-9b96cae4d385",
+    "pre_fix_output": "TAP version 13\n# Subtest: formatBytes returns literal fragments on values >= 1024\nnot ok 1 - formatBytes returns literal fragments on values >= 1024\n  ---\n  duration_ms: 2.835045\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:7:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n    - '1.0 KB'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.0 KB'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: formatSpeed inherits literal fragments\nnot ok 2 - formatSpeed inherits literal fragments\n  ---\n  duration_ms: 0.239098\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n    - '1.5 KB/s'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.5 KB/s'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:17:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n# Subtest: formatEta remains unaffected\nok 3 - formatEta remains unaffected\n  ---\n  duration_ms: 0.20663\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 1\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 327.347136\n\nPATCHPROOF_TEST_HASH_BEFORE=1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd\nPATCHPROOF_TEST_HASH_AFTER=1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd",
+    "protected": true,
+    "rationale": "The test imports the actual repository's format.ts via the TypeScript loader and verifies the reported formatting defect: formatBytes and formatSpeed return literal JavaScript fragments instead of human-readable unit strings. formatEta is included to confirm unrelated behavior is preserved. The assertions match the expected output table from the issue.",
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "sha256": "1a1dd0b2eb233168822179f2136498ece3c25a8f8c80adb4eedc0d08cca88acd"
+  },
+  "runtime": {
+    "application_languages": [
+      "JavaScript",
+      "TypeScript"
+    ],
+    "display_name": "Node.js / JavaScript / TypeScript",
+    "id": "node-package",
+    "image_env": "CONTREE_IMAGE",
+    "test_runtime": "node-test"
+  },
+  "sandbox": {
+    "base_image": "7f7087b2-38e4-403c-96a6-1a41ca119b13",
+    "provider": "Nebius Token Factory"
+  },
+  "schema_version": "0.5",
+  "verdict": "rejected"
+}

@@ -1,0 +1,188 @@
+{
+  "app_version": "0.5.5",
+  "baseline": {
+    "command": "CI=1 npm test",
+    "existing_suite_passed": true,
+    "image": "119ace68-eef7-4d53-b67c-515caae3e883",
+    "output": "> file-sharing@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.241834\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 0.134432\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.151388\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 322.781825",
+    "tests_passed": 3
+  },
+  "candidates": [
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "// lib/utils/format.ts\nexport function formatBytes(bytes: number): string {\n  if (bytes < 1024) return `${bytes} B`;\n  const units = ['KB', 'MB', 'GB', 'TB'];\n  let v = bytes, i = -1;\n  do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);\n  const precision = v >= 100 ? 0 : 1;\n  return `${v.toFixed(precision)} ${units[i]}`;\n}\n\nexport function formatSpeed(bps: number): string {\n  return `${formatBytes(bps)}/s`;\n}\n\nexport function formatEta(seconds: number): string {\n  if (!Number.isFinite(seconds)) return '\u2014';\n  if (seconds < 60) return `${Math.ceil(seconds)}s`;\n  if (seconds < 3600) return `Math.floor(seconds/60)m{Math.floor(seconds / 60)}mMath.floor(seconds/60)m{Math.ceil(seconds % 60)}s`;\n  return `Math.floor(seconds/3600)h{Math.floor(seconds / 3600)}hMath.floor(seconds/3600)h{Math.ceil((seconds % 3600) / 60)}m`;\n}\n",
+              "path": "lib/utils/format.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "58df262e-bea5-4ab2-ba4d-47c1f9b42105",
+          "output": "> file-sharing@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.238699\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 0.13266\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.161823\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 311.665339",
+          "regression_test_present": false,
+          "tests_passed": 3
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 3,
+      "candidate": 1,
+      "changed_files": [
+        "lib/utils/format.ts"
+      ],
+      "changed_lines": 3,
+      "command": "node --test --test-reporter=tap test_patchproof_issue_1.test.mjs",
+      "duration_seconds": 8.671,
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "7c12a5bd-a65e-4eb2-9fda-836b483c47f1",
+      "output": "TAP version 13\n# Subtest: formatBytes returns correct readable units\nok 1 - formatBytes returns correct readable units\n  ---\n  duration_ms: 1.694153\n  ...\n# Subtest: formatSpeed returns correct readable units\nok 2 - formatSpeed returns correct readable units\n  ---\n  duration_ms: 0.211827\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 330.744435\n\nPATCHPROOF_TEST_HASH_BEFORE=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6\nPATCHPROOF_TEST_HASH_AFTER=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "minimal targeted correction",
+      "summary": "Fix format.ts to output human-readable units instead of JavaScript template fragments. The functions currently return string literals like 'v.toFixed(...)' instead of computed values.",
+      "test_protected": true,
+      "tests_passed": 2
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "// lib/utils/format.ts\nexport function formatBytes(bytes: number): string {\n  if (bytes < 1024) return `${bytes} B`;\n  const units = ['KB', 'MB', 'GB', 'TB'];\n  let v = bytes, i = -1;\n  do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);\n  const precision = v >= 100 ? 0 : 1;\n  return `${v.toFixed(precision)}${units[i]}`;\n}\n\nexport function formatSpeed(bps: number): string {\n  return `${formatBytes(bps)}/s`;\n}\n\nexport function formatEta(seconds: number): string {\n  if (!Number.isFinite(seconds)) return '\u2014';\n  if (seconds < 60) return `${Math.ceil(seconds)}s`;\n  if (seconds < 3600) return `Math.floor(seconds/60)m{Math.floor(seconds / 60)}mMath.floor(seconds/60)m{Math.ceil(seconds % 60)}s`;\n  return `Math.floor(seconds/3600)h{Math.floor(seconds / 3600)}hMath.floor(seconds/3600)h{Math.ceil((seconds % 3600) / 60)}m`;\n}\n",
+              "path": "lib/utils/format.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "83d784bf-54fb-40a8-89da-248695327d45",
+          "output": "> file-sharing@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.243777\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 0.13998\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.151978\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 313.375486",
+          "regression_test_present": false,
+          "tests_passed": 3
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 3,
+      "candidate": 2,
+      "changed_files": [
+        "lib/utils/format.ts"
+      ],
+      "changed_lines": 3,
+      "command": "node --test --test-reporter=tap test_patchproof_issue_1.test.mjs",
+      "duration_seconds": 10.215,
+      "exit_code": 1,
+      "generation_attempts": 1,
+      "image": "926058d7-3583-4f03-8b95-23d4ffe8d3f6",
+      "output": "TAP version 13\n# Subtest: formatBytes returns correct readable units\nnot ok 1 - formatBytes returns correct readable units\n  ---\n  duration_ms: 2.605801\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:7:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + '1.0KB'\n    - '1.0 KB'\n          ^\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.0 KB'\n  actual: '1.0KB'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: formatSpeed returns correct readable units\nnot ok 2 - formatSpeed returns correct readable units\n  ---\n  duration_ms: 0.221463\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + '1.5KB/s'\n    - '1.5 KB/s'\n          ^\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.5 KB/s'\n  actual: '1.5KB/s'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:17:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 0\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 338.130019\n\nPATCHPROOF_TEST_HASH_BEFORE=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6\nPATCHPROOF_TEST_HASH_AFTER=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6",
+      "passed": false,
+      "stage": "regression",
+      "strategy": "defensive edge-case correction",
+      "summary": "Fix formatBytes template literal interpolation and formatSpeed to produce readable units instead of source code text, preserving 1024-based units with one decimal place below 100 units and no decimal places from 100 units upward.",
+      "test_protected": true,
+      "tests_passed": 0
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "// lib/utils/format.ts\nexport function formatBytes(bytes: number): string {\n  if (bytes < 1024) return `${bytes} B`;\n  const units = ['KB', 'MB', 'GB', 'TB'];\n  let v = bytes, i = -1;\n  do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);\n  const precision = v >= 100 ? 0 : 1;\n  return `${v.toFixed(precision)} ${units[i]}`;\n}\n\nexport function formatSpeed(bps: number): string {\n  return `${formatBytes(bps)}/s`;\n}\n\nexport function formatEta(seconds: number): string {\n  if (!Number.isFinite(seconds)) return '\u2014';\n  if (seconds < 60) return `${Math.ceil(seconds)}s`;\n  if (seconds < 3600) return `Math.floor(seconds/60)m{Math.floor(seconds / 60)}mMath.floor(seconds/60)m{Math.ceil(seconds % 60)}s`;\n  return `Math.floor(seconds/3600)h{Math.floor(seconds / 3600)}hMath.floor(seconds/3600)h{Math.ceil((seconds % 3600) / 60)}m`;\n}\n",
+              "path": "lib/utils/format.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "ed36cda7-5835-49e0-9f5c-1c7026e706be",
+          "output": "> file-sharing@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.268674\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 0.133952\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.160521\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 314.134635",
+          "regression_test_present": false,
+          "tests_passed": 3
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 3,
+      "candidate": 3,
+      "changed_files": [
+        "lib/utils/format.ts"
+      ],
+      "changed_lines": 3,
+      "command": "node --test --test-reporter=tap test_patchproof_issue_1.test.mjs",
+      "duration_seconds": 9.042,
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "7a834a54-79b1-4619-b64b-681814379d0b",
+      "output": "TAP version 13\n# Subtest: formatBytes returns correct readable units\nok 1 - formatBytes returns correct readable units\n  ---\n  duration_ms: 1.285249\n  ...\n# Subtest: formatSpeed returns correct readable units\nok 2 - formatSpeed returns correct readable units\n  ---\n  duration_ms: 0.135654\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 324.701275\n\nPATCHPROOF_TEST_HASH_BEFORE=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6\nPATCHPROOF_TEST_HASH_AFTER=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "maintainable behavior-preserving correction",
+      "summary": "Fixed formatBytes to output readable units (B/KB/MB/GB) and formatSpeed to use those units with /s suffix, using 1024-based division, one decimal place below 100 units, and no decimal places from 100 upward. The single edit in lib/utils/format.ts corrects both functions to produce outputs like '1.0 KB' instead of literal 'v.toFixed(...)'.",
+      "test_protected": true,
+      "tests_passed": 2
+    }
+  ],
+  "clean_replay": {
+    "command": "CI=1 npm test && echo PATCHPROOF_REGRESSION_START && node --test --test-reporter=tap test_patchproof_issue_1.test.mjs",
+    "exit_code": 0,
+    "image": "427511bf-1c32-45f0-b5c4-3d052ea4b025",
+    "output": "> file-sharing@0.1.0 test\n> node --test --test-reporter=tap tests/*.test.mjs\n\nTAP version 13\n# Subtest: byte-sized values retain their B suffix\nok 1 - byte-sized values retain their B suffix\n  ---\n  duration_ms: 1.238048\n  ...\n# Subtest: byte-sized transfer rates retain their suffix\nok 2 - byte-sized transfer rates retain their suffix\n  ---\n  duration_ms: 0.129114\n  ...\n# Subtest: short and unknown ETA behavior remains intact\nok 3 - short and unknown ETA behavior remains intact\n  ---\n  duration_ms: 0.167682\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 312.661824\nPATCHPROOF_REGRESSION_START\nTAP version 13\n# Subtest: formatBytes returns correct readable units\nok 1 - formatBytes returns correct readable units\n  ---\n  duration_ms: 1.27232\n  ...\n# Subtest: formatSpeed returns correct readable units\nok 2 - formatSpeed returns correct readable units\n  ---\n  duration_ms: 0.148193\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 303.598832\n\nPATCHPROOF_TEST_HASH_BEFORE=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6\nPATCHPROOF_TEST_HASH_AFTER=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6",
+    "passed": true,
+    "test_protected": true,
+    "tests_passed": 2
+  },
+  "issue": {
+    "number": 1,
+    "title": "File sizes and transfer speeds display JavaScript text instead of readable units",
+    "url": "https://github.com/creatoropener/file-sharing-app/issues/1"
+  },
+  "model": "nvidia/Nemotron-3_5-Lightning",
+  "regression_test": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "classification": "accepted assertion failure reproduced the issue",
+        "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { loadStandaloneTypeScript } from './patchproof_runtime/typescript_module.mjs';\n\nconst { formatBytes, formatSpeed } = loadStandaloneTypeScript('lib/utils/format.ts');\n\ntest('formatBytes returns correct readable units', () => {\n  assert.equal(formatBytes(512), '512 B');\n  assert.equal(formatBytes(1024), '1.0 KB');\n  assert.equal(formatBytes(1536), '1.5 KB');\n  assert.equal(formatBytes(102400), '100 KB');\n  assert.equal(formatBytes(1048576), '1.0 MB');\n  assert.equal(formatBytes(1073741824), '1.0 GB');\n});\n\ntest('formatSpeed returns correct readable units', () => {\n  assert.equal(formatSpeed(1536), '1.5 KB/s');\n});\n",
+        "exit_code": 1,
+        "image": "d29c3ef9-4328-49d1-9be1-76e87f3044d5",
+        "output": "TAP version 13\n# Subtest: formatBytes returns correct readable units\nnot ok 1 - formatBytes returns correct readable units\n  ---\n  duration_ms: 2.567414\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:7:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n    - '1.0 KB'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.0 KB'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: formatSpeed returns correct readable units\nnot ok 2 - formatSpeed returns correct readable units\n  ---\n  duration_ms: 0.245749\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n    - '1.5 KB/s'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.5 KB/s'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:17:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 0\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 342.816274\n\nPATCHPROOF_TEST_HASH_BEFORE=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6\nPATCHPROOF_TEST_HASH_AFTER=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6",
+        "protected": true,
+        "rationale": "The test imports the actual repository format utility functions via the TypeScript loader and asserts the expected 1024-based unit formatting for both formatBytes and formatSpeed. It captures the reported bug where the functions return literal string fragments instead of proper unit strings, and will fail on the original source but pass after the repair. The test is deterministic, offline, and uses only the necessary setup with no external dependencies beyond the repository modules.",
+        "sha256": "d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6"
+      }
+    ],
+    "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { loadStandaloneTypeScript } from './patchproof_runtime/typescript_module.mjs';\n\nconst { formatBytes, formatSpeed } = loadStandaloneTypeScript('lib/utils/format.ts');\n\ntest('formatBytes returns correct readable units', () => {\n  assert.equal(formatBytes(512), '512 B');\n  assert.equal(formatBytes(1024), '1.0 KB');\n  assert.equal(formatBytes(1536), '1.5 KB');\n  assert.equal(formatBytes(102400), '100 KB');\n  assert.equal(formatBytes(1048576), '1.0 MB');\n  assert.equal(formatBytes(1073741824), '1.0 GB');\n});\n\ntest('formatSpeed returns correct readable units', () => {\n  assert.equal(formatSpeed(1536), '1.5 KB/s');\n});\n",
+    "created_before_candidates": true,
+    "failed_before_fix": true,
+    "path": "test_patchproof_issue_1.test.mjs",
+    "pre_fix_exit_code": 1,
+    "pre_fix_image": "d29c3ef9-4328-49d1-9be1-76e87f3044d5",
+    "pre_fix_output": "TAP version 13\n# Subtest: formatBytes returns correct readable units\nnot ok 1 - formatBytes returns correct readable units\n  ---\n  duration_ms: 2.567414\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:7:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n    - '1.0 KB'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.0 KB'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: formatSpeed returns correct readable units\nnot ok 2 - formatSpeed returns correct readable units\n  ---\n  duration_ms: 0.245749\n  location: '/workspace/repo/test_patchproof_issue_1.test.mjs:16:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n    - '1.5 KB/s'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: '1.5 KB/s'\n  actual: 'v.toFixed(v>=100?0:1){v.toFixed(v >= 100 ? 0 : 1)}v.toFixed(v>=100?0:1){units[i]}/s'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_1.test.mjs:17:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 0\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 342.816274\n\nPATCHPROOF_TEST_HASH_BEFORE=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6\nPATCHPROOF_TEST_HASH_AFTER=d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6",
+    "protected": true,
+    "rationale": "The test imports the actual repository format utility functions via the TypeScript loader and asserts the expected 1024-based unit formatting for both formatBytes and formatSpeed. It captures the reported bug where the functions return literal string fragments instead of proper unit strings, and will fail on the original source but pass after the repair. The test is deterministic, offline, and uses only the necessary setup with no external dependencies beyond the repository modules.",
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "sha256": "d114e38b685321c33eadfa81f558b672ed662c6c97f667751f087bbc72df0fc6"
+  },
+  "runtime": {
+    "application_languages": [
+      "JavaScript",
+      "TypeScript"
+    ],
+    "display_name": "Node.js / JavaScript / TypeScript",
+    "id": "node-package",
+    "image_env": "CONTREE_IMAGE",
+    "test_runtime": "node-test"
+  },
+  "sandbox": {
+    "base_image": "7f7087b2-38e4-403c-96a6-1a41ca119b13",
+    "provider": "Nebius Token Factory"
+  },
+  "schema_version": "0.5",
+  "verdict": "verified",
+  "winner": {
+    "candidate": 1,
+    "changed_files": [
+      "lib/utils/format.ts"
+    ],
+    "selection": "fewest changed files, then fewest changed lines, then duration",
+    "summary": "Fix format.ts to output human-readable units instead of JavaScript template fragments. The functions currently return string literals like 'v.toFixed(...)' instead of computed values."
+  }
+}

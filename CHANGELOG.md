@@ -1,20 +1,19 @@
 # Changelog
 
-## 0.2.0 — 2026-09-16
+## v0.5.5 — consolidated submission release, 2026-09-20
 
-- External Git snapshots with exact base/head SHAs and patch hashes.
-- Verifier input lock, source allowlist and protected test/config policy.
-- pytest/Node adapters, test-identity checks and fresh replay.
-- Base-only NVIDIA test drafting with explicit context selection.
-- Commit-bound JSON/Markdown reports and disposable Git fixture demos.
-- Corrected/pinned installed SDK 0.3.6 constructor.
-- Validation: 26 local tests pass, including Python/Node executions and failure gates.
-- QR repository run, live Nebius validation and automatic PR posting remain pending.
+- Bring the demonstrated issue-to-PR engine into creatoropener/shadow-patch.
+- Include runtime adapters, all required helpers, and the standalone TypeScript loader.
+- Preserve existing tests as solver context while withholding the generated regression.
+- Retry invalid proposals with validation feedback; omit redundant unchanged edits
+  but reject proposals without a net source change.
+- Allow one baseline correction per candidate without hidden-regression feedback.
+- Preserve three candidate evaluations, protected regression checks and clean replay.
+- Include the corrected PR notification and Python bytecode prevention/ignore rules.
+- Add setup, architecture, evidence, screenshots, demo and submission materials.
+- Move the previous v0.2 implementation and documentation intact to `legacy/v0.2/`.
 
-## 0.1.0 — 2026-09-15
+This consolidation does not claim a new live run. The attached v0.5.5 report and
+linked GitHub runs document the earlier demonstrated target execution.
 
-- Added PatchProof gates, source-only candidate policy and report generation.
-- Added trusted local Python/pytest demonstration with three candidate fixes.
-- Added optional Token Factory NVIDIA generation and Contree runner adapters.
-- Added eight verification-policy tests, setup instructions and implementation roadmap.
-- Live cloud validation and GitHub App workflow remain future milestones.
+Earlier prototype history: [legacy changelog](legacy/v0.2/CHANGELOG.md).

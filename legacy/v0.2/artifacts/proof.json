@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "provider": "local-trusted-fixture (not VM isolated)",
+  "status": "verified",
+  "base_sha256": "615017f34553c981177a4b2df7bdbf1aa7c7008dd35bab0249b3baa4dd47551e",
+  "regression_sha256": "c63d10c08964bf55ea5419ea2c1728332412bd6238aabb637b5d266354517bc0",
+  "stages": [
+    {
+      "stage": "baseline",
+      "exit_code": 0,
+      "passed": 2,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "..                                                                       [100%]\n2 passed in 0.01s\n",
+      "execution_id": "45606172-f2d8-4fad-9b87-b3840c42a3a7"
+    },
+    {
+      "stage": "reproduce",
+      "exit_code": 1,
+      "passed": 0,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n___________________________ test_whitespace_and_case ___________________________\n\n    def test_whitespace_and_case():\n>       assert normalize_tags([' Python ', '', 'python', 'AI', ' ai ', ' ']) == ['Python', 'AI']\nE       AssertionError: assert [' Python ', ..., ' ai ', ' '] == ['Python', 'AI']\nE         \nE         At index 0 diff: ' Python ' != 'Python'\nE         Left contains 4 more items, first extra item: 'python'\nE         Use -v to get more diff\n\ntests/test_regression.py:3: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_regression.py::test_whitespace_and_case - AssertionError: a...\n1 failed in 0.02s\n",
+      "execution_id": "f4ca6d40-2518-49aa-920a-ff2c54771978"
+    },
+    {
+      "stage": "candidate-1-regression",
+      "exit_code": 1,
+      "passed": 0,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n___________________________ test_whitespace_and_case ___________________________\n\n    def test_whitespace_and_case():\n>       assert normalize_tags([' Python ', '', 'python', 'AI', ' ai ', ' ']) == ['Python', 'AI']\nE       AssertionError: assert [' Python ', ..., ' ai ', ' '] == ['Python', 'AI']\nE         \nE         At index 0 diff: ' Python ' != 'Python'\nE         Left contains 4 more items, first extra item: 'python'\nE         Use -v to get more diff\n\ntests/test_regression.py:3: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_regression.py::test_whitespace_and_case - AssertionError: a...\n1 failed in 0.01s\n",
+      "execution_id": "dcf5d888-05a1-4f64-af48-06e3dd406b5c"
+    },
+    {
+      "stage": "candidate-1-suite",
+      "exit_code": 1,
+      "passed": 2,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "log": "..F                                                                      [100%]\n=================================== FAILURES ===================================\n___________________________ test_whitespace_and_case ___________________________\n\n    def test_whitespace_and_case():\n>       assert normalize_tags([' Python ', '', 'python', 'AI', ' ai ', ' ']) == ['Python', 'AI']\nE       AssertionError: assert [' Python ', ..., ' ai ', ' '] == ['Python', 'AI']\nE         \nE         At index 0 diff: ' Python ' != 'Python'\nE         Left contains 4 more items, first extra item: 'python'\nE         Use -v to get more diff\n\ntests/test_regression.py:3: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_regression.py::test_whitespace_and_case - AssertionError: a...\n1 failed, 2 passed in 0.02s\n",
+      "execution_id": "05cbf467-fe2b-49c2-9df2-000b90f857b4"
+    },
+    {
+      "stage": "candidate-2-regression",
+      "exit_code": 1,
+      "passed": 0,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "log": "F                                                                        [100%]\n=================================== FAILURES ===================================\n___________________________ test_whitespace_and_case ___________________________\n\n    def test_whitespace_and_case():\n>       assert normalize_tags([' Python ', '', 'python', 'AI', ' ai ', ' ']) == ['Python', 'AI']\nE       AssertionError: assert ['ai', 'python'] == ['Python', 'AI']\nE         \nE         At index 0 diff: 'ai' != 'Python'\nE         Use -v to get more diff\n\ntests/test_regression.py:3: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_regression.py::test_whitespace_and_case - AssertionError: a...\n1 failed in 0.02s\n",
+      "execution_id": "49a59695-32c8-4cb7-a8dc-7fadf1193040"
+    },
+    {
+      "stage": "candidate-2-suite",
+      "exit_code": 1,
+      "passed": 1,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0,
+      "log": ".FF                                                                      [100%]\n=================================== FAILURES ===================================\n__________________________________ test_order __________________________________\n\n    def test_order():\n>       assert normalize_tags(['b', 'a', 'b']) == ['b', 'a']\nE       AssertionError: assert ['a', 'b'] == ['b', 'a']\nE         \nE         At index 0 diff: 'a' != 'b'\nE         Use -v to get more diff\n\ntests/test_existing.py:5: AssertionError\n___________________________ test_whitespace_and_case ___________________________\n\n    def test_whitespace_and_case():\n>       assert normalize_tags([' Python ', '', 'python', 'AI', ' ai ', ' ']) == ['Python', 'AI']\nE       AssertionError: assert ['ai', 'python'] == ['Python', 'AI']\nE         \nE         At index 0 diff: 'ai' != 'Python'\nE         Use -v to get more diff\n\ntests/test_regression.py:3: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_existing.py::test_order - AssertionError: assert ['a', 'b']...\nFAILED tests/test_regression.py::test_whitespace_and_case - AssertionError: a...\n2 failed, 1 passed in 0.02s\n",
+      "execution_id": "fa50b57d-3b81-4042-9314-7a511b7e4704"
+    },
+    {
+      "stage": "candidate-3-regression",
+      "exit_code": 0,
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": ".                                                                        [100%]\n1 passed in 0.01s\n",
+      "execution_id": "41b62b87-cb5c-486f-ba5f-47d917efeee0"
+    },
+    {
+      "stage": "candidate-3-suite",
+      "exit_code": 0,
+      "passed": 3,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "...                                                                      [100%]\n3 passed in 0.02s\n",
+      "execution_id": "2c38ca83-2643-4f07-bf3e-0458c8f2aa67"
+    },
+    {
+      "stage": "candidate-3-replay",
+      "exit_code": 0,
+      "passed": 3,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "...                                                                      [100%]\n3 passed in 0.01s\n",
+      "execution_id": "001b98ab-2f4b-45bb-a7d8-4a1ac2e990ec"
+    }
+  ],
+  "candidates": [
+    {
+      "candidate": 1,
+      "patch_sha256": "0d7c5092a9411e39986058734389cc2c47292a9db84670c0abbf107a944e727e",
+      "accepted": false,
+      "reason": "Candidate did not pass both verification gates."
+    },
+    {
+      "candidate": 2,
+      "patch_sha256": "a28e4a8838f66b6d6ecd395de3d3efd8b910f97276418b017f9d2f43ac95fd78",
+      "accepted": false,
+      "reason": "Candidate did not pass both verification gates."
+    },
+    {
+      "candidate": 3,
+      "patch_sha256": "3a39919eb50491f45eae72a2df2217a8b0f4e078cdfcf09d9764539ca4645850",
+      "accepted": true
+    }
+  ],
+  "winner": 3,
+  "human_merge_required": true,
+  "scope": "Observed pytest evidence; not a correctness or security proof.",
+  "patch": {
+    "app/tags.py": "def normalize_tags(tags):\n    seen = set()\n    result = []\n    for tag in tags:\n        tag = tag.strip()\n        key = tag.casefold()\n        if tag and key not in seen:\n            seen.add(key)\n            result.append(tag)\n    return result\n"
+  },
+  "verified_files_sha256": "350edafb5f1785d53cfaa49b37dd8138e1c5bedb48617d989a30a1dc0fe31e22",
+  "issue": "normalize_tags should strip whitespace, drop empty tags, and deduplicate case-insensitively while preserving first spelling and order.",
+  "model": "none: scripted fixture",
+  "mode": "demo"
+}
