@@ -9,7 +9,6 @@ FILES = (
     "proof.py", "runtimes.py", "requirements-patchproof.txt",
     "patchproof_runtime/static_web_check.mjs",
     "patchproof_runtime/java_check.py", "patchproof_runtime/junit_check.py",
-    "patchproof_runtime/typescript_module.mjs",
     ".github/workflows/shadow-fix.yml", ".github/workflows/prepare-image.yml",
 )
 
