@@ -26,9 +26,10 @@ issue-to-PR workflow rather than leave it as a claim in an agent's summary.
 
 ## What it does
 
-A maintainer applies `shadow-fix` to an issue. PatchProof first generates a
-regression from the issue and original repository, and confirms that it fails
-with an actual assertion on the unfixed code. Separate solver calls then produce
+A maintainer applies `shadow-fix` to an issue. PatchProof first checks the selected
+sandbox runtime and existing baseline, then generates a regression from the issue
+and original repository and confirms that it fails with an actual assertion on
+the unfixed code. Separate solver calls then produce
 three candidate repairs. Each runs in an isolated Nebius sandbox branch and must
 pass existing tests plus the frozen regression. The winning patch is replayed
 from a clean image before the workflow opens or updates a PR. Merge remains a
@@ -41,7 +42,9 @@ through Nebius Token Factory inference; the demonstrated model is
 `nvidia/Nemotron-3_5-Lightning`. Nebius Sandboxes execute repository bootstrap,
 tests, isolated candidate evaluations and clean replay. Runtime adapters separate
 application language, test framework and image selection. The recorded repair
-uses the Node adapter and a loader for standalone TypeScript utilities.
+used the earlier Node adapter and a loader for a standalone TypeScript utility.
+The v0.6 release candidate replaces that narrow loader with an explicit pinned
+`tsx` contract; it is not counted as demonstrated evidence until acceptance passes.
 
 The verifier test is created before repair and excluded from solver prompts.
 Source-path restrictions block direct edits to protected files. Hash checks

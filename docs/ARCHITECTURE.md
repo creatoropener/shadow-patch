@@ -5,7 +5,9 @@
 ```mermaid
 flowchart TD
   A[Issue label] --> B[GitHub Actions orchestrator]
-  B --> C[Verifier model call]
+  B --> P[Runtime preflight and baseline]
+  P -->|Fail| X[Reject with report]
+  P -->|Pass| C[Verifier model call]
   C --> D[Regression reproduction]
   D --> E{Assertion fails as expected?}
   E -->|No| X[Reject with report]
@@ -25,6 +27,9 @@ The orchestrator runs on GitHub Actions. It calls NVIDIA model inference through
 Nebius Token Factory and executes application commands through Nebius Sandboxes.
 `RuntimeAdapter` selects files, bootstrap commands, baseline commands and native
 test-result interpretation. The same pipeline coordinates supported ecosystems.
+The selected sandbox image, runtime executable, dependency bootstrap and existing
+baseline are checked before inference, so configuration failures do not consume a
+verifier generation request.
 
 ## Verifier and solver separation
 
@@ -37,6 +42,9 @@ An accepted reproduction needs a recognized assertion failure and an unchanged
 test hash. Syntax errors, import errors, skipped tests, zero-test success and a
 test already passing on the original source are not sufficient evidence.
 Bounded setup retries occur before a reproduced regression is frozen.
+For `node-typescript`, normal project imports run through pinned `tsx`. Generic
+`readableFromBytes` and `collectBytes` helpers provide deterministic Web Streams
+plumbing without copying application behavior into the test.
 
 Separate calls can use the same NVIDIA model and share correlated mistakes.
 "Independent" describes the workflow and test timing, not statistical model
@@ -101,5 +109,6 @@ to the workflow run, target revision and PR alongside the report, as done in
 
 The v0.2 CLI and historical fixtures were moved intact to `legacy/v0.2/` to avoid
 confusing them with the current `python proof.py` entry point. No legacy test
-result is presented as evidence for v0.5.5. The included adapters are an extension
-foundation; only the recorded standalone TypeScript case is demonstrated here.
+result is presented as evidence for v0.5.5. The v0.6 TypeScript runtime is a
+release candidate pending the Issue #3 acceptance run; the recorded v0.5.5
+standalone utility repair remains the current live evidence.

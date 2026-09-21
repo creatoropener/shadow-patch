@@ -7,9 +7,9 @@ regression before asking a solver for a patch, evaluates three repair candidates
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Release: v0.5.5 · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.1 · Recorded verification evidence: v0.5.5 · Track: Coding and Agentic Engineering**
 
-[Setup](docs/SETUP.md) · [Architecture](docs/ARCHITECTURE.md) ·
+[Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
 [Submission text](docs/SUBMISSION.md)
 
@@ -40,11 +40,12 @@ of solver prompts. The verifier and solver use separate calls to the configured
 model; they are not independent model vendors or a formal proof system.
 
 1. A user adds `shadow-fix` to an issue in an installed target repository.
-2. The verifier drafts a regression and demonstrates a real assertion failure.
-3. Three solver strategies propose small, exact-match source edits.
-4. Each candidate must pass existing tests and the frozen regression.
-5. The selected patch must pass again from a clean sandbox image.
-6. The workflow creates or updates one PR per issue, with the verification report.
+2. PatchProof checks the selected image, runtime and existing baseline before inference.
+3. The verifier drafts a regression and demonstrates a real assertion failure.
+4. Three solver strategies propose small, exact-match source edits.
+5. Each candidate must pass existing tests and the frozen regression.
+6. The selected patch must pass again from a clean sandbox image.
+7. The workflow creates or updates one PR per issue, with the verification report.
 
 Candidates run **sequentially in separate branches**, not concurrently. Existing
 baseline failures can be supplied for one bounded correction. Hidden-regression
@@ -55,14 +56,15 @@ results are never fed back to a solver. Details: [architecture](docs/ARCHITECTUR
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.5.5.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.1.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
 sandbox image; commit the workflows to the default branch; then apply the issue
 label. Repository-specific test setup is described in [SETUP.md](docs/SETUP.md).
-The file-sharing example needs its baseline tests and TypeScript loader; those
-setup files are included under `examples/file-sharing-setup/`.
+The file-sharing example uses the explicit `node-typescript` adapter, a repository
+baseline executed with pinned `tsx`, and engine-owned Web Streams test plumbing.
+The setup files are included under `examples/file-sharing-setup/`.
 
 This main repository contains the engine. The linked file-sharing repository is
 the demonstrated target. Installing a GitHub App from a marketplace is not part
@@ -72,7 +74,8 @@ of this MVP.
 
 | Adapter | Toolchain | Evidence in this release |
 | --- | --- | --- |
-| `node-package` | Package baseline + Node test runner | Live TypeScript utility repair demonstrated |
+| `node-typescript` | Package baseline + pinned tsx + Node test runner | v0.6 acceptance run pending; fail-fast and local contract checks included |
+| `node-package` | JavaScript package baseline + Node test runner | JavaScript-only path; no v0.6 live evidence bundled |
 | `python-pytest` | Python + pytest | Adapter included; no current-release live evidence bundled |
 | `static-web` | Syntax check + Node/jsdom regression | Adapter included; QRcrafts verification remained unresolved |
 | `web-playwright` | Python pytest + Playwright | Adapter included; no live evidence bundled |
@@ -82,10 +85,11 @@ of this MVP.
 | `go` | Go modules + native tests | Adapter included; no live evidence bundled |
 | `rust` | Cargo integration tests | Adapter included; no live evidence bundled |
 
-One build root is selected per run. The TypeScript helper loads standalone `.ts`
-utilities; it does not implement TSX rendering or an arbitrary import graph.
-Passing the small baseline does not establish that the entire Next.js app builds
-or works. Known limits and trust boundaries are in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+One build root is selected per run. TypeScript tests execute through pinned `tsx`
+and normal project imports; the retired source loader is no longer used. The
+engine supplies only generic byte-stream plumbing for Web Streams tests. Passing
+a repository baseline does not establish that an entire Next.js app builds or
+works. Known limits and trust boundaries are in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Nebius and NVIDIA
 
@@ -102,7 +106,7 @@ that all orchestration or patch assembly executes inside Nebius.
 
 - `proof.py`: inference, validation, candidates, replay and reports.
 - `runtimes.py`: runtime detection, commands and native-result classification.
-- `patchproof_runtime/`: sandbox helpers and standalone TypeScript loader.
+- `patchproof_runtime/`: engine-owned sandbox and test-plumbing helpers.
 - `.github/workflows/`: image preparation and issue-to-PR orchestration.
 - `docs/`: setup, architecture, recorded evidence and submission materials.
 - `legacy/v0.2/`: preserved prototype, CLI, tests and historical fixtures; not the
@@ -110,9 +114,9 @@ that all orchestration or patch assembly executes inside Nebius.
 
 ## Verification status and license
 
-The demonstrated target ran on Nebius. Consolidation checks are limited to source
-review, Python syntax/imports, workflow parsing, and document rendering. No new
-application tests or paid inference runs were executed during consolidation.
+The demonstrated v0.5.5 target ran on Nebius. The v0.6 TypeScript adapter is a
+release candidate until the documented Issue #3 acceptance run passes. Engine
+contract tests and static checks do not replace that sandbox acceptance run.
 
 The engine is released under the existing [MIT license](LICENSE), copyright
 Tabloop. This is a reproducible MVP with recorded evidence, not a production

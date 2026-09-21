@@ -5,7 +5,7 @@
 From this repository, run:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.5.5.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.1.zip
 ```
 
 Extract the ZIP and copy its files to the **target repository root**, preserving
@@ -44,6 +44,7 @@ A runtime-specific image secret takes precedence over `CONTREE_IMAGE`:
 | --- | --- |
 | python-pytest | `CONTREE_IMAGE_PYTHON_PYTEST` |
 | node-package | `CONTREE_IMAGE_NODE_PACKAGE` |
+| node-typescript | `CONTREE_IMAGE_NODE_TYPESCRIPT` |
 | static-web | `CONTREE_IMAGE_STATIC_WEB` |
 | web-playwright | `CONTREE_IMAGE_WEB_PLAYWRIGHT` |
 | java-junit | `CONTREE_IMAGE_JAVA_JUNIT` |
@@ -63,9 +64,11 @@ an organization policy.
 
 ## Prepare or reuse an image
 
-An existing image can be reused if the project can access it and its toolchain
-matches the adapter. The demonstrated web image supplies Node/npm; the target's
-TypeScript dependency is installed during sandbox bootstrap.
+An existing image can be reused only if the project can access it and its
+toolchain matches the adapter. The `node-typescript` image must contain the pinned
+`tsx` executable at `/opt/patchproof/node/node_modules/.bin/tsx`; an older v0.5
+image will fail preflight. The target's own locked dependencies are installed
+during sandbox bootstrap.
 
 Otherwise run **Prepare Sandbox Image** from Actions. Choose `web` for this
 TypeScript case, or `all` for the combined toolchain. Copy the resulting UUID to
@@ -77,24 +80,32 @@ The setup uses `contree-sdk==0.3.6` and `openai==1.109.1` on the runner.
 Runtime detection reads root manifests. Select explicitly when ambiguous:
 
 ```json
-{"runtime": "node-package"}
+{"runtime": "node-typescript"}
 ```
 
 Save that as `patchproof.json`. Only `runtime` and `test_directory` are accepted.
 For Go, `test_directory` names the existing package containing source. Consult
 `runtimes.py` for conventional Maven, Gradle and Rust layouts.
 
-An existing baseline must pass before repair. Keep the new root-level Node
-regression out of the baseline command, for example:
+An existing baseline must pass before repair. Keep the new root-level regression
+out of the baseline command. For a TypeScript target, pin `tsx` in the target's
+development dependencies and use a baseline such as:
 
 ```json
-"test": "node --test --test-reporter=tap tests/*.test.mjs"
+"scripts": {
+  "test": "tsx --test --test-reporter=tap tests/*.test.ts"
+},
+"devDependencies": {
+  "tsx": "4.23.15"
+}
 ```
 
 For the demonstrated file-sharing target, copy `examples/file-sharing-setup/tests/`
-and its `patchproof.json`, and add the test script above to package.json. Its
-existing TypeScript 5.6.3 dependency is sufficient; do not replace the target's
-entire package.json or lockfile. The engine export includes the TypeScript loader.
+and its `patchproof.json`, add the test script and exact `tsx` development
+dependency above, then regenerate `package-lock.json` with
+`npm install --save-dev --save-exact tsx@4.23.15`. Do not replace the target's
+entire package.json or lockfile. The engine export includes generic Web Streams
+test plumbing; it does not install application dependencies into the repository.
 
 The known unfixed app revision is `807346b22421d0a58103092ccc318c1bdc1d7231` in
 creatoropener/file-sharing-app. Reproduce in a separate demonstration repository
@@ -119,7 +130,7 @@ repair may no longer reproduce; that rejection is appropriate.
 | --- | --- |
 | No workflow run | Both workflow filenames must end in `.yml`; commit on default branch, then remove/reapply the label |
 | Forbidden from Nebius | Authorized project, credential and Sandbox access; the CLI tutorial alone does not grant API access |
-| Missing node/npm/jsdom | Correct image profile and matching UUID |
+| Missing node/npm/jsdom/tsx | Correct image profile, runtime-specific secret and new image UUID; do not reuse the v0.5 image |
 | Empty or truncated model output | Reported inference reason and configured budget; incomplete JSON remains rejected |
 | Baseline fails | Existing tests or bootstrap must be repaired separately; do not weaken expected behavior |
 | PR exists but old run is red | Old notification step tried reading a report after PR creation; install the corrected workflow |

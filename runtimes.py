@@ -92,6 +92,31 @@ class RuntimeAdapter:
             raise ValueError("Generated regression test is empty.")
         if self.test_suffix == ".py":
             compile(content, filename, "exec")
+        if self.id == "node-typescript":
+            if Path(filename).suffix != ".ts":
+                raise ValueError("The node-typescript adapter requires a .ts test file.")
+            if "typescript_module" in content or "loadStandaloneTypeScript" in content:
+                raise ValueError(
+                    "Do not use the retired TypeScript loader; import application modules "
+                    "normally in the tsx-executed test."
+                )
+            uses_web_streams = any(
+                marker in content
+                for marker in ("ReadableStream", "TransformStream", ".pipeThrough(")
+            )
+            if uses_web_streams:
+                required = (
+                    "file:///patchproof/web_streams.mjs",
+                    "readableFromBytes(",
+                    "collectBytes(",
+                )
+                missing = [marker for marker in required if marker not in content]
+                if missing:
+                    raise ValueError(
+                        "Web Streams regressions must import and call readableFromBytes and "
+                        "collectBytes from file:///patchproof/web_streams.mjs; missing: "
+                        + ", ".join(missing)
+                    )
 
     def validate_candidate_file(self, path: str, content: str) -> None:
         if Path(path).suffix.lower() == ".py":
@@ -301,6 +326,8 @@ def detect_runtime(root: Path) -> RuntimeAdapter:
     if requested is None and len(found) > 1:
         raise RuntimeDetectionError("Multiple runtime manifests found; select runtime in patchproof.json: " + ", ".join(found))
     selected = requested or (found[0] if found else None)
+    if requested is None and selected == "node-package" and (root / "tsconfig.json").is_file():
+        selected = "node-typescript"
     compiled = {"java-maven", "java-gradle", "java-junit", "go", "rust"}
     if selected in compiled:
         if selected != "java-junit" and selected not in found:
@@ -379,15 +406,14 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "import { generateSessionKey } from './lib/crypto/aes'; "
                 "Never invent a helper import or reimplement application logic; call the real "
                 "exported functions directly. "
-                "When testing code built on ReadableStream/TransformStream, pipe with "
-                ".pipeThrough()/.pipeTo() and consume the result concurrently with "
-                "`for await (const c of readable) {...}` — for an encrypt/decrypt pair this "
-                "means: source ReadableStream -> pipeThrough(encryption transform) -> collect "
-                "ciphertext -> new ReadableStream of that ciphertext -> pipeThrough(decryption "
-                "transform) -> collect output. Never call writer.write(...) then writer.close() "
-                "and only .read() afterward with no concurrent reader; a TransformStream will not "
-                "resolve write()/close() until something is actively reading, and that ordering "
-                "deadlocks instead of failing cleanly. "
+                "For any Web Streams test, you MUST import "
+                "{ readableFromBytes, collectBytes } from "
+                "'file:///patchproof/web_streams.mjs' and use those helpers instead of "
+                "constructing or collecting streams yourself. Pipe application transforms "
+                "between them, for example: const output = await collectBytes("
+                "readableFromBytes(input, 512).pipeThrough(await makeTransform())); "
+                "Use a small explicit application chunk size and a small byte fixture; do not "
+                "allocate multi-megabyte input merely to exercise a final partial chunk. "
                 "If the reported defect surfaces as a rejected promise or thrown error (e.g. a "
                 "decrypt/verify step that should succeed but currently fails), wrap the call in "
                 "assert.rejects(...) or assert.doesNotReject(...) so the failure is a recognized "

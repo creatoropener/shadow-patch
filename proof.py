@@ -24,8 +24,8 @@ from typing import Any
 
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
-SCHEMA_VERSION = "0.5"
-APP_VERSION = "0.5.5"
+SCHEMA_VERSION = "0.6"
+APP_VERSION = "0.6.0-rc.1"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -732,7 +732,8 @@ def sandbox_workspace(
 ) -> Any:
     helper_root = Path(__file__).resolve().parent / "patchproof_runtime"
     helpers = {f"/patchproof/{name}": helper_root / name for name in
-               ("static_web_check.mjs", "junit_check.py", "java_check.py")}
+               ("static_web_check.mjs", "web_streams.mjs",
+                "junit_check.py", "java_check.py")}
     for helper in helpers.values():
         if not helper.is_file():
             raise PatchProofError(f"Incomplete PatchProof installation: missing {helper.name}")
@@ -814,7 +815,9 @@ exit "$status"
 
 def render_report(proof: dict[str, Any]) -> str:
     verified = proof.get("verdict") == "verified"
-    mark = "✅" if verified else "❌"
+    blocked = proof.get("verdict") == "blocked"
+    mark = "✅" if verified else ("⚠️" if blocked else "❌")
+    verdict_label = "VERIFIED" if verified else ("BLOCKED" if blocked else "REJECTED")
     regression = proof.get("regression_test") or {}
     candidates = proof.get("candidates") or []
     sandbox_branches = sum(1 for candidate in candidates if "image" in candidate)
@@ -823,7 +826,7 @@ def render_report(proof: dict[str, Any]) -> str:
     lines = [
         "# PatchProof Verification Report",
         "",
-        f"**Verdict:** {mark} {'VERIFIED' if verified else 'REJECTED'}",
+        f"**Verdict:** {mark} {verdict_label}",
         "",
         "## Independent evidence",
         "",
@@ -897,7 +900,16 @@ def render_report(proof: dict[str, Any]) -> str:
         lines.append("No candidate completed evaluation.")
 
     if proof.get("error"):
-        lines.extend(["", "## Rejection reason", "", str(proof["error"])])
+        lines.extend(
+            [
+                "",
+                "## Blocking reason" if blocked else "## Rejection reason",
+                "",
+                f"Stage: `{proof.get('stage', 'initialization')}`",
+                "",
+                str(proof["error"]),
+            ]
+        )
 
     lines.extend(
         [
@@ -918,18 +930,22 @@ def write_evidence(root: Path, proof: dict[str, Any]) -> None:
 
 
 def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
+    proof["stage"] = "configuration"
     api_key = require_env("NEBIUS_API_KEY")
     project_id = require_env("NEBIUS_PROJECT_ID")
     model = require_env("NEBIUS_MODEL")
+    proof["stage"] = "runtime-detection"
     try:
         adapter = detect_runtime(root)
     except RuntimeDetectionError as error:
         raise PatchProofError(str(error)) from error
     runtime_image_env = f"CONTREE_IMAGE_{adapter.id.replace('-', '_').upper()}"
+    proof["stage"] = "configuration"
     image_uuid = os.environ.get(runtime_image_env, "").strip() or require_env(
         "CONTREE_IMAGE"
     )
 
+    proof["stage"] = "repository-analysis"
     verifier_context, _ = collect_repository_context(root, adapter, include_tests=True)
     solver_context, allowed_paths = collect_repository_context(
         root, adapter, include_tests=True
@@ -958,6 +974,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                 "provider": "Nebius Token Factory",
                 "base_image": image_uuid,
             },
+            "stage": "runtime-preflight",
         }
     )
 
@@ -966,21 +983,6 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         raise PatchProofError("Regression test path escapes the repository.")
     if (root / test_path).exists():
         raise PatchProofError(f"Refusing to overwrite an existing regression test: {test_path}")
-    test_content, rationale = generate_regression_with_retry(
-        issue=issue, context=verifier_context, api_key=api_key, model=model,
-        adapter=adapter, test_path=test_path,
-    )
-    test_hash = sha256_text(test_content)
-    proof["regression_test"] = {
-        "path": test_path,
-        "sha256": test_hash,
-        "rationale": rationale,
-        "content": test_content,
-        "created_before_candidates": True,
-        "failed_before_fix": False,
-        "protected": False,
-        "attempts": [],
-    }
 
     sdk = create_sandbox_client(api_key, project_id)
     base_image = sdk.images.use(image_uuid, strict=True)
@@ -990,6 +992,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         make_repository_archive(root, archive_path)
 
         baseline = sandbox_workspace(base_image, archive_path, adapter, root)
+        proof["stage"] = "baseline"
         baseline_suite = baseline.run(
             shell=adapter.baseline_command,
             cwd="/workspace/repo",
@@ -1006,7 +1009,28 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         if baseline_suite.exit_code != 0:
             raise PatchProofError(f"Baseline command failed for runtime {adapter.id}.")
 
+        # Do not spend an inference request until the selected image, dependency
+        # bootstrap, runtime preflight, and existing baseline have all passed.
+        # The regression is still generated before any solver call or candidate.
+        proof["stage"] = "verifier-generation"
+        test_content, rationale = generate_regression_with_retry(
+            issue=issue, context=verifier_context, api_key=api_key, model=model,
+            adapter=adapter, test_path=test_path,
+        )
+        test_hash = sha256_text(test_content)
+        proof["regression_test"] = {
+            "path": test_path,
+            "sha256": test_hash,
+            "rationale": rationale,
+            "content": test_content,
+            "created_before_candidates": True,
+            "failed_before_fix": False,
+            "protected": False,
+            "attempts": [],
+        }
+
         reproduction_command = adapter.regression_command(test_path)
+        proof["stage"] = "verifier-reproduction"
         retry_feedback = ""
         attempted_hashes: set[str] = set()
         for reproduction_attempt in range(1, 4):
@@ -1090,6 +1114,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         passing: list[
             tuple[tuple[int, int, float], dict[str, Any], list[dict[str, str]]]
         ] = []
+        proof["stage"] = "candidate-evaluation"
         for index, (strategy, temperature) in enumerate(strategies, start=1):
             started = time.monotonic()
             candidate_record: dict[str, Any] = {
@@ -1227,6 +1252,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             "selection": "fewest changed files, then fewest changed lines, then duration",
         }
 
+        proof["stage"] = "clean-replay"
         clean = sandbox_workspace(base_image, archive_path, adapter, root)
         clean_with_test = apply_contents(
             clean, [{"path": test_path, "content": test_content}]
@@ -1256,6 +1282,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             destination = root / change["path"]
             destination.write_text(change["content"], encoding="utf-8")
 
+    proof["stage"] = "completed"
     proof["verdict"] = "verified"
     return proof
 
@@ -1290,14 +1317,21 @@ def main(argv: list[str] | None = None) -> int:
         }
         proof = execute(root, issue, proof)
     except Exception as error:  # noqa: BLE001 - always persist rejection evidence
-        proof["verdict"] = "rejected"
+        blocked_stages = {
+            "configuration", "runtime-detection", "repository-analysis",
+            "runtime-preflight", "baseline",
+        }
+        proof["verdict"] = (
+            "blocked" if proof.get("stage") in blocked_stages else "rejected"
+        )
         proof["error"] = str(error)
         if issue:
             proof.setdefault(
                 "issue",
                 {"number": issue.number, "title": issue.title, "url": issue.url},
             )
-        print(f"PatchProof rejected the repair: {error}", file=sys.stderr)
+        action = "blocked evaluation" if proof["verdict"] == "blocked" else "rejected the repair"
+        print(f"PatchProof {action}: {error}", file=sys.stderr)
     finally:
         write_evidence(root, proof)
 
