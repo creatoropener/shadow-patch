@@ -69,6 +69,8 @@ class RuntimeAdapter:
                 else ""
             )
             return f"{prefix}python -m pytest -q {target}"
+        if self.id == "node-typescript":
+            return f"/opt/patchproof/node/node_modules/.bin/tsx --test --test-reporter=tap {target}"
         return f"node --test --test-reporter=tap {target}"
 
     def full_command(self, test_path: str) -> str:
@@ -352,11 +354,11 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             ),
         )
 
-    if requested in (None, "node-package") and (root / "package.json").is_file():
+    if requested in (None, "node-typescript") and (root / "package.json").is_file() and (root / "tsconfig.json").is_file():
         baseline, bootstrap = _node_baseline(root)
         return RuntimeAdapter(
-            id="node-package",
-            display_name="Node.js / JavaScript / TypeScript",
+            id="node-typescript",
+            display_name="Node.js / TypeScript (tsx)",
             application_languages=("JavaScript", "TypeScript"),
             test_runtime="node-test",
             source_extensions=frozenset({".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"}),
@@ -364,6 +366,54 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".json"}
             ),
             context_names=frozenset({"package.json", "tsconfig.json"}),
+            test_suffix=".test.ts",
+            baseline_command=baseline,
+            bootstrap_command=bootstrap,
+            preflight_command="node --version && npm --version && /opt/patchproof/node/node_modules/.bin/tsx --version",
+            verifier_guidance=(
+                "Return an offline deterministic test using node:test and node:assert, "
+                "executed with tsx (real TypeScript, not a custom loader). Import application "
+                "modules the normal way, exactly as the application itself does, including "
+                "relative paths and this project's '@/' path alias (tsx resolves both from "
+                "tsconfig.json automatically) — for example: "
+                "import { generateSessionKey } from './lib/crypto/aes'; "
+                "Never invent a helper import or reimplement application logic; call the real "
+                "exported functions directly. "
+                "When testing code built on ReadableStream/TransformStream, pipe with "
+                ".pipeThrough()/.pipeTo() and consume the result concurrently with "
+                "`for await (const c of readable) {...}` — for an encrypt/decrypt pair this "
+                "means: source ReadableStream -> pipeThrough(encryption transform) -> collect "
+                "ciphertext -> new ReadableStream of that ciphertext -> pipeThrough(decryption "
+                "transform) -> collect output. Never call writer.write(...) then writer.close() "
+                "and only .read() afterward with no concurrent reader; a TransformStream will not "
+                "resolve write()/close() until something is actively reading, and that ordering "
+                "deadlocks instead of failing cleanly. "
+                "If the reported defect surfaces as a rejected promise or thrown error (e.g. a "
+                "decrypt/verify step that should succeed but currently fails), wrap the call in "
+                "assert.rejects(...) or assert.doesNotReject(...) so the failure is a recognized "
+                "AssertionError rather than an uncaught exception — for example: "
+                "await assert.doesNotReject(async () => { recovered = await roundTrip(); }); "
+                "assert.deepStrictEqual(recovered, original); An uncaught exception is not "
+                "accepted as reproduction evidence even when it demonstrates the real defect."
+            ),
+            solver_guidance=(
+                "Repair existing JavaScript or TypeScript application files only. "
+                "Keep module format and public APIs compatible."
+            ),
+        )
+
+    if requested in (None, "node-package") and (root / "package.json").is_file():
+        baseline, bootstrap = _node_baseline(root)
+        return RuntimeAdapter(
+            id="node-package",
+            display_name="Node.js / JavaScript",
+            application_languages=("JavaScript",),
+            test_runtime="node-test",
+            source_extensions=frozenset({".js", ".mjs", ".cjs", ".jsx"}),
+            context_extensions=frozenset(
+                {".js", ".mjs", ".cjs", ".jsx", ".json"}
+            ),
+            context_names=frozenset({"package.json"}),
             test_suffix=".test.mjs",
             baseline_command=baseline,
             bootstrap_command=bootstrap,
@@ -371,18 +421,9 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert. "
                 "The test may import project modules but must not modify the repository."
-                + (
-                    " For standalone TypeScript utilities without runtime imports, use "
-                    "import {loadStandaloneTypeScript} from './patchproof_runtime/typescript_module.mjs'; "
-                    "then loadStandaloneTypeScript('path/to/module.ts') to access its exports. "
-                    "The helper loads and transpiles actual repository source with the installed "
-                    "TypeScript compiler. Do not copy the algorithm or strip types with regex."
-                    if (root / "patchproof_runtime/typescript_module.mjs").is_file()
-                    else ""
-                )
             ),
             solver_guidance=(
-                "Repair existing JavaScript or TypeScript application files only. "
+                "Repair existing JavaScript application files only. "
                 "Keep module format and public APIs compatible."
             ),
         )
