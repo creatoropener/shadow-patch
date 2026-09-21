@@ -106,7 +106,7 @@ jobs:
               install += ["apt-get clean", "python -m pytest --version"]
               ready = base.run(
                   shell="\n".join(install),
-                  tag=f"patchproof-{profile}:v0.5",
+                  tag=f"patchproof-{profile}:v0.6",
                   timeout=2700,
                   disposable=False,
               ).wait()
