@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.0-rc.3 — semantic verifier hardening, 2026-09-22
+
+- Reject generated TypeScript regressions with initialized bindings that never
+  participate in the asserted behavior, both before sandbox execution and through
+  a target-TypeScript AST check inside the sandbox.
+- Require Web Streams round-trip regressions to connect every forward and inverse
+  transform before collecting and asserting the final output.
+- Give the verifier up to three bounded generation attempts with targeted semantic
+  feedback when an incomplete test pipeline is rejected.
+- Require solver proposals that modify binary framing to audit allocation sizes,
+  offsets, producer/consumer symmetry, and normal/final emission paths.
+- Add the exact faulty regression from the prior Issue #3 run and a corrected
+  encrypt-to-decrypt fixture as local contract tests.
+
+This remains a release candidate. The Issue #3 Nebius acceptance run is still the
+promotion gate for final v0.6.0 support.
+
 ## v0.6.0-rc.2 — verifier contract hardening, 2026-09-22
 
 - Type-check every generated `node-typescript` regression and its imported

@@ -1,12 +1,13 @@
-# v0.6.0-rc.2 engineering handoff
+# v0.6.0-rc.3 engineering handoff
 
 ## Purpose
 
-This release candidate replaces the improvised TypeScript source loader with an
-explicit `node-typescript` contract: a pinned `tsx` executable in the Nebius image,
-target-owned pinned TypeScript compiler, normal project imports, repository-owned
-baseline tests, and engine-owned generic Web Streams plumbing. Generated TypeScript
-regressions are checked against the target's real API declarations before execution.
+This release candidate keeps the explicit `node-typescript` contract from rc.2 and
+adds a semantic guard for generated tests. A fast runner check and a sandbox-side
+TypeScript AST check reject initialized bindings that never participate in the
+asserted behavior. Verifier guidance now requires every transform in a round trip
+to be connected before output is collected; solver guidance adds binary-frame
+allocation, offset, producer/consumer, and final-flush consistency checks.
 
 The v0.5.5 green run remains the recorded live evidence. Do not present v0.6 as
 validated until file-sharing Issue #3 reproduces, evaluates all three candidates,
@@ -18,7 +19,7 @@ Make engine changes in `creatoropener/shadow-patch`, review them through a branc
 and export the target installer from that revision:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.2.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.3.zip
 ```
 
 Copy the exported files into a target repository. Do not independently edit
@@ -38,7 +39,7 @@ and `patchproof.json` remain owned by the target.
    retrying; do not spend repeated model/sandbox calls on the same configuration.
 6. Require: accepted pre-fix assertion, three evaluated candidates, at least one
    passing candidate, matching test hashes, clean replay, green workflow, and PR.
-7. If all gates pass, bump `APP_VERSION` and documentation from `0.6.0-rc.2` to
+7. If all gates pass, bump `APP_VERSION` and documentation from `0.6.0-rc.3` to
    `0.6.0`, tag the release, and keep the new proof artifact as acceptance evidence.
 
 ## Local checks

@@ -8,6 +8,8 @@ import unittest
 from runtimes import detect_runtime
 from proof import classify_reproduction, render_report, reproduction_feedback
 
+FIXTURES = Path(__file__).parent / "fixtures"
+
 
 class NodeTypeScriptContractTests(unittest.TestCase):
     def make_project(self, *, explicit: bool = False) -> Path:
@@ -59,8 +61,28 @@ class NodeTypeScriptContractTests(unittest.TestCase):
         adapter.validate_generated_test(
             """import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.mjs';
 const output = await collectBytes(readableFromBytes(input, 8).pipeThrough(transform));
+assert.deepStrictEqual(output, expected);
 """,
             "test_patchproof_issue_3.test.ts",
+        )
+
+    def test_rejects_proof_6_unused_decryption_transform(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        faulty = (FIXTURES / "proof6_faulty_regression.test.ts").read_text(
+            encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "never used: dec"):
+            adapter.validate_generated_test(
+                faulty, "test_patchproof_issue_3.test.ts"
+            )
+
+    def test_accepts_complete_encrypt_decrypt_pipeline(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        complete = (FIXTURES / "proof6_corrected_regression.test.ts").read_text(
+            encoding="utf-8"
+        )
+        adapter.validate_generated_test(
+            complete, "test_patchproof_issue_3.test.ts"
         )
 
     def test_rejects_typescript_contract_bypasses(self) -> None:
@@ -112,6 +134,31 @@ const output = await collectBytes(readableFromBytes(input, 8).pipeThrough(transf
         self.assertEqual(
             classification,
             "generated TypeScript regression failed API type-check",
+        )
+
+    def test_semantic_lint_has_specific_feedback_and_classification(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        digest = "def456"
+        output = (
+            "binding 'dec' is declared but never used\n"
+            "PATCHPROOF_TYPESCRIPT_LINT=failed\n"
+            f"PATCHPROOF_TEST_HASH_BEFORE={digest}\n"
+            f"PATCHPROOF_TEST_HASH_AFTER={digest}\n"
+        )
+        feedback = reproduction_feedback(
+            "const dec = await createDecryptionStream(key);",
+            "generated TypeScript regression failed semantic lint",
+            output,
+        )
+        self.assertIn("apply both transforms", feedback)
+        reproduced, protected, classification = classify_reproduction(
+            adapter, 2, output, digest
+        )
+        self.assertFalse(reproduced)
+        self.assertTrue(protected)
+        self.assertEqual(
+            classification,
+            "generated TypeScript regression failed semantic lint",
         )
 
 

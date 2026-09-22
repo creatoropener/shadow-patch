@@ -13,6 +13,29 @@ class RuntimeDetectionError(ValueError):
     """Raised when a repository cannot be mapped to a supported runtime."""
 
 
+def _unused_initialized_bindings(content: str) -> list[str]:
+    """Find simple generated-test locals that are declared but never referenced.
+
+    This fast runner-side check intentionally handles only ordinary ``const`` and
+    ``let`` identifiers. The sandbox repeats the check with the TypeScript parser.
+    Counting lexical identifier occurrences can miss a name repeated in a comment
+    or another scope, but it does not reject a binding that is genuinely referenced.
+    """
+    unused: list[str] = []
+    pattern = re.compile(
+        r"\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*"
+        r"(?::[^=;\n]+)?\s*="
+    )
+    for match in pattern.finditer(content):
+        name = match.group(1)
+        references = re.findall(
+            rf"(?<![\w$]){re.escape(name)}(?![\w$])", content
+        )
+        if len(references) == 1:
+            unused.append(name)
+    return sorted(set(unused))
+
+
 @dataclass(frozen=True)
 class RuntimeAdapter:
     id: str
@@ -112,6 +135,13 @@ class RuntimeAdapter:
                 raise ValueError(
                     "Do not bypass TypeScript API contracts with ts-ignore, ts-nocheck, "
                     "ts-expect-error, or any casts."
+                )
+            unused = _unused_initialized_bindings(content)
+            if unused:
+                raise ValueError(
+                    "Generated TypeScript regression declares initialized bindings that are "
+                    "never used: " + ", ".join(unused) + ". Every constructed helper, stream, "
+                    "or transform must participate in the asserted behavior."
                 )
             uses_web_streams = any(
                 marker in content
@@ -434,7 +464,10 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "between them before collecting, for example: const output = await collectBytes("
                 "readableFromBytes(input, 512).pipeThrough(await makeFirstTransform())"
                 ".pipeThrough(await makeSecondTransform())); collectBytes returns Uint8Array, "
-                "not a stream, so never call pipeThrough on its result. "
+                "not a stream, so never call pipeThrough on its result. Every transform you "
+                "construct must actually appear in the pipeline. For an encrypt/decrypt "
+                "round trip, chain BOTH transforms before collectBytes; never collect the "
+                "encrypted intermediate and compare ciphertext with plaintext. "
                 "Use a small explicit application chunk size and a small byte fixture; do not "
                 "allocate multi-megabyte input merely to exercise a final partial chunk. "
                 "Assert the intended post-fix behavior, never the current defect. If an operation "
@@ -449,7 +482,11 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             ),
             solver_guidance=(
                 "Repair existing JavaScript or TypeScript application files only. "
-                "Keep module format and public APIs compatible."
+                "Keep module format and public APIs compatible. For binary frames or protocol "
+                "changes, privately verify that every allocated buffer is at least as large as "
+                "its highest write offset plus payload length, that producer and consumer use "
+                "identical field offsets and frame lengths, and that full-chunk and final-flush "
+                "paths emit the same format. Return only the reviewed minimal edit."
             ),
         )
 

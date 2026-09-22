@@ -7,7 +7,7 @@ regression before asking a solver for a patch, evaluates three repair candidates
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.2 · Recorded verification evidence: v0.5.5 · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.3 · Recorded verification evidence: v0.5.5 · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -56,7 +56,7 @@ results are never fed back to a solver. Details: [architecture](docs/ARCHITECTUR
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.2.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.3.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
@@ -74,7 +74,7 @@ of this MVP.
 
 | Adapter | Toolchain | Evidence in this release |
 | --- | --- | --- |
-| `node-typescript` | Package baseline + pinned tsx + TypeScript checker + Node test runner | v0.6 acceptance run pending; fail-fast and local contract checks included |
+| `node-typescript` | Package baseline + pinned tsx + semantic lint + TypeScript checker + Node test runner | v0.6 acceptance run pending; fail-fast and local contract checks included |
 | `node-package` | JavaScript package baseline + Node test runner | JavaScript-only path; no v0.6 live evidence bundled |
 | `python-pytest` | Python + pytest | Adapter included; no current-release live evidence bundled |
 | `static-web` | Syntax check + Node/jsdom regression | Adapter included; QRcrafts verification remained unresolved |
@@ -85,10 +85,11 @@ of this MVP.
 | `go` | Go modules + native tests | Adapter included; no live evidence bundled |
 | `rust` | Cargo integration tests | Adapter included; no live evidence bundled |
 
-One build root is selected per run. TypeScript tests are statically checked against
-the target's real API declarations and then execute through pinned `tsx` with normal
-project imports; the retired source loader is no longer used. The engine supplies
-only generic byte-stream plumbing for Web Streams tests. Passing
+One build root is selected per run. TypeScript tests are checked for unused
+generated-test bindings, statically checked against the target's real API
+declarations, and then executed through pinned `tsx` with normal project imports;
+the retired source loader is no longer used. The engine supplies only generic
+byte-stream plumbing for Web Streams tests. Passing
 a repository baseline does not establish that an entire Next.js app builds or
 works. Known limits and trust boundaries are in [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

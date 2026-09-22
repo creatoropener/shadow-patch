@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.2"
+APP_VERSION = "0.6.0-rc.3"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -407,6 +407,10 @@ broken behavior. The test must fail on the unfixed revision and pass after the
 reported defect is repaired. A thrown error is not proof by itself: convert it
 to a test-framework assertion failure without treating the current defect as an
 expected success. Follow the repository's declared API signatures exactly.
+Every helper, stream, transform, fixture, and expected value created by the test
+must participate in the asserted behavior. For a round trip, exercise every
+forward and inverse operation before collecting and asserting the final output;
+never compare an encoded intermediate directly with the original decoded value.
 Do not modify or propose modifications to application source."""
     user = f"""ISSUE #{issue.number}
 Title: {issue.title}
@@ -456,7 +460,7 @@ def generate_regression_with_retry(
     adapter: RuntimeAdapter, test_path: str, retry_feedback: str = ""
 ) -> tuple[str, str]:
     last_error: Exception | None = None
-    for attempt in range(1, 3):
+    for attempt in range(1, 4):
         try:
             return generate_regression_test(
                 issue=issue, context=context, api_key=api_key, model=model,
@@ -468,8 +472,12 @@ def generate_regression_with_retry(
         except PatchProofError as error:
             last_error = error
             retry_feedback += f"\nTest-generation validation error: {error}"
-            if attempt == 1:
-                print(f"Verifier returned an invalid test: {error}; retrying once.", file=sys.stderr)
+            if attempt < 3:
+                print(
+                    f"Verifier returned an invalid test: {error}; "
+                    f"retrying ({attempt + 1}/3).",
+                    file=sys.stderr,
+                )
     raise PatchProofError(f"Verifier could not produce a valid regression test: {last_error}") from last_error
 
 
@@ -503,6 +511,13 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
             "to silence the mismatch. Keep stream values as streams until all pipeThrough "
             "operations are complete; collectBytes returns Uint8Array."
         )
+    if "PATCHPROOF_TYPESCRIPT_LINT=failed" in output:
+        feedback += (
+            "\nENGINE DIAGNOSIS: The generated test constructed a value but never used it "
+            "in the asserted behavior. Connect every stream transform to the pipeline. For "
+            "an encode/decode or encrypt/decrypt round trip, apply both transforms before "
+            "collectBytes and compare only the final decoded bytes with the original input."
+        )
     if "not of type CryptoKey" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: A wrapper returned by a key factory was passed where the "
@@ -523,6 +538,8 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
         return False, False, "protected test hash was missing or changed"
     if adapter.is_regression_failure(exit_code, output):
         return True, True, "accepted assertion failure reproduced the issue"
+    if "PATCHPROOF_TYPESCRIPT_LINT=failed" in output:
+        return False, True, "generated TypeScript regression failed semantic lint"
     if "PATCHPROOF_TYPESCRIPT_CHECK=failed" in output:
         return False, True, "generated TypeScript regression failed API type-check"
     if exit_code == 0:
@@ -634,6 +651,10 @@ Existing repository tests are compatibility requirements; the newly generated
 verifier test is hidden. If retry feedback is supplied, address its specific
 failure. Each proposal must apply to the ORIGINAL repository source, not a
 previous candidate's patched source.
+Before returning, privately audit the proposed source edit. For binary framing
+or protocol changes, verify allocation sizes, every DataView/typed-array offset,
+producer/consumer layout symmetry, and all normal/final emission paths. Correct
+any inconsistency before returning JSON; do not include the audit in the answer.
 Keep summary to at most two sentences. Return only the smallest necessary
 exact-match edits. Do not repeat repository context or include explanations
 outside the requested JSON object."""
@@ -762,7 +783,8 @@ def sandbox_workspace(
     helper_root = Path(__file__).resolve().parent / "patchproof_runtime"
     helpers = {f"/patchproof/{name}": helper_root / name for name in
                ("static_web_check.mjs", "web_streams.mjs",
-                "typescript_check.py", "typescript_runtime.d.ts",
+                "typescript_check.py", "typescript_test_lint.mjs",
+                "typescript_runtime.d.ts",
                 "junit_check.py", "java_check.py")}
     for helper in helpers.values():
         if not helper.is_file():

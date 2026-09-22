@@ -34,7 +34,8 @@ def main(argv: list[str]) -> int:
     tsconfig = root / "tsconfig.json"
     compiler = root / "node_modules" / ".bin" / "tsc"
     declaration_source = Path(__file__).with_name("typescript_runtime.d.ts")
-    for required in (tsconfig, compiler, declaration_source):
+    semantic_linter = Path(__file__).with_name("typescript_test_lint.mjs")
+    for required in (tsconfig, compiler, declaration_source, semantic_linter):
         if not required.is_file():
             print(
                 f"PATCHPROOF_TYPESCRIPT_CHECK=unavailable: missing {required}",
@@ -45,6 +46,15 @@ def main(argv: list[str]) -> int:
     config_path: Path | None = None
     declaration_path: Path | None = None
     try:
+        lint = subprocess.run(
+            ["node", str(semantic_linter), target.relative_to(root).as_posix()],
+            cwd=root,
+            timeout=60,
+            check=False,
+        )
+        if lint.returncode != 0:
+            return lint.returncode
+
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", suffix=".d.ts",
             prefix=".patchproof-runtime-", dir=root, delete=False,

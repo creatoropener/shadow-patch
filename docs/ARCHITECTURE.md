@@ -43,11 +43,15 @@ test hash. Syntax errors, import errors, skipped tests, zero-test success and a
 test already passing on the original source are not sufficient evidence.
 Bounded setup retries occur before a reproduced regression is frozen.
 For `node-typescript`, each generated test and its imported application modules
-are first checked with the target's pinned TypeScript compiler. This catches wrong
-API arguments and invalid stream composition before runtime evidence is considered.
-Normal project imports then run through pinned `tsx`. Generic `readableFromBytes`
-and `collectBytes` helpers provide deterministic Web Streams plumbing without
-copying application behavior into the test.
+are checked for unused initialized bindings on the runner and again with the
+target's pinned TypeScript parser in the sandbox. The target's pinned TypeScript
+compiler then checks the test and imported application modules. These gates catch
+disconnected transforms, wrong API arguments and invalid stream composition before
+runtime evidence is considered. Normal project imports then run through pinned
+`tsx`. Generic `readableFromBytes` and `collectBytes` helpers provide deterministic
+Web Streams plumbing without copying application behavior into the test. These
+checks reject a known incomplete test pattern; they do not prove that every used
+value contributes meaningfully to the final assertion.
 
 Separate calls can use the same NVIDIA model and share correlated mistakes.
 "Independent" describes the workflow and test timing, not statistical model
@@ -66,6 +70,12 @@ one correction, with a fresh branch for the new proposal. These branches exclude
 the hidden test, so broad test discovery cannot expose its assertions as feedback.
 The frozen test is injected only after baseline success. A hidden-regression
 failure rejects that candidate; it does not trigger a solver correction.
+
+For binary-frame or protocol edits, solver instructions require a private
+consistency audit of buffer allocation, write/read offsets, producer/consumer
+layout, and normal/final emission paths. This reduces common malformed-patch
+failures but remains model guidance; compilation, baseline, hidden regression and
+clean replay are still the enforcement gates.
 
 All three candidate slots must complete a sandbox evaluation before selection.
 The winner is chosen by fewest changed files, then changed lines, then elapsed
