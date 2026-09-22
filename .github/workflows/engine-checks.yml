@@ -26,8 +26,11 @@ jobs:
           python -m py_compile proof.py runtimes.py tools/export_target.py
           patchproof_runtime/typescript_check.py
 
+      - name: Install pinned compiler for linter integration tests
+        run: npm install --prefix "$RUNNER_TEMP/patchproof-lint" --ignore-scripts --no-audit --no-fund typescript@5.6.3
+
       - name: Run runtime contract tests
-        run: python -m unittest discover -s tests -v
+        run: TS_LINT_NODE_MODULES="$RUNNER_TEMP/patchproof-lint/node_modules" python -m unittest discover -s tests -v
 
       - name: Check JavaScript helpers
         run: |
