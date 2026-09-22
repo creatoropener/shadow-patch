@@ -14,7 +14,7 @@ using that language is supported. A runtime combination moves through three stat
 | Combination | State | Boundary |
 | --- | --- | --- |
 | Historical Node + standalone TypeScript utility loader (v0.5.5) | Recorded | One import-light formatting utility only; retained as historical evidence |
-| Node 20 + TypeScript + pinned tsx + node:test (v0.6) | Release candidate | Conventional package root with `package.json`, `tsconfig.json`, locked dependencies and a passing repository baseline |
+| Node 20 + pinned TypeScript + pinned tsx + node:test (v0.6) | Release candidate | Conventional package root with `package.json`, `tsconfig.json`, locked dependencies, project-aware generated-test type checking and a passing repository baseline |
 | Python + pytest | Experimental | Conventional root environment and deterministic pytest suite |
 | Static web + node:test/jsdom | Experimental | Offline HTML/CSS/JavaScript behavior supported by the adapter's DOM harness |
 | Python Playwright, Java, Maven, Gradle, Go and Rust | Experimental | Conventional layouts described in `runtimes.py`; no current-release live acceptance evidence |

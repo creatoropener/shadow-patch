@@ -70,7 +70,11 @@ class RuntimeAdapter:
             )
             return f"{prefix}python -m pytest -q {target}"
         if self.id == "node-typescript":
-            return f"/opt/patchproof/node/node_modules/.bin/tsx --test --test-reporter=tap {target}"
+            return (
+                f"python /patchproof/typescript_check.py {target} && "
+                "/opt/patchproof/node/node_modules/.bin/tsx "
+                f"--test --test-reporter=tap {target}"
+            )
         return f"node --test --test-reporter=tap {target}"
 
     def full_command(self, test_path: str) -> str:
@@ -99,6 +103,15 @@ class RuntimeAdapter:
                 raise ValueError(
                     "Do not use the retired TypeScript loader; import application modules "
                     "normally in the tsx-executed test."
+                )
+            if re.search(
+                r"@ts-(?:ignore|nocheck|expect-error)\b|\bas\s+(?:unknown\s+as\s+)?any\b|"
+                r"\bas\s+unknown\s+as\s+[A-Za-z_$]|:\s*any\b",
+                content,
+            ):
+                raise ValueError(
+                    "Do not bypass TypeScript API contracts with ts-ignore, ts-nocheck, "
+                    "ts-expect-error, or any casts."
                 )
             uses_web_streams = any(
                 marker in content
@@ -396,7 +409,11 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             test_suffix=".test.ts",
             baseline_command=baseline,
             bootstrap_command=bootstrap,
-            preflight_command="node --version && npm --version && /opt/patchproof/node/node_modules/.bin/tsx --version",
+            preflight_command=(
+                "node --version && npm --version && "
+                "/opt/patchproof/node/node_modules/.bin/tsx --version && "
+                "test -x ./node_modules/.bin/tsc && ./node_modules/.bin/tsc --version"
+            ),
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert, "
                 "executed with tsx (real TypeScript, not a custom loader). Import application "
@@ -405,22 +422,30 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "tsconfig.json automatically) — for example: "
                 "import { generateSessionKey } from './lib/crypto/aes'; "
                 "Never invent a helper import or reimplement application logic; call the real "
-                "exported functions directly. "
+                "exported functions directly. Respect every declared TypeScript signature. If "
+                "a factory returns a wrapper object, destructure or select the documented field "
+                "whose type the next API requires; never pass the wrapper itself and never hide "
+                "a mismatch with any, ts-ignore, or a double cast. The engine type-checks the "
+                "test and its imported application modules before executing it. "
                 "For any Web Streams test, you MUST import "
                 "{ readableFromBytes, collectBytes } from "
                 "'file:///patchproof/web_streams.mjs' and use those helpers instead of "
                 "constructing or collecting streams yourself. Pipe application transforms "
-                "between them, for example: const output = await collectBytes("
-                "readableFromBytes(input, 512).pipeThrough(await makeTransform())); "
+                "between them before collecting, for example: const output = await collectBytes("
+                "readableFromBytes(input, 512).pipeThrough(await makeFirstTransform())"
+                ".pipeThrough(await makeSecondTransform())); collectBytes returns Uint8Array, "
+                "not a stream, so never call pipeThrough on its result. "
                 "Use a small explicit application chunk size and a small byte fixture; do not "
                 "allocate multi-megabyte input merely to exercise a final partial chunk. "
-                "If the reported defect surfaces as a rejected promise or thrown error (e.g. a "
-                "decrypt/verify step that should succeed but currently fails), wrap the call in "
-                "assert.rejects(...) or assert.doesNotReject(...) so the failure is a recognized "
-                "AssertionError rather than an uncaught exception — for example: "
+                "Assert the intended post-fix behavior, never the current defect. If an operation "
+                "should succeed but currently rejects or throws, use assert.doesNotReject(...)—"
+                "not assert.rejects(...)—so the unfixed revision produces a recognized assertion "
+                "failure; then assert its expected result. For example: "
                 "await assert.doesNotReject(async () => { recovered = await roundTrip(); }); "
-                "assert.deepStrictEqual(recovered, original); An uncaught exception is not "
-                "accepted as reproduction evidence even when it demonstrates the real defect."
+                "assert.deepStrictEqual(recovered, original). Use assert.rejects only when "
+                "rejection is the required correct behavior and the bug is that invalid input is "
+                "accepted. An uncaught exception is not accepted as reproduction evidence even "
+                "when it demonstrates the real defect."
             ),
             solver_guidance=(
                 "Repair existing JavaScript or TypeScript application files only. "

@@ -5,7 +5,7 @@
 From this repository, run:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.1.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.2.zip
 ```
 
 Extract the ZIP and copy its files to the **target repository root**, preserving
@@ -88,24 +88,26 @@ For Go, `test_directory` names the existing package containing source. Consult
 `runtimes.py` for conventional Maven, Gradle and Rust layouts.
 
 An existing baseline must pass before repair. Keep the new root-level regression
-out of the baseline command. For a TypeScript target, pin `tsx` in the target's
-development dependencies and use a baseline such as:
+out of the baseline command. For a TypeScript target, pin `tsx` and `typescript`
+in the target's development dependencies and use a baseline such as:
 
 ```json
 "scripts": {
   "test": "tsx --test --test-reporter=tap tests/*.test.ts"
 },
 "devDependencies": {
-  "tsx": "4.23.15"
+  "tsx": "4.23.15",
+  "typescript": "5.6.3"
 }
 ```
 
 For the demonstrated file-sharing target, copy `examples/file-sharing-setup/tests/`
-and its `patchproof.json`, add the test script and exact `tsx` development
-dependency above, then regenerate `package-lock.json` with
-`npm install --save-dev --save-exact tsx@4.23.15`. Do not replace the target's
+and its `patchproof.json`, add the test script and exact development dependencies
+above, then regenerate `package-lock.json` with
+`npm install --save-dev --save-exact tsx@4.23.15 typescript@5.6.3`. Do not replace the target's
 entire package.json or lockfile. The engine export includes generic Web Streams
-test plumbing; it does not install application dependencies into the repository.
+test plumbing and a temporary project-aware type-check harness; it does not install
+application dependencies into the repository.
 
 The known unfixed app revision is `807346b22421d0a58103092ccc318c1bdc1d7231` in
 creatoropener/file-sharing-app. Reproduce in a separate demonstration repository

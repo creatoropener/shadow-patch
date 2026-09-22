@@ -42,9 +42,12 @@ An accepted reproduction needs a recognized assertion failure and an unchanged
 test hash. Syntax errors, import errors, skipped tests, zero-test success and a
 test already passing on the original source are not sufficient evidence.
 Bounded setup retries occur before a reproduced regression is frozen.
-For `node-typescript`, normal project imports run through pinned `tsx`. Generic
-`readableFromBytes` and `collectBytes` helpers provide deterministic Web Streams
-plumbing without copying application behavior into the test.
+For `node-typescript`, each generated test and its imported application modules
+are first checked with the target's pinned TypeScript compiler. This catches wrong
+API arguments and invalid stream composition before runtime evidence is considered.
+Normal project imports then run through pinned `tsx`. Generic `readableFromBytes`
+and `collectBytes` helpers provide deterministic Web Streams plumbing without
+copying application behavior into the test.
 
 Separate calls can use the same NVIDIA model and share correlated mistakes.
 "Independent" describes the workflow and test timing, not statistical model

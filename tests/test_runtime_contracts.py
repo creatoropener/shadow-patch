@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from runtimes import detect_runtime
-from proof import render_report
+from proof import classify_reproduction, render_report, reproduction_feedback
 
 
 class NodeTypeScriptContractTests(unittest.TestCase):
@@ -29,7 +29,10 @@ class NodeTypeScriptContractTests(unittest.TestCase):
         adapter = detect_runtime(self.make_project())
         self.assertEqual(adapter.id, "node-typescript")
         self.assertEqual(adapter.test_path(3), "test_patchproof_issue_3.test.ts")
-        self.assertIn("/opt/patchproof/node/node_modules/.bin/tsx", adapter.regression_command("x.test.ts"))
+        command = adapter.regression_command("x.test.ts")
+        self.assertIn("python /patchproof/typescript_check.py", command)
+        self.assertLess(command.index("typescript_check.py"), command.index("/tsx "))
+        self.assertIn("./node_modules/.bin/tsc --version", adapter.preflight_command)
 
     def test_explicit_typescript_runtime_is_supported(self) -> None:
         adapter = detect_runtime(self.make_project(explicit=True))
@@ -58,6 +61,57 @@ class NodeTypeScriptContractTests(unittest.TestCase):
 const output = await collectBytes(readableFromBytes(input, 8).pipeThrough(transform));
 """,
             "test_patchproof_issue_3.test.ts",
+        )
+
+    def test_rejects_typescript_contract_bypasses(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        for bypass in (
+            "const key = value as any;",
+            "const key = value as unknown as CryptoKey;",
+            "// @ts-ignore\nconst key = value;",
+            "// @ts-expect-error\nconst key = value;",
+        ):
+            with self.subTest(bypass=bypass), self.assertRaisesRegex(
+                ValueError, "Do not bypass TypeScript API contracts"
+            ):
+                adapter.validate_generated_test(
+                    bypass, "test_patchproof_issue_3.test.ts"
+                )
+
+    def test_retry_feedback_corrects_green_bug_confirmation(self) -> None:
+        feedback = reproduction_feedback(
+            "await assert.rejects(roundTrip);",
+            "test passed on the unfixed revision",
+            "# pass 1",
+        )
+        self.assertIn("intended post-fix behavior", feedback)
+        self.assertIn("doesNotReject", feedback)
+
+    def test_retry_feedback_explains_typescript_contract_errors(self) -> None:
+        feedback = reproduction_feedback(
+            "const output = await collectBytes(stream); output.pipeThrough(transform);",
+            "test infrastructure exited with code 2",
+            "error TS2339\nPATCHPROOF_TYPESCRIPT_CHECK=failed",
+        )
+        self.assertIn("failed static API checking", feedback)
+        self.assertIn("collectBytes returns Uint8Array", feedback)
+
+    def test_typescript_type_error_has_specific_classification(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        digest = "abc123"
+        output = (
+            "error TS2345\nPATCHPROOF_TYPESCRIPT_CHECK=failed\n"
+            f"PATCHPROOF_TEST_HASH_BEFORE={digest}\n"
+            f"PATCHPROOF_TEST_HASH_AFTER={digest}\n"
+        )
+        reproduced, protected, classification = classify_reproduction(
+            adapter, 2, output, digest
+        )
+        self.assertFalse(reproduced)
+        self.assertTrue(protected)
+        self.assertEqual(
+            classification,
+            "generated TypeScript regression failed API type-check",
         )
 
 

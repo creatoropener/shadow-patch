@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0-rc.2 — verifier contract hardening, 2026-09-22
+
+- Type-check every generated `node-typescript` regression and its imported
+  application modules against the target's own `tsconfig.json` before execution.
+- Reject generated tests that hide API mismatches with TypeScript suppression or
+  `any` casts.
+- Require regressions to assert intended post-fix behavior rather than treating
+  the current defect as an expected success.
+- Retry a generated test that passes on the unfixed revision with explicit semantic
+  feedback instead of stopping immediately.
+- Add targeted retry diagnostics for invalid stream composition and Web Crypto key
+  wrapper misuse while preserving conservative assertion-only reproduction evidence.
+
+This remains a release candidate. The Issue #3 Nebius acceptance run is still the
+promotion gate for final v0.6.0 support.
+
 ## v0.6.0-rc.1 — TypeScript runtime hardening, 2026-09-21
 
 - Add an explicit `node-typescript` adapter using pinned `tsx` and normal project imports.
