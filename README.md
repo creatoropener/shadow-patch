@@ -7,7 +7,7 @@ regression before asking a solver for a patch, evaluates three repair candidates
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.4 · Recorded verification evidence: v0.5.5 · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.5 · Recorded verification evidence: v0.5.5 · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -56,7 +56,7 @@ results are never fed back to a solver. Details: [architecture](docs/ARCHITECTUR
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.4.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.5.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible

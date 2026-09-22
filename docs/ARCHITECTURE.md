@@ -42,6 +42,20 @@ An accepted reproduction needs a recognized assertion failure and an unchanged
 test hash. Syntax errors, import errors, skipped tests, zero-test success and a
 test already passing on the original source are not sufficient evidence.
 Bounded setup retries occur before a reproduced regression is frozen.
+Identical regenerated source reuses the prior failed result on the same base for
+diagnostics and consumes a retry slot; it does not execute again or immediately
+abort. Generation records include validation failures and duplicate references,
+while execution records contain only actual sandbox runs. There remain at most
+three reproduction slots with up to three validation-generation attempts per slot;
+HTTP retries inside inference are separate from these records.
+
+Conventional TypeScript stream tests that compare collected output must use an
+awaited async doesNotReject callback. The runner catches absent guards; the sandbox
+parser checks operation placement within the same test. It also checks partial-chunk
+claims for one resolvable literal fixture and one explicit application chunkSize.
+It supports numeric byte-array literals and TextEncoder string literals, including
+escapes. Computed or ambiguous fixtures are not assessed for coverage. These are
+bounded structural checks, not general data-flow or coverage proofs.
 Verifier responses must contain separate non-empty `test_content` and `rationale`
 strings. The JSON decoder rejects trailing data and duplicate fields; it does not
 salvage the first object from mixed prose or strip metadata from test source.

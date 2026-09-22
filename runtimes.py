@@ -36,6 +36,24 @@ def _unused_initialized_bindings(content: str) -> list[str]:
     return sorted(set(unused))
 
 
+def _js_code_only(content: str) -> str:
+    """Mask comments and strings for conservative runner-side presence checks."""
+    return re.sub(
+        r"//[^\n]*|/\*[\s\S]*?\*/|'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`(?:\\.|[^`\\])*`",
+        lambda match: re.sub(r"[^\n]", " ", match.group()), content,
+    )
+
+
+def _missing_async_success_guard(content: str) -> bool:
+    code = _js_code_only(content)
+    return bool(
+        re.search(r"\.pipeThrough\s*\(", code)
+        and re.search(r"\bcollectBytes\s*\(", code)
+        and re.search(r"\bassert\.(?:deepStrictEqual|strictEqual|equal)\s*\(", code)
+        and not re.search(r"\bawait\s+assert\.doesNotReject\s*\(", code)
+    )
+
+
 @dataclass(frozen=True)
 class RuntimeAdapter:
     id: str
@@ -159,6 +177,13 @@ class RuntimeAdapter:
                         "Web Streams regressions must import and call readableFromBytes and "
                         "collectBytes from file:///patchproof/web_streams.mjs; missing: "
                         + ", ".join(missing)
+                    )
+                if _missing_async_success_guard(content):
+                    raise ValueError(
+                        "Stream output compared for equality must be collected inside "
+                        "await assert.doesNotReject(async () => { ... }); then assert "
+                        "the expected output. Put creation and consumption inside the "
+                        "callback. An unrelated assert.rejects is not a success guard."
                     )
 
     def validate_candidate_file(self, path: str, content: str) -> None:

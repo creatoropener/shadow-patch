@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.4"
+APP_VERSION = "0.6.0-rc.5"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -477,19 +477,30 @@ Markdown fences."""
 
 def generate_regression_with_retry(
     *, issue: Issue, context: str, api_key: str, model: str,
-    adapter: RuntimeAdapter, test_path: str, retry_feedback: str = ""
+    adapter: RuntimeAdapter, test_path: str, retry_feedback: str = "",
+    generation_attempts: list[dict[str, Any]] | None = None,
 ) -> tuple[str, str]:
     last_error: Exception | None = None
     for attempt in range(1, 4):
         try:
-            return generate_regression_test(
+            result = generate_regression_test(
                 issue=issue, context=context, api_key=api_key, model=model,
                 adapter=adapter, test_path=test_path,
                 retry_feedback=retry_feedback,
             )
+            if generation_attempts is not None:
+                generation_attempts.append({"attempt": len(generation_attempts) + 1,
+                                            "status": "validated", "sha256": sha256_text(result[0])})
+            return result
         except InferenceError:
+            if generation_attempts is not None:
+                generation_attempts.append({"attempt": len(generation_attempts) + 1,
+                                            "status": "inference_failed"})
             raise
         except PatchProofError as error:
+            if generation_attempts is not None:
+                generation_attempts.append({"attempt": len(generation_attempts) + 1,
+                                            "status": "validation_failed", "diagnostic": str(error)})
             last_error = error
             retry_feedback += f"\nTest-generation validation error: {error}"
             if attempt < 3:
@@ -558,6 +569,14 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
             "must contain source only, without appended JSON metadata or Markdown fences. "
             "Preserve the expected behavior and assertion intent."
         )
+    elif "PATCHPROOF_TYPESCRIPT_CONTRACT=failed" in output:
+        feedback += (
+            "\nENGINE DIAGNOSIS: The generated stream test violates its execution or coverage "
+            "contract. Follow the specific diagnostics above. Guard the complete successful "
+            "operation with awaited assert.doesNotReject, then compare the output. For full "
+            "and partial chunk coverage use more than one application chunk and a nonzero "
+            "remainder. Input stream segmentation is not the application's chunkSize."
+        )
     elif "PATCHPROOF_TYPESCRIPT_LINT=failed" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: The generated test constructed a value but never used it "
@@ -591,6 +610,8 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
         return False, False, "protected test hash was missing or changed"
     if "PATCHPROOF_TYPESCRIPT_PARSE=failed" in output:
         return False, True, "generated TypeScript regression failed syntax parsing"
+    if "PATCHPROOF_TYPESCRIPT_CONTRACT=failed" in output:
+        return False, True, "generated TypeScript regression failed stream contract"
     if "PATCHPROOF_TYPESCRIPT_LINT=unavailable" in output:
         return False, True, "generated TypeScript lint tooling unavailable"
     if adapter.is_regression_failure(exit_code, output):
@@ -957,6 +978,16 @@ def render_report(proof: dict[str, Any]) -> str:
         f"- Sandbox image: `{proof.get('sandbox', {}).get('base_image', '')}`",
         f"- Regression test: `{regression.get('path', '')}`",
     ]
+    generations = regression.get("generation_attempts") or []
+    if generations:
+        lines.extend(["", "## Verifier generation attempts", "",
+                      "| Generation | Status | Sandbox execution |", "| ---: | --- | --- |"])
+        for generation in generations:
+            status = str(generation.get("status", "")).replace("|", "\\|")
+            execution = generation.get("execution_attempt", "not executed")
+            if generation.get("reused_from_attempt"):
+                execution = f"reused result from {generation['reused_from_attempt']}; not re-executed"
+            lines.append(f"| {generation.get('attempt', '')} | {status} | {execution} |")
     attempts = regression.get("attempts") or []
     if attempts:
         lines.extend(["", "## Regression reproduction attempts", "",
@@ -1122,9 +1153,12 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         # bootstrap, runtime preflight, and existing baseline have all passed.
         # The regression is still generated before any solver call or candidate.
         proof["stage"] = "verifier-generation"
+        generation_attempts: list[dict[str, Any]] = []
+        proof["regression_test"] = {"generation_attempts": generation_attempts}
         test_content, rationale = generate_regression_with_retry(
             issue=issue, context=verifier_context, api_key=api_key, model=model,
             adapter=adapter, test_path=test_path,
+            generation_attempts=generation_attempts,
         )
         test_hash = sha256_text(test_content)
         proof["regression_test"] = {
@@ -1136,25 +1170,38 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             "failed_before_fix": False,
             "protected": False,
             "attempts": [],
+            "generation_attempts": generation_attempts,
         }
 
         reproduction_command = adapter.regression_command(test_path)
         proof["stage"] = "verifier-reproduction"
         retry_feedback = ""
-        attempted_hashes: set[str] = set()
+        attempted: dict[str, dict[str, Any]] = {}
         for reproduction_attempt in range(1, 4):
             if reproduction_attempt > 1:
                 test_content, rationale = generate_regression_with_retry(
                     issue=issue, context=verifier_context, api_key=api_key,
                     model=model, adapter=adapter, test_path=test_path,
                     retry_feedback=retry_feedback,
+                    generation_attempts=generation_attempts,
                 )
                 test_hash = sha256_text(test_content)
-            if test_hash in attempted_hashes:
-                raise PatchProofError(
-                    "Verifier returned an identical regression test; refusing to rerun it."
+            if test_hash in attempted:
+                prior = attempted[test_hash]
+                classification = prior["classification"]
+                generation_attempts[-1].update({"status": "duplicate",
+                                               "reused_from_attempt": prior["attempt"]})
+                retry_feedback = reproduction_feedback(
+                    prior["content"], classification, prior["output"]
+                ) + (
+                    "\nENGINE DIAGNOSIS: This test_content is identical to a previously rejected "
+                    "test. Its result was reused without another sandbox execution. Correct "
+                    "the diagnosed harness problem while preserving expected behavior; "
+                    "cosmetic edits do not fix it."
                 )
-            attempted_hashes.add(test_hash)
+                print(f"Verifier generation duplicated execution {prior['attempt']}; "
+                      "skipping sandbox execution and using remaining retry budget.", file=sys.stderr)
+                continue
             proof["regression_test"].update({
                 "sha256": test_hash, "rationale": rationale, "content": test_content,
                 "protected": False, "failed_before_fix": False,
@@ -1173,7 +1220,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             )
             proof["regression_test"]["attempts"].append(
                 {
-                    "attempt": reproduction_attempt,
+                    "attempt": len(proof["regression_test"]["attempts"]) + 1,
                     "sha256": test_hash,
                     "content": test_content,
                     "rationale": rationale,
@@ -1184,6 +1231,9 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     "output": short_output(reproduction),
                 }
             )
+            record = proof["regression_test"]["attempts"][-1]
+            attempted[test_hash] = record
+            generation_attempts[-1]["execution_attempt"] = record["attempt"]
             proof["regression_test"].update({
                 "failed_before_fix": reproduced, "protected": protected,
                 "pre_fix_exit_code": reproduction.exit_code,
@@ -1206,7 +1256,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             )
         else:
             raise PatchProofError(
-                "Three verifier-created tests did not produce an accepted pre-fix "
+                "Verifier retry budget exhausted without an accepted pre-fix "
                 f"assertion failure; last result: {classification}."
             )
 

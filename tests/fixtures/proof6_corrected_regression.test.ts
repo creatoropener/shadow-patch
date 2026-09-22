@@ -7,10 +7,10 @@ import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.
 const FIXTURE = new TextEncoder().encode('Hello, World! This is a test of the stream cipher regression test.');
 
 test('stream cipher round-trip preserves all bytes including final partial chunk', async () => {
-  const { key } = await generateSessionKey();
   let recovered: Uint8Array | undefined;
 
   await assert.doesNotReject(async () => {
+    const { key } = await generateSessionKey();
     recovered = await collectBytes(
       readableFromBytes(FIXTURE, 7)
         .pipeThrough(await createEncryptionStream(key, { chunkSize: 16 }))

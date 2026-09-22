@@ -60,7 +60,10 @@ class NodeTypeScriptContractTests(unittest.TestCase):
         adapter = detect_runtime(self.make_project())
         adapter.validate_generated_test(
             """import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.mjs';
-const output = await collectBytes(readableFromBytes(input, 8).pipeThrough(transform));
+let output;
+await assert.doesNotReject(async () => {
+output = await collectBytes(readableFromBytes(input, 8).pipeThrough(transform));
+});
 assert.deepStrictEqual(output, expected);
 """,
             "test_patchproof_issue_3.test.ts",

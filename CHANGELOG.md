@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0-rc.5 — stream contracts and bounded duplicate retries, 2026-09-23
+
+- Skip duplicate regression executions and use remaining regeneration allowance
+  with the original diagnosis; do not abort immediately or weaken assertion gates.
+- Report generation attempts separately from actual sandbox executions, including
+  validation failures and duplicate references. Existing bounded retry limits remain.
+- Reject missing success guards on conventional generated TypeScript stream tests;
+  the sandbox parser checks that awaited operations and consumption are inside the
+  awaited async doesNotReject callback in the same test.
+- Check unambiguous literal fixture coverage against explicit application chunkSize.
+  Do not confuse source segmentation with application chunks or guess computed values.
+- Test the actual execute control flow with mocked external services, plus parser
+  checks for unrelated guards, escaped text fixtures and full/partial boundaries.
+
+An existing rc.4 image and secrets can be reused. Live Issue #3 acceptance is still pending.
+
 ## v0.6.0-rc.4 — reproduction diagnostics and response contracts, 2026-09-22
 
 - Explain operational Node test failures with a concrete doesNotReject pattern;

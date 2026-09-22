@@ -1,15 +1,15 @@
-# v0.6.0-rc.4 engineering handoff
+# v0.6.0-rc.5 engineering handoff
 
 ## Purpose
 
-This release candidate preserves the rc.3 runtime and assertion gates. It adds
-specific feedback for operational rejections before assertions, separates syntax
-errors from unused-binding and linter-tooling failures, and strictly validates the
-verifier's JSON fields. Malformed source is rejected and regenerated, not trimmed
-into a potentially different test. Engine Checks exercise real Node TAP output
-and the pinned TypeScript parser using the latest failure fixtures.
+This release candidate preserves the assertion gates and rc.4 diagnostics. It adds
+structural stream-success and literal chunk-coverage checks. Duplicate generations
+consume the existing retry allowance without repeated sandbox execution or immediate
+abort. The report separates generations from executions, and records validation
+failures as well as duplicates. Engine Checks exercise the actual orchestrator loop
+with mocked external services and run the real TypeScript parser.
 
-For an existing rc.3 installation with passing preflight and baseline, update the
+For an existing rc.4 installation with passing preflight and baseline, update the
 engine files only. Reuse the image UUID, secrets and target dependencies. The image
 preparation steps below apply to first-time installations or incompatible images.
 
@@ -23,7 +23,7 @@ Make engine changes in `creatoropener/shadow-patch`, review them through a branc
 and export the target installer from that revision:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.4.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.5.zip
 ```
 
 Copy the exported files into a target repository. Do not independently edit
@@ -43,7 +43,7 @@ and `patchproof.json` remain owned by the target.
    retrying; do not spend repeated model/sandbox calls on the same configuration.
 6. Require: accepted pre-fix assertion, three evaluated candidates, at least one
    passing candidate, matching test hashes, clean replay, green workflow, and PR.
-7. If all gates pass, bump `APP_VERSION` and documentation from `0.6.0-rc.4` to
+7. If all gates pass, bump `APP_VERSION` and documentation from `0.6.0-rc.5` to
    `0.6.0`, tag the release, and keep the new proof artifact as acceptance evidence.
 
 ## Local checks

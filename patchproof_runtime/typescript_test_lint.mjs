@@ -47,6 +47,92 @@ if (!targetArg) {
         }
         fail('Generated TypeScript test has parser diagnostics.', 'PATCHPROOF_TYPESCRIPT_PARSE=failed');
       } else {
+        // Enforce the conventional generated stream-test contract structurally.
+        // This is deliberately narrower than arbitrary JavaScript data-flow analysis.
+        const contractErrors = [];
+        const visit = (node, fn) => { fn(node); ts.forEachChild(node, child => visit(child, fn)); };
+        const callName = node => ts.isCallExpression(node) ? node.expression.getText(sourceFile) : '';
+        visit(sourceFile, node => {
+          if (!ts.isCallExpression(node) || !['test', 'it'].includes(callName(node))) return;
+          const callback = node.arguments.find(arg => ts.isArrowFunction(arg) || ts.isFunctionExpression(arg));
+          if (!callback) return;
+          const calls = [];
+          visit(callback.body, child => { if (ts.isCallExpression(child)) calls.push(child); });
+          const consumers = calls.filter(call => callName(call) === 'collectBytes');
+          const equality = calls.some(call => /^assert\.(deepStrictEqual|strictEqual|equal)$/.test(callName(call)));
+          const pipeline = calls.some(call => ts.isPropertyAccessExpression(call.expression)
+            && call.expression.name.text === 'pipeThrough');
+          if (consumers.length && equality && pipeline) {
+            const guards = calls.filter(call => callName(call) === 'assert.doesNotReject'
+              && ts.isAwaitExpression(call.parent)
+              && call.arguments[0]
+              && (ts.isArrowFunction(call.arguments[0]) || ts.isFunctionExpression(call.arguments[0]))
+              && call.arguments[0].modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword));
+            const guarded = operation => guards.some(guard => {
+              for (let parent = operation.parent; parent && parent !== callback; parent = parent.parent) {
+                if (parent === guard.arguments[0]) return true;
+              }
+              return false;
+            });
+            const operations = calls.filter(call => callName(call) !== 'assert.doesNotReject'
+              && (callName(call) === 'collectBytes'
+                || (ts.isPropertyAccessExpression(call.expression) && call.expression.name.text === 'pipeThrough')
+                || ts.isAwaitExpression(call.parent)));
+            if (!guards.length || operations.some(operation => !guarded(operation))) {
+              contractErrors.push('Stream success contract: put awaited application operations, pipeThrough and collectBytes inside an awaited assert.doesNotReject(async () => { ... }); then compare output.');
+            }
+          }
+          const title = node.arguments[0];
+          if (!title || !ts.isStringLiteralLike(title) || !/partial/i.test(title.text)) return;
+          const bindings = new Map();
+          visit(sourceFile, child => {
+            if (ts.isVariableDeclaration(child) && ts.isIdentifier(child.name)) {
+              const entries = bindings.get(child.name.text) ?? [];
+              entries.push(child.initializer);
+              bindings.set(child.name.text, entries);
+            }
+          });
+          const resolve = (expression, depth = 0) => {
+            if (!expression || depth > 8) return undefined;
+            if (ts.isIdentifier(expression)) {
+              const entries = bindings.get(expression.text);
+              return entries?.length === 1 ? resolve(entries[0], depth + 1) : undefined;
+            }
+            return expression;
+          };
+          const sources = calls.filter(call => callName(call) === 'readableFromBytes');
+          const sizes = [];
+          for (const call of calls) for (const arg of call.arguments) {
+            if (ts.isObjectLiteralExpression(arg)) for (const property of arg.properties) {
+              if (ts.isPropertyAssignment(property) && property.name.getText(sourceFile) === 'chunkSize') {
+                sizes.push(resolve(property.initializer));
+              }
+            }
+          }
+          // Ambiguous or computed values are not guessed. Input segmentation is
+          // not the application chunkSize and is never used as a substitute.
+          if (sources.length !== 1 || sizes.length !== 1) return;
+          const fixture = resolve(sources[0].arguments[0]);
+          const size = sizes[0];
+          if (!fixture || !size || !ts.isNumericLiteral(size)) return;
+          const chunk = Number(size.text);
+          let length;
+          if (ts.isNewExpression(fixture) && fixture.expression.getText(sourceFile) === 'Uint8Array') {
+            const values = fixture.arguments?.[0];
+            if (values && ts.isArrayLiteralExpression(values)
+              && values.elements.every(value => ts.isNumericLiteral(value))) length = values.elements.length;
+          } else if (ts.isCallExpression(fixture) && ts.isPropertyAccessExpression(fixture.expression)
+            && fixture.expression.name.text === 'encode'
+            && ts.isNewExpression(fixture.expression.expression)
+            && fixture.expression.expression.expression.getText(sourceFile) === 'TextEncoder'
+            && fixture.arguments[0] && ts.isStringLiteralLike(fixture.arguments[0])) {
+            length = Buffer.byteLength(fixture.arguments[0].text, 'utf8');
+          }
+          if (length === undefined || !Number.isSafeInteger(chunk) || chunk <= 0) return;
+          if (length % chunk === 0 || (/\bfull\b/i.test(title.text) && length <= chunk)) {
+            contractErrors.push(`Chunk coverage contract: ${length} fixture bytes with application chunkSize ${chunk} do not support the claimed full/partial coverage. Use a non-multiple; for full and partial coverage exceed one chunk.`);
+          }
+        });
         const declarations = new Map();
         const declarationNodes = new Set();
 
@@ -103,6 +189,8 @@ if (!targetArg) {
             'Every constructed helper, stream, or transform must participate in the asserted behavior.',
             'PATCHPROOF_TYPESCRIPT_LINT=failed',
           );
+        } else if (contractErrors.length) {
+          fail(contractErrors.join('\n'), 'PATCHPROOF_TYPESCRIPT_CONTRACT=failed');
         } else {
           process.stdout.write('PATCHPROOF_TYPESCRIPT_LINT=passed\n');
         }
