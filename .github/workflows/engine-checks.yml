@@ -32,5 +32,6 @@ jobs:
       - name: Check JavaScript helpers
         run: |
           node --check patchproof_runtime/static_web_check.mjs
+          node --check patchproof_runtime/typescript_test_lint.mjs
           node --check patchproof_runtime/web_streams.mjs
           node --test tests/test_web_streams.mjs
