@@ -1,0 +1,6 @@
+PATCHPROOF_TEST_HASH_BEFORE=18362cfa52a6dd7c617d910d0f2af807a18f400f3593af6d9cb10efe33141de5
+PATCHPROOF_TEST_HASH_AFTER=18362cfa52a6dd7c617d910d0f2af807a18f400f3593af6d9cb10efe33141de5
+
+test_patchproof_issue_3.test.ts:21:13: ';' expected.
+Generated TypeScript test has parser diagnostics.
+PATCHPROOF_TYPESCRIPT_LINT=failed

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.0-rc.4 — reproduction diagnostics and response contracts, 2026-09-22
+
+- Explain operational Node test failures with a concrete doesNotReject pattern;
+  require the complete successful application operation inside the callback,
+  followed by its result assertion. Raw ERR_TEST_FAILURE remains rejected.
+- Separate TypeScript parser errors, unused-binding failures and unavailable
+  linter tooling so retry feedback matches the actual failure.
+- Require one unambiguous JSON object and separate non-empty test_content and
+  rationale fields. Reject duplicate keys, trailing data and malformed payloads;
+  never silently strip metadata from generated source.
+- Add fixtures from proof(7), actual Node TAP assertion tests, and pinned
+  TypeScript parser integration checks in Engine Checks.
+
+No new image or target dependencies are required for an already working rc.3
+installation. This is not a new live acceptance result; Issue #3 still needs to
+pass all verification gates before promoting v0.6.0.
+
 ## v0.6.0-rc.3 — semantic verifier hardening, 2026-09-22
 
 - Reject generated TypeScript regressions with initialized bindings that never

@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-function fail(message) {
-  process.stderr.write(`${message}\nPATCHPROOF_TYPESCRIPT_LINT=failed\n`);
+function fail(message, marker = 'PATCHPROOF_TYPESCRIPT_LINT=unavailable') {
+  process.stderr.write(`${message}\n${marker}\n`);
   process.exitCode = 2;
 }
 
@@ -45,7 +45,7 @@ if (!targetArg) {
             `${targetArg}:${position.line + 1}:${position.character + 1}: ${message}\n`,
           );
         }
-        fail('Generated TypeScript test has parser diagnostics.');
+        fail('Generated TypeScript test has parser diagnostics.', 'PATCHPROOF_TYPESCRIPT_PARSE=failed');
       } else {
         const declarations = new Map();
         const declarationNodes = new Set();
@@ -101,6 +101,7 @@ if (!targetArg) {
           }
           fail(
             'Every constructed helper, stream, or transform must participate in the asserted behavior.',
+            'PATCHPROOF_TYPESCRIPT_LINT=failed',
           );
         } else {
           process.stdout.write('PATCHPROOF_TYPESCRIPT_LINT=passed\n');

@@ -1,0 +1,24 @@
+PATCHPROOF_TYPESCRIPT_LINT=passed
+PATCHPROOF_TYPESCRIPT_CHECK=passed
+TAP version 13
+# Subtest: createDecryptionStream can decrypt output of createEncryptionStream (same key, no seed passed, round trip)
+not ok 1 - createDecryptionStream can decrypt output of createEncryptionStream (same key, no seed passed, round trip)
+  ---
+  duration_ms: 16.093396
+  location: '/workspace/repo/test_patchproof_issue_3.test.ts:9:1'
+  failureType: 'testCodeFailure'
+  error: 'The operation failed for an operation-specific reason'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 358.561387
+
+PATCHPROOF_TEST_HASH_BEFORE=cc70df972b8ded40614133e101508eae937f2eaafa0395601124d25eba0fd76d
+PATCHPROOF_TEST_HASH_AFTER=cc70df972b8ded40614133e101508eae937f2eaafa0395601124d25eba0fd76d

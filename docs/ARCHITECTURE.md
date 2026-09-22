@@ -42,6 +42,13 @@ An accepted reproduction needs a recognized assertion failure and an unchanged
 test hash. Syntax errors, import errors, skipped tests, zero-test success and a
 test already passing on the original source are not sufficient evidence.
 Bounded setup retries occur before a reproduced regression is frozen.
+Verifier responses must contain separate non-empty `test_content` and `rationale`
+strings. The JSON decoder rejects trailing data and duplicate fields; it does not
+salvage the first object from mixed prose or strip metadata from test source.
+Node operational failures are still rejected as reproduction evidence. Retry
+feedback explains how to assert successful asynchronous behavior explicitly before
+checking the returned value. Parser errors, unused bindings, and unavailable lint
+tooling have distinct diagnostics so unrelated rewrites are not encouraged.
 For `node-typescript`, each generated test and its imported application modules
 are checked for unused initialized bindings on the runner and again with the
 target's pinned TypeScript parser in the sandbox. The target's pinned TypeScript
