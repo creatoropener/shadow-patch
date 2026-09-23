@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.5"
+APP_VERSION = "0.6.0-rc.6"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -572,10 +572,25 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
     elif "PATCHPROOF_TYPESCRIPT_CONTRACT=failed" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: The generated stream test violates its execution or coverage "
-            "contract. Follow the specific diagnostics above. Guard the complete successful "
-            "operation with awaited assert.doesNotReject, then compare the output. For full "
-            "and partial chunk coverage use more than one application chunk and a nonzero "
-            "remainder. Input stream segmentation is not the application's chunkSize."
+            "contract. Follow the specific diagnostics above. EVERY awaited call in the test "
+            "function -- including session/key setup, not only the transforms -- must be inside "
+            "ONE awaited assert.doesNotReject(async () => { ... }) callback; only the final "
+            "equality assertion goes outside it. Splitting the round trip into an unguarded "
+            "setup/forward step and a separately-guarded inverse step still violates the "
+            "contract. Example shape: "
+            "let recovered: Uint8Array | undefined; "
+            "await assert.doesNotReject(async () => { "
+            "const { key } = await generateSessionKey(); "
+            "const forward = await makeForwardTransform(key); "
+            "const encoded = await collectBytes(readableFromBytes(input, n).pipeThrough(forward)); "
+            "const inverse = await makeInverseTransform(key); "
+            "recovered = await collectBytes(readableFromBytes(encoded, n).pipeThrough(inverse)); "
+            "}); assert.deepStrictEqual(recovered, input); "
+            "Use the repository's real APIs, not these placeholder names. Do not assert anything "
+            "about the intermediate encoded value (not even its byteLength) -- only compare the "
+            "final recovered value to the original input. For full and partial chunk coverage "
+            "use more than one application chunk and a nonzero remainder. Input stream "
+            "segmentation is not the application's chunkSize."
         )
     elif "PATCHPROOF_TYPESCRIPT_LINT=failed" in output:
         feedback += (
