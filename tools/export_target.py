@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 import zipfile
 
@@ -17,6 +18,14 @@ FILES = (
 )
 
 
+def _read_app_version(root: Path) -> str:
+    text = (root / "proof.py").read_text()
+    match = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    if not match:
+        raise SystemExit("Could not find APP_VERSION in proof.py")
+    return match.group(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -25,12 +34,13 @@ def main() -> None:
     for name in FILES:
         if not (root / name).is_file():
             parser.error(f"Incomplete installation: {name}")
+    version = _read_app_version(root)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, "w", zipfile.ZIP_DEFLATED) as archive:
         for name in FILES:
             archive.write(root / name, name)
         archive.writestr("PATCHPROOF-INSTALL.md", (
-            "# Install PatchProof v0.6.0-rc.5\n\n"
+            f"# Install PatchProof v{version}\n\n"
             "Copy the engine files into your target repository, preserving paths.\n"
             "Append __pycache__/ and *.py[cod] to its existing .gitignore.\n"
             "Configure NEBIUS_API_KEY, NEBIUS_PROJECT_ID, NEBIUS_MODEL and a compatible "
@@ -41,7 +51,7 @@ def main() -> None:
             "Full setup and the optional file-sharing example:\n"
             "https://github.com/creatoropener/shadow-patch/blob/main/docs/SETUP.md\n"
         ))
-    print(f"Exported {len(FILES)} engine files and setup instructions to {args.output}")
+    print(f"Exported {len(FILES)} engine files (v{version}) and setup instructions to {args.output}")
 
 
 if __name__ == "__main__":
