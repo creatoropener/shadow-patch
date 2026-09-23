@@ -41,7 +41,6 @@ jobs:
 
   sync-to-target:
     needs: validate
-    # Only run this on the main/default branch when tests pass, not on every PR branch
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -53,9 +52,10 @@ jobs:
       - name: Checkout file-sharing-app
         uses: actions/checkout@v4
         with:
-          repository: 'creatoropener/file-sharing-app' # Replace with your actual org/repo name
-          token: ${{ secrets.SYNC_TARGET_TOKEN }}          # Requires a PAT with repo scope
+          repository: 'creatoropener/file-sharing-app'
+          token: ${{ secrets.SYNC_TARGET_TOKEN }}          
           path: file-sharing-app
+          persist-credentials: false # <-- Crucial addition: prevents overriding credentials
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -75,15 +75,14 @@ jobs:
         run: |
           cd file-sharing-app
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@://github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # Stage the specific target files and directories
           git add runtimes.py proof.py requirements-patchproof.txt patchproof_runtime/ .github/workflows/
           
-          # Only commit and push if changes actually exist
           if ! git diff --cached --quiet; then
             git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
-            git push origin HEAD
+            # Force target path to explicitly utilize token for the transfer
+            git push https://x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}@://github.com HEAD:main
           else
             echo "No changes detected. Skipping deployment."
           fi
