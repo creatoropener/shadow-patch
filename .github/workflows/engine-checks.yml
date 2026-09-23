@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write  # Updated to allow the workflow to push commits if needed
+  contents: read
 
 jobs:
   validate:
@@ -38,62 +38,3 @@ jobs:
           node --check patchproof_runtime/typescript_test_lint.mjs
           node --check patchproof_runtime/web_streams.mjs
           node --test tests/test_web_streams.mjs
-
-  sync-to-target:
-    needs: validate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout shadow-patch
-        uses: actions/checkout@v4
-        with:
-          path: shadow-patch
-
-      - name: Checkout file-sharing-app
-        uses: actions/checkout@v4
-        with:
-          repository: 'creatoropener/file-sharing-app'
-          token: ${{ secrets.SYNC_TARGET_TOKEN }}          
-          path: file-sharing-app
-          persist-credentials: false # <-- Crucial addition: prevents overriding credentials
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Run export script
-        run: |
-          cd shadow-patch
-          python3 tools/export_target.py --output ../patch_delivery.zip
-
-      - name: Extract package over file-sharing-app root
-        run: |
-          unzip -o patch_delivery.zip -d file-sharing-app/
-
-      - name: Commit and push updates to file-sharing-app
-        env:
-          # This safely maps the secret to an environment variable first
-          TARGET_TOKEN: ${{ secrets.SYNC_TARGET_TOKEN }}
-        run: |
-          cd file-sharing-app
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          git add runtimes.py proof.py requirements-patchproof.txt patchproof_runtime/ .github/workflows/
-          
-          if ! git diff --cached --quiet; then
-            git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
-            
-            # If the secret is missing, this will print an explicit warning instead of breaking the URL
-            if [ -z "$TARGET_TOKEN" ]; then
-              echo "ERROR: SYNC_TARGET_TOKEN secret is empty or missing in GitHub repository settings!"
-              exit 1
-            fi
-            
-            # Safely updates the remote using the validated environment variable
-            git remote set-url origin "https://x-access-token:${TARGET_TOKEN}@://github.com"
-            git push origin HEAD:main
-          else
-            echo "No changes detected. Skipping deployment."
-          fi
