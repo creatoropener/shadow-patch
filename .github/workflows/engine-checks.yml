@@ -72,9 +72,6 @@ jobs:
           unzip -o patch_delivery.zip -d file-sharing-app/
 
       - name: Commit and push updates to file-sharing-app
-        # Bind the token to the git environment safely via env keys
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_TARGET_TOKEN }}
         run: |
           cd file-sharing-app
           git config user.name "github-actions[bot]"
@@ -85,8 +82,8 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
             
-            # The environment variable handles token injection automatically over origin
-            git push origin HEAD:main
+            # This absolute URL format forces git to use the token directly for this single push
+            git push "https://x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}@://github.com" HEAD:main
           else
             echo "No changes detected. Skipping deployment."
           fi
