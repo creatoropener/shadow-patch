@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write  # Updated to allow the workflow to push commits if needed
 
 jobs:
   validate:
@@ -38,3 +38,52 @@ jobs:
           node --check patchproof_runtime/typescript_test_lint.mjs
           node --check patchproof_runtime/web_streams.mjs
           node --test tests/test_web_streams.mjs
+
+  sync-to-target:
+    needs: validate
+    # Only run this on the main/default branch when tests pass, not on every PR branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout shadow-patch
+        uses: actions/checkout@v4
+        with:
+          path: shadow-patch
+
+      - name: Checkout file-sharing-app
+        uses: actions/checkout@v4
+        with:
+          repository: 'creatoropener/file-sharing-app' # Replace with your actual org/repo name
+          token: ${{ secrets.SYNC_TARGET_TOKEN }}          # Requires a PAT with repo scope
+          path: file-sharing-app
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run export script
+        run: |
+          cd shadow-patch
+          python3 tools/export_target.py --output ../patch_delivery.zip
+
+      - name: Extract package over file-sharing-app root
+        run: |
+          unzip -o patch_delivery.zip -d file-sharing-app/
+
+      - name: Commit and push updates to file-sharing-app
+        run: |
+          cd file-sharing-app
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@://github.com"
+          
+          # Stage the specific target files and directories
+          git add runtimes.py proof.py requirements-patchproof.txt patchproof_runtime/ .github/workflows/
+          
+          # Only commit and push if changes actually exist
+          if ! git diff --cached --quiet; then
+            git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
+            git push origin HEAD
+          else
+            echo "No changes detected. Skipping deployment."
+          fi
