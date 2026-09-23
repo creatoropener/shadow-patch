@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.6"
+APP_VERSION = "0.6.0-rc.7"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1391,10 +1391,10 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         time.monotonic() - started,
                     )
                     passing.append((score, candidate_record, changes))
-            except InferenceError as candidate_error:
-                candidate_record["error"] = str(candidate_error)
-                raise
-            except Exception as candidate_error:  # noqa: BLE001 - isolate a failed candidate
+            except Exception as candidate_error:  # noqa: BLE001 - isolate a failed candidate,
+                                                    # InferenceError included: a JSON-formatting
+                                                    # or refusal hiccup on THIS strategy's prompt
+                                                    # says nothing about the next strategy's.
                 candidate_record["error"] = str(candidate_error)
             finally:
                 candidate_record["duration_seconds"] = round(time.monotonic() - started, 3)
