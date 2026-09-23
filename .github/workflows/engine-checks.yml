@@ -81,8 +81,11 @@ jobs:
           
           if ! git diff --cached --quiet; then
             git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
-            # Force target path to explicitly utilize token for the transfer
-            git push https://x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}@://github.com HEAD:main
+            
+            # Use an authorization header instead of modifying the remote URL directly
+            git config extraheader "Authorization: Basic $(echo -n 'x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}' | base64)"
+            
+            git push origin HEAD:main
           else
             echo "No changes detected. Skipping deployment."
           fi
