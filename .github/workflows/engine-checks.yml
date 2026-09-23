@@ -75,15 +75,15 @@ jobs:
         run: |
           cd file-sharing-app
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@://github.com"
           
           git add runtimes.py proof.py requirements-patchproof.txt patchproof_runtime/ .github/workflows/
           
           if ! git diff --cached --quiet; then
             git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
             
-            # Use an authorization header instead of modifying the remote URL directly
-            git config extraheader "Authorization: Basic $(echo -n 'x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}' | base64)"
+            # Added the correct 'http.' prefix section to resolve the git config error
+            git config http.extraheader "Authorization: Basic $(echo -n 'x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}' | base64)"
             
             git push origin HEAD:main
           else
