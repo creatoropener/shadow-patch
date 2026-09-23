@@ -72,6 +72,9 @@ jobs:
           unzip -o patch_delivery.zip -d file-sharing-app/
 
       - name: Commit and push updates to file-sharing-app
+        env:
+          # This safely maps the secret to an environment variable first
+          TARGET_TOKEN: ${{ secrets.SYNC_TARGET_TOKEN }}
         run: |
           cd file-sharing-app
           git config user.name "github-actions[bot]"
@@ -82,9 +85,14 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
             
-            # Rewrite the remote URL to securely include the token as a variable
-            git remote set-url origin https://x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}@://github.com
+            # If the secret is missing, this will print an explicit warning instead of breaking the URL
+            if [ -z "$TARGET_TOKEN" ]; then
+              echo "ERROR: SYNC_TARGET_TOKEN secret is empty or missing in GitHub repository settings!"
+              exit 1
+            fi
             
+            # Safely updates the remote using the validated environment variable
+            git remote set-url origin "https://x-access-token:${TARGET_TOKEN}@://github.com"
             git push origin HEAD:main
           else
             echo "No changes detected. Skipping deployment."
