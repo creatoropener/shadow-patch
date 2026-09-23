@@ -82,8 +82,10 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Automated sync: updated engine files from shadow-patch (${{ github.sha }})"
             
-            # This absolute URL format forces git to use the token directly for this single push
-            git push "https://x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}@://github.com" HEAD:main
+            # Rewrite the remote URL to securely include the token as a variable
+            git remote set-url origin https://x-access-token:${{ secrets.SYNC_TARGET_TOKEN }}@://github.com
+            
+            git push origin HEAD:main
           else
             echo "No changes detected. Skipping deployment."
           fi
