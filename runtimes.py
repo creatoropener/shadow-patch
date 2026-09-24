@@ -145,6 +145,12 @@ class RuntimeAdapter:
                     "Do not use the retired TypeScript loader; import application modules "
                     "normally in the tsx-executed test."
                 )
+            if re.search(r"""['"]/@/""", content):
+                raise ValueError(
+                    "Malformed path alias: found '/@/' with a leading slash before the @. "
+                    "This project's alias is '@/' with no leading slash — for example "
+                    "import { generateSessionKey } from '@/lib/crypto/aes';"
+                )    
             if re.search(
                 r"@ts-(?:ignore|nocheck|expect-error)\b|\bas\s+(?:unknown\s+as\s+)?any\b|"
                 r"\bas\s+unknown\s+as\s+[A-Za-z_$]|:\s*any\b",
@@ -476,6 +482,9 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "relative paths and this project's '@/' path alias (tsx resolves both from "
                 "tsconfig.json automatically) — for example: "
                 "import { generateSessionKey } from './lib/crypto/aes'; "
+                "or, using the alias form: "
+                "import { generateSessionKey } from '@/lib/crypto/aes'; "
+                "The alias is '@/', never '/@/' — there is no leading slash before the @. "
                 "Never invent a helper import or reimplement application logic; call the real "
                 "exported functions directly. Respect every declared TypeScript signature. If "
                 "a factory returns a wrapper object, destructure or select the documented field "
