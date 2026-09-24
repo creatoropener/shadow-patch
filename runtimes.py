@@ -54,6 +54,34 @@ def _missing_async_success_guard(content: str) -> bool:
     )
 
 
+_NODE_TEST_IMPORT = "import test from 'node:test';"
+_NODE_ASSERT_IMPORT = "import assert from 'node:assert/strict';"
+
+
+def _without_comments(content: str) -> str:
+    """Drop whole-line and block comments; module specifiers stay visible."""
+    return re.sub(r"(?m)^[ \t]*//[^\n]*$|/\*[\s\S]*?\*/", "", content)
+
+
+def _missing_node_test_imports(content: str) -> list[str]:
+    """Return the import lines a generated node:test file needs but lacks.
+
+    Under tsx, ``test`` and ``assert`` are not globals. Without the imports the
+    sandbox type-check fails (TS2582/TS2304) and a model that reads the compiler's
+    "install @types/jest" hint tends to resubmit the same file unchanged.
+    """
+    source = _without_comments(content)
+    missing: list[str] = []
+    if not re.search(r"""(?:\bfrom\s*|\brequire\s*\(\s*)['"]node:test['"]""", source):
+        missing.append(_NODE_TEST_IMPORT)
+    uses_assert = re.search(r"(?<![\w$.])assert\s*[.(]", _js_code_only(source))
+    if uses_assert and not re.search(
+        r"""(?:\bfrom\s*|\brequire\s*\(\s*)['"]node:assert(?:/strict)?['"]""", source
+    ):
+        missing.append(_NODE_ASSERT_IMPORT)
+    return missing
+
+
 @dataclass(frozen=True)
 class RuntimeAdapter:
     id: str
@@ -191,6 +219,15 @@ class RuntimeAdapter:
                         "the expected output. Put creation and consumption inside the "
                         "callback. An unrelated assert.rejects is not a success guard."
                     )
+            missing_imports = _missing_node_test_imports(content)
+            if missing_imports:
+                raise ValueError(
+                    "Generated TypeScript regression is missing required imports: `test` "
+                    "and `assert` are not globals under tsx. Add exactly: "
+                    + " ".join(missing_imports)
+                    + " Declare each case as test('name', async () => { ... });. "
+                    "This is a missing import, not a missing @types package."
+                )
 
     def validate_candidate_file(self, path: str, content: str) -> None:
         if Path(path).suffix.lower() == ".py":
@@ -477,7 +514,12 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             ),
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert, "
-                "executed with tsx (real TypeScript, not a custom loader). Import application "
+                "executed with tsx (real TypeScript, not a custom loader). `test` and "
+                "`assert` are NOT globals: the file MUST include exactly these two imports, "
+                "written this way: import test from 'node:test'; "
+                "import assert from 'node:assert/strict'; "
+                "and every case is declared as test('descriptive name', async () => { ... }); "
+                "never call test() or assert without importing them. Import application "
                 "modules the normal way, exactly as the application itself does, including "
                 "relative paths and this project's '@/' path alias (tsx resolves both from "
                 "tsconfig.json automatically) — for example: "

@@ -59,7 +59,9 @@ class NodeTypeScriptContractTests(unittest.TestCase):
     def test_accepts_engine_web_stream_helpers(self) -> None:
         adapter = detect_runtime(self.make_project())
         adapter.validate_generated_test(
-            """import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.mjs';
+            """import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.mjs';
 let output;
 await assert.doesNotReject(async () => {
 output = await collectBytes(readableFromBytes(input, 8).pipeThrough(transform));
@@ -163,6 +165,95 @@ assert.deepStrictEqual(output, expected);
             classification,
             "generated TypeScript regression failed semantic lint",
         )
+
+    # --- missing node:test / node:assert imports (real generated test from proof.json) ---
+
+    def test_rejects_generated_test_without_node_test_import(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        source = (FIXTURES / "missing_node_test_import.test.ts").read_text(encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "missing required imports") as raised:
+            adapter.validate_generated_test(source, "test_patchproof_issue_3.test.ts")
+        # `assert` is imported in this fixture; only `test` is missing.
+        self.assertIn("import test from 'node:test';", str(raised.exception))
+        self.assertNotIn("node:assert/strict", str(raised.exception))
+
+    def test_accepts_same_test_once_imports_are_present(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        source = (FIXTURES / "missing_node_test_import_corrected.test.ts").read_text(
+            encoding="utf-8"
+        )
+        adapter.validate_generated_test(source, "test_patchproof_issue_3.test.ts")
+
+    def test_missing_assert_import_is_reported_separately(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        source = "import test from 'node:test';\ntest('x', () => { assert.equal(1, 1); });\n"
+        with self.assertRaisesRegex(ValueError, "missing required imports") as raised:
+            adapter.validate_generated_test(source, "test_patchproof_issue_3.test.ts")
+        self.assertIn("import assert from 'node:assert/strict';", str(raised.exception))
+        self.assertNotIn("import test from", str(raised.exception))
+
+    def test_accepted_import_spellings(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        for header in (
+            "import test from 'node:test';\nimport assert from 'node:assert/strict';",
+            'import { test } from "node:test";\nimport { strict as assert } from "node:assert";',
+            "import test, { describe } from 'node:test';\nimport assert from 'node:assert';",
+            "const test = require('node:test');\nconst assert = require('node:assert/strict');",
+        ):
+            with self.subTest(header=header):
+                adapter.validate_generated_test(
+                    header + "\ntest('x', () => { assert.equal(1, 1); });\n",
+                    "test_patchproof_issue_3.test.ts",
+                )
+
+    def test_commented_out_import_does_not_count(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        source = (
+            "// import test from 'node:test';\n"
+            "/* import assert from 'node:assert/strict'; */\n"
+            "test('x', () => { assert.equal(1, 1); });\n"
+        )
+        with self.assertRaisesRegex(ValueError, "missing required imports"):
+            adapter.validate_generated_test(source, "test_patchproof_issue_3.test.ts")
+
+    def test_verifier_guidance_demonstrates_the_imports(self) -> None:
+        adapter = detect_runtime(self.make_project())
+        self.assertIn("import test from 'node:test';", adapter.verifier_guidance)
+        self.assertIn("import assert from 'node:assert/strict';", adapter.verifier_guidance)
+
+    def test_missing_import_feedback_replaces_generic_api_advice(self) -> None:
+        source = (FIXTURES / "missing_node_test_import.test.ts").read_text(encoding="utf-8")
+        output = (FIXTURES / "missing_node_test_import.out").read_text(encoding="utf-8")
+        feedback = reproduction_feedback(
+            source, "generated TypeScript regression failed API type-check", output
+        )
+        self.assertIn("missing import", feedback)
+        self.assertIn("import test from 'node:test';", feedback)
+        self.assertIn("NOT a missing @types package", feedback)
+        self.assertIn("identical content fails again", feedback)
+        self.assertNotIn("failed static API checking", feedback)
+
+    def test_mixed_diagnostics_keep_both_kinds_of_feedback(self) -> None:
+        output = (
+            "x.test.ts(6,1): error TS2582: Cannot find name 'test'.\n"
+            "x.test.ts(9,5): error TS2345: Argument of type 'string' is not assignable.\n"
+            "PATCHPROOF_TYPESCRIPT_CHECK=failed"
+        )
+        feedback = reproduction_feedback("src", "generated TypeScript regression failed API type-check", output)
+        self.assertIn("missing import", feedback)
+        self.assertIn("failed static API checking", feedback)
+
+    def test_corrected_test_is_accepted_as_assertion_failure_evidence(self) -> None:
+        # TAP captured by running the corrected fixture against the unfixed issue #3 code.
+        adapter = detect_runtime(self.make_project())
+        output = (FIXTURES / "missing_node_test_import_corrected.tap").read_text(encoding="utf-8")
+        digest = "abc123"
+        output += (
+            f"\nPATCHPROOF_TEST_HASH_BEFORE={digest}\nPATCHPROOF_TEST_HASH_AFTER={digest}\n"
+        )
+        reproduced, protected, classification = classify_reproduction(adapter, 1, output, digest)
+        self.assertTrue(reproduced, classification)
+        self.assertTrue(protected)
 
 
 class ReportContractTests(unittest.TestCase):

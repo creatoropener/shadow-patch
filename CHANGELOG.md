@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.6.0-rc.8 — missing test-runner imports, 2026-09-25
+
+- Reject a generated TypeScript regression that calls `test` or `assert` without
+  importing them (`import test from 'node:test'`, `import assert from 'node:assert/strict'`)
+  before any sandbox execution. Under tsx these are not globals; the sandbox type-check
+  otherwise fails with TS2582/TS2304, whose "install @types/jest" hint led the verifier
+  model to resubmit the same file unchanged for the whole retry budget.
+- Show the two imports in the verifier guidance instead of only naming node:test.
+- When the compiler reports "Cannot find name" for `test`/`assert`, retry feedback now
+  says it is a missing import (not a missing @types package) and names the exact lines;
+  the generic API-signature advice is added only when other compiler errors are present.
+- The path-alias validation (`'/@/'` → `'@/'`) already present in `runtimes.py` is part
+  of this release. It shipped without a version bump, so earlier proof.json files carry
+  `rc.7` even though they ran that check. rc.6 and rc.7 were not recorded here.
+- Add fixtures from a real run: the generated test that failed with TS2582, its corrected
+  form, and the TAP output showing the corrected test fails on the unfixed Issue #3 code
+  with a recognised `ERR_ASSERTION`.
+
+No new image or target dependencies are required. Replace `proof.py` and `runtimes.py` in
+the target repository. Live Issue #3 acceptance is still pending.
+
 ## v0.6.0-rc.5 — stream contracts and bounded duplicate retries, 2026-09-23
 
 - Skip duplicate regression executions and use remaining regeneration allowance

@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.7"
+APP_VERSION = "0.6.0-rc.8"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -554,13 +554,33 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
             "Do not change fixture values or protocol expectations merely to obtain a failure."
         )
     if "PATCHPROOF_TYPESCRIPT_CHECK=failed" in output:
-        feedback += (
-            "\nENGINE DIAGNOSIS: The generated TypeScript test failed static API checking. "
-            "Correct every reported compiler diagnostic by re-reading the repository's actual "
-            "parameter and return types. Do not use any, ts-ignore, ts-expect-error, or casts "
-            "to silence the mismatch. Keep stream values as streams until all pipeThrough "
-            "operations are complete; collectBytes returns Uint8Array."
+        runner_name = re.compile(
+            r"error TS(?:2582|2304)[^\n]*Cannot find name '(?:test|it|describe|assert)'"
         )
+        missing_runner = any(runner_name.search(line) for line in output.splitlines())
+        other_errors = any(
+            re.search(r"error TS\d+", line) and not runner_name.search(line)
+            for line in output.splitlines()
+        )
+        if missing_runner:
+            feedback += (
+                "\nENGINE DIAGNOSIS: The compiler reported \"Cannot find name\" for `test` "
+                "or `assert`. This is a missing import in the generated file, NOT a missing "
+                "@types package: do not install or mention @types/jest or @types/mocha, and "
+                "do not change what the test asserts. `test` and `assert` are not globals under "
+                "tsx. Put exactly these two lines at the top of test_content: "
+                "import test from 'node:test'; import assert from 'node:assert/strict'; "
+                "and keep the case declared as test('name', async () => { ... }). "
+                "Return the complete corrected file; resubmitting identical content fails again."
+            )
+        if other_errors or not missing_runner:
+            feedback += (
+                "\nENGINE DIAGNOSIS: The generated TypeScript test failed static API checking. "
+                "Correct every reported compiler diagnostic by re-reading the repository's actual "
+                "parameter and return types. Do not use any, ts-ignore, ts-expect-error, or casts "
+                "to silence the mismatch. Keep stream values as streams until all pipeThrough "
+                "operations are complete; collectBytes returns Uint8Array."
+            )
     if "PATCHPROOF_TYPESCRIPT_PARSE=failed" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: The generated TypeScript source has a syntax error. "

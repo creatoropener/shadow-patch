@@ -1,0 +1,7 @@
+PATCHPROOF_TYPESCRIPT_LINT=passed
+test_patchproof_issue_3.test.ts(6,1): error TS2582: Cannot find name 'test'. Do you need to install type definitions for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`.
+
+PATCHPROOF_TEST_HASH_BEFORE=f787e55ada1dea6fe9d4ea5937aba8cfbe53d0cd08a9f3bfd2b0be2acc8bc0a0
+PATCHPROOF_TEST_HASH_AFTER=f787e55ada1dea6fe9d4ea5937aba8cfbe53d0cd08a9f3bfd2b0be2acc8bc0a0
+
+PATCHPROOF_TYPESCRIPT_CHECK=failed
