@@ -128,8 +128,16 @@ class RetryLoopTests(unittest.TestCase):
 
     def test_duplicate_preserves_third_attempt_without_fake_execution(self):
         report, calls, candidates, feedback, error = self.run_loop(['bad', 'bad', 'valid'])
-        self.assertEqual((calls, candidates), (2, 1))
-        self.assertEqual(error, 'candidate reached')
+        # Candidate isolation (rc.7) means an InferenceError from one strategy no longer
+        # aborts the race: all 3 strategies get an independent, isolated attempt instead
+        # of the old first-InferenceError-wins short circuit. calls stays 2 (the duplicate
+        # at reproduction_attempt=2 is still correctly skipped); candidates rises to 3.
+        self.assertEqual((calls, candidates), (2, 3))
+        self.assertEqual(
+            error,
+            "Only 0 of 3 candidates completed isolated Sandbox evaluation; 0 passed both "
+            "the baseline and hidden regression. See individual candidate errors.",
+        )
         regression = report['regression_test']
         self.assertEqual(len(regression['attempts']), 2)
         self.assertEqual(len(regression['generation_attempts']), 3)
