@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.6.0-rc.12 — record rejected candidates' actual diffs, 2026-09-25
+
+- First real run to reach `candidate-evaluation`: the regression test
+  validated and correctly reproduced Issue #3 on the first attempt
+  (`nvidia/nemotron-3-super-120b-a12b`, `reasoning_tokens=0` throughout,
+  confirming rc.10/rc.11 hold for this model too). All three candidates
+  correctly targeted `stream-cipher.ts` with the right general idea and
+  still failed -- but nothing about what any of them actually proposed
+  was recoverable: `proof.json` kept only `changed_files` (paths) and a
+  line count, never the content. Same shape of blind spot as rc.9
+  (validation rejections) and rc.11 (truncated responses), one stage
+  further into the pipeline where nothing had reached until now.
+- Added `unified_diff_text`, and every candidate record (passed or
+  rejected) now carries a real unified diff of what it proposed against
+  the original file. Application source only, never test or secret
+  content, so the full diff is kept rather than truncated.
+- The existing baseline-retry feedback had its own inline copy of this
+  same diff-building logic; it now calls the shared helper instead.
+- New tests: `unified_diff_text` directly, plus a full run through
+  `proof.execute()` with three independently mocked candidate proposals,
+  confirming each rejected candidate's record carries its own distinct,
+  correctly-attributed diff rather than a shared or stale one.
+
+No new image or target dependencies are required. Replace `proof.py` in
+the target repository (`runtimes.py` is unchanged since rc.8). Live Issue #3
+acceptance is still pending -- this release only makes a rejection
+diagnosable, not the fix itself.
+
 ## v0.6.0-rc.11 — family-wide Nemotron detection, truncated-response logging, 2026-09-25
 
 - rc.10 is confirmed working: a live run against `nvidia/Nemotron-3-Ultra-550b-a55b`

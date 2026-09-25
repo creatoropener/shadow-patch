@@ -151,3 +151,110 @@ class RetryLoopTests(unittest.TestCase):
         self.assertEqual((calls, candidates), (1, 0))
         self.assertIn('budget exhausted', error)
         self.assertEqual(len(report['regression_test']['generation_attempts']), 3)
+
+
+class UnifiedDiffTextTests(unittest.TestCase):
+    def test_matches_real_file_content_against_a_proposed_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'app.ts').write_text('export const x = 1;\nexport const y = 2;\n')
+            diff = proof.unified_diff_text(
+                root, [{'path': 'app.ts', 'content': 'export const x = 1;\nexport const y = 3;\n'}])
+            self.assertIn('--- app.ts', diff)
+            self.assertIn('+++ app.ts', diff)
+            self.assertIn('-export const y = 2;', diff)
+            self.assertIn('+export const y = 3;', diff)
+            self.assertIn('\n export const x = 1;\n', diff)  # unchanged line: space-prefixed context
+            self.assertNotIn('-export const x = 1;', diff)
+            self.assertNotIn('+export const x = 1;', diff)
+
+    def test_multiple_files_each_get_their_own_diff_header(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'a.ts').write_text('const a = 1;\n')
+            (root / 'b.ts').write_text('const b = 1;\n')
+            diff = proof.unified_diff_text(root, [
+                {'path': 'a.ts', 'content': 'const a = 2;\n'},
+                {'path': 'b.ts', 'content': 'const b = 2;\n'},
+            ])
+            self.assertIn('--- a.ts', diff)
+            self.assertIn('--- b.ts', diff)
+
+    def test_no_changes_produces_an_empty_diff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'app.ts').write_text('const a = 1;\n')
+            diff = proof.unified_diff_text(
+                root, [{'path': 'app.ts', 'content': 'const a = 1;\n'}])
+            self.assertEqual(diff, '')
+
+
+class CandidateDiffRecordingTests(unittest.TestCase):
+    """rc.12: a rejected candidate's proposed fix was discarded once the
+    sandbox rejected it -- proof.json kept only its file paths and a line
+    count, never the actual code. Built from a real Issue #3 run where all
+    three candidates independently targeted the right file with the right
+    general idea and still failed, with no way to see why."""
+
+    def test_every_candidate_record_carries_a_real_diff_of_its_own_proposal(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory)
+            (root / 'package.json').write_text('{"scripts":{"test":"node --test"}}')
+            (root / 'app.ts').write_text('export const x = 1;\n')
+            baseline = MagicMock()
+            baseline.exit_code = 0
+            baseline.uuid = 'baseline'
+            baseline.output = '# pass 1'
+            baseline.run.return_value.wait.return_value = baseline
+            stack.enter_context(patch.dict(os.environ, {
+                'NEBIUS_API_KEY': 'test', 'NEBIUS_PROJECT_ID': 'test',
+                'NEBIUS_MODEL': 'test', 'CONTREE_IMAGE': 'test'}))
+            for name, result in [('collect_repository_context', ('context', {'app.ts'})),
+                                 ('create_sandbox_client', MagicMock()),
+                                 ('sandbox_workspace', baseline),
+                                 ('apply_contents', baseline)]:
+                stack.enter_context(patch('proof.' + name, return_value=result))
+            stack.enter_context(patch('proof.make_repository_archive'))
+            stack.enter_context(patch('proof.text_output', side_effect=lambda state: state.output))
+            def generate_regression(**kwargs):
+                kwargs['generation_attempts'].append({'attempt': 1, 'status': 'validated'})
+                return 'valid', 'rationale'
+            stack.enter_context(patch('proof.generate_regression_with_retry',
+                                      side_effect=generate_regression))
+
+            def execute_test(*args):
+                digest = proof.sha256_text('valid')
+                return SimpleNamespace(exit_code=1, uuid='execution', output=(
+                    "TAP version 13\nnot ok 1 - operation\n  ---\n"
+                    "  failureType: 'testCodeFailure'\n"
+                    "  code: 'ERR_ASSERTION'\n"
+                    '  ...\n# fail 1\n# pass 0\n'
+                    f'PATCHPROOF_TEST_HASH_BEFORE={digest}\nPATCHPROOF_TEST_HASH_AFTER={digest}\n'))
+            stack.enter_context(patch('proof.run_protected_tests', side_effect=execute_test))
+
+            # Each of the 3 strategies proposes a *different* one-line change,
+            # like three independently-generated real candidates would.
+            proposals = iter([
+                'export const x = 2;\n', 'export const x = 3;\n', 'export const x = 4;\n'])
+            stack.enter_context(patch(
+                'proof.generate_candidate_with_retry',
+                side_effect=lambda **kwargs: (
+                    [{'path': 'app.ts', 'content': next(proposals)}], 'a proposed fix')))
+
+            report = {'candidates': []}
+            with self.assertRaises(proof.PatchProofError) as error:
+                proof.execute(root, proof.Issue(3, 't', 'b'), report)
+            self.assertIn('All candidate repairs were rejected', str(error.exception))
+
+            self.assertEqual(len(report['candidates']), 3)
+            seen_values = set()
+            for candidate in report['candidates']:
+                self.assertFalse(candidate['passed'])
+                self.assertIn('diff', candidate)
+                self.assertIn('--- app.ts', candidate['diff'])
+                self.assertIn('+++ app.ts', candidate['diff'])
+                self.assertIn('-export const x = 1;', candidate['diff'])
+                seen_values.add(candidate['diff'])
+            # The three candidates' diffs are genuinely distinct, not a copy
+            # of one strategy's proposal.
+            self.assertEqual(len(seen_values), 3)

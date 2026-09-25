@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.11"
+APP_VERSION = "0.6.0-rc.12"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1078,6 +1078,23 @@ def changed_lines(root: Path, changes: list[dict[str, str]]) -> int:
     return total
 
 
+def unified_diff_text(root: Path, changes: list[dict[str, str]]) -> str:
+    """A readable unified diff of proposed changes against the original,
+    pre-fix file contents.
+
+    Used both for a rejected candidate's evidence record (application
+    source only -- never test or secret content -- so the full diff is
+    kept rather than truncated) and for baseline-retry feedback.
+    """
+    return "\n".join(
+        "".join(difflib.unified_diff(
+            (root / item["path"]).read_text(encoding="utf-8").splitlines(True),
+            item["content"].splitlines(True),
+            fromfile=item["path"], tofile=item["path"],
+        )) for item in changes
+    )
+
+
 def run_protected_tests(state: Any, test_path: str, command: str) -> Any:
     protected_path = shlex.quote(test_path)
     shell = f"""set +e
@@ -1451,6 +1468,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     candidate_record["summary"] = summary
                     candidate_record["changed_files"] = [item["path"] for item in changes]
                     candidate_record["changed_lines"] = changed_lines(root, changes)
+                    candidate_record["diff"] = unified_diff_text(root, changes)
                     # This snapshot predates the hidden test. Keeping that file
                     # absent prevents broad baseline discovery (e.g. pytest) from
                     # exposing hidden assertions in the solver's retry feedback.
@@ -1484,13 +1502,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         break
                     if baseline_attempt == 2:
                         raise PatchProofError("Candidate still fails the existing baseline after one correction.")
-                    patch = "\n".join(
-                        "".join(difflib.unified_diff(
-                            (root / item["path"]).read_text(encoding="utf-8").splitlines(True),
-                            item["content"].splitlines(True),
-                            fromfile=item["path"], tofile=item["path"],
-                        )) for item in changes
-                    )
+                    patch = unified_diff_text(root, changes)
                     baseline_feedback = candidate_retry_feedback(
                         "The previous proposal broke or failed the existing baseline. "
                         "Preserve the existing expectations and repair source only. "
