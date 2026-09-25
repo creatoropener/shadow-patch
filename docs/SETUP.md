@@ -5,7 +5,7 @@
 From this repository, run:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.9.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.10.zip
 ```
 
 Extract the ZIP and copy its files to the **target repository root**, preserving

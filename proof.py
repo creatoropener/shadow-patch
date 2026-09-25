@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.9"
+APP_VERSION = "0.6.0-rc.10"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -280,6 +280,53 @@ def _format_is_unsupported(error: Any) -> bool:
     return mentions_format and unsupported
 
 
+# Models whose chat template supports toggling reasoning off via
+# chat_template_kwargs.enable_thinking (confirmed on each model's own card).
+# Without this, a reasoning-heavy model can spend most or all of its
+# NEBIUS_MAX_TOKENS budget on hidden reasoning before ever writing the
+# answer, and gets rejected on finish_reason=length with little or nothing
+# to show for it -- as opposed to a plain wrong-but-complete answer.
+_THINKING_TOGGLE_MODELS = {
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+    "nvidia/Nemotron-3_5-Lightning",
+    "nvidia/Nemotron-3-Ultra-550b-a55b",
+}
+
+
+def build_model_request(
+    *, model: str, system: str, user: str, temperature: float, max_tokens: int
+) -> dict[str, Any]:
+    """The exact request body model_json sends to the inference endpoint.
+
+    Isolated from model_json so the per-model overrides below (thinking mode,
+    temperature, top_p) are unit-testable without a live network call.
+    """
+    request: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if model in _THINKING_TOGGLE_MODELS:
+        request["extra_body"] = {
+            "chat_template_kwargs": {
+                "enable_thinking": False,
+            }
+        }
+        if model == "nvidia/Nemotron-3_5-Lightning":
+            request["temperature"] = 1.0
+            request["top_p"] = 0.95
+        elif model == "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B":
+            request["temperature"] = 0.0
+        # nvidia/Nemotron-3-Ultra-550b-a55b: only silence its reasoning
+        # trace; its sampling has no prior tuning history, so the caller's
+        # temperature is left as given rather than guessed at.
+    return request
+
+
 def model_json(
     *, api_key: str, model: str, system: str, user: str, temperature: float
 ) -> dict[str, Any]:
@@ -290,30 +337,10 @@ def model_json(
     if not 1_000 <= max_tokens <= 32_000:
         raise InferenceError("NEBIUS_MAX_TOKENS must be between 1000 and 32000.")
     from openai import APIConnectionError, APIStatusError, OpenAI
-    request: dict[str, Any] = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    if model in {
-        "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-        "nvidia/Nemotron-3_5-Lightning",
-    }:
-        request["extra_body"] = {
-            "chat_template_kwargs": {
-                "enable_thinking": False,
-            }
-        }
-
-        if model == "nvidia/Nemotron-3_5-Lightning":
-            request["temperature"] = 1.0
-            request["top_p"] = 0.95
-        else:
-            request["temperature"] = 0.0
+    request = build_model_request(
+        model=model, system=system, user=user, temperature=temperature,
+        max_tokens=max_tokens,
+    )
     structured = True
     last_failure = "No usable model response."
     # One retry owner: at most three HTTP requests per model_json call, including

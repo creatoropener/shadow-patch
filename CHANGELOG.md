@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.6.0-rc.10 — silence reasoning for Nemotron-3-Ultra-550b-a55b, 2026-09-25
+
+- Add `nvidia/Nemotron-3-Ultra-550b-a55b` to the set of models sent
+  `chat_template_kwargs.enable_thinking: False`, matching its two smaller
+  siblings already special-cased here. NVIDIA's own model card confirms this
+  model supports the identical toggle. Unlike those two, its temperature is
+  left as the caller's value rather than overridden -- there is no prior
+  tuning history for it to justify a guess.
+- `model_json`'s request-building is extracted into `build_model_request`,
+  a pure function, so these per-model overrides are unit-tested directly
+  instead of only through a live inference call.
+- Built from a real Issue #3 run on this model: attempt 1 produced an
+  otherwise well-formed regression test (correct imports, correctly wrapped
+  in `assert.doesNotReject`) with a single missing `)` closing
+  `new Uint8Array(`, correctly caught by the sandbox's real compiler at
+  `43:2`. Attempt 2's retry spent 11,161 of the 12,000-token
+  `NEBIUS_MAX_TOKENS` budget on hidden reasoning and was rejected on
+  `finish_reason=length` before writing a final answer. This release only
+  addresses the reasoning-budget cause; the syntax typo itself needed no
+  engine change -- the sandbox already caught it precisely, with a usable
+  diagnostic, exactly as designed.
+- **Not changed, and worth doing separately:** `NEBIUS_MAX_TOKENS` is a
+  GitHub Actions repo variable/secret, not engine code. This model's
+  documented max output is far above the engine's 32,000-token ceiling;
+  raising the configured budget (e.g. toward that ceiling) is a config
+  change on the target repo, independent of this release, and is not
+  guaranteed to be sufficient on its own without the fix above.
+- Whether `enable_thinking: False` is honored through Nebius Token
+  Factory specifically for this model is unverified from this environment
+  (no network path to the inference endpoint here); the next real run is
+  the actual test.
+
+No new image or target dependencies are required. Replace `proof.py` in the
+target repository (`runtimes.py` is unchanged since rc.8). Live Issue #3
+acceptance is still pending.
+
 ## v0.6.0-rc.9 — generation-failure observability and repeat detection, 2026-09-25
 
 - A rejected verifier-generation attempt (before any sandbox involvement) now

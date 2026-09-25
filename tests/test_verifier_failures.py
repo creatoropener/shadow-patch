@@ -12,7 +12,8 @@ from unittest.mock import patch
 import contextlib
 import io
 
-from proof import (Issue, PatchProofError, classify_reproduction, extract_json_object,
+from proof import (Issue, PatchProofError, build_model_request,
+                   classify_reproduction, extract_json_object,
                    generate_regression_test, generate_regression_with_retry,
                    repeated_failure_feedback, reproduction_feedback,
                    validate_verifier_payload)
@@ -203,6 +204,63 @@ class RepeatedFailureEscalationTests(unittest.TestCase):
             # The concrete example shown back is attempt 2's own content, not attempt 1's.
             self.assertIn("test('b'", third_call_user)
             self.assertNotIn("test('a'", third_call_user)
+
+
+class ModelRequestThinkingToggleTests(unittest.TestCase):
+    """rc.10: nvidia/Nemotron-3-Ultra-550b-a55b joined the engine's model
+    lineup and, unlike the two smaller Nemotron models already special-cased
+    here, was not told to keep its reasoning off. On a retry it spent 11,161
+    of a 12,000-token budget on hidden reasoning and was rejected on
+    finish_reason=length with almost nothing left for the actual answer."""
+
+    def test_ultra_550b_gets_thinking_disabled(self):
+        request = build_model_request(
+            model="nvidia/Nemotron-3-Ultra-550b-a55b", system="s", user="u",
+            temperature=0.1, max_tokens=12000)
+        self.assertEqual(
+            request["extra_body"]["chat_template_kwargs"]["enable_thinking"], False)
+
+    def test_ultra_550b_temperature_is_left_to_the_caller(self):
+        # No prior tuning history for this model exists (unlike its two
+        # siblings below); only its runaway reasoning is being addressed.
+        request = build_model_request(
+            model="nvidia/Nemotron-3-Ultra-550b-a55b", system="s", user="u",
+            temperature=0.37, max_tokens=12000)
+        self.assertEqual(request["temperature"], 0.37)
+        self.assertNotIn("top_p", request)
+
+    def test_existing_lightning_and_nano_overrides_are_unchanged(self):
+        lightning = build_model_request(
+            model="nvidia/Nemotron-3_5-Lightning", system="s", user="u",
+            temperature=0.1, max_tokens=12000)
+        self.assertEqual(lightning["temperature"], 1.0)
+        self.assertEqual(lightning["top_p"], 0.95)
+        self.assertEqual(
+            lightning["extra_body"]["chat_template_kwargs"]["enable_thinking"], False)
+
+        nano = build_model_request(
+            model="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", system="s", user="u",
+            temperature=0.1, max_tokens=12000)
+        self.assertEqual(nano["temperature"], 0.0)
+        self.assertNotIn("top_p", nano)
+        self.assertEqual(
+            nano["extra_body"]["chat_template_kwargs"]["enable_thinking"], False)
+
+    def test_an_unlisted_model_gets_no_overrides(self):
+        request = build_model_request(
+            model="some/other-model", system="s", user="u",
+            temperature=0.42, max_tokens=12000)
+        self.assertNotIn("extra_body", request)
+        self.assertEqual(request["temperature"], 0.42)
+
+    def test_request_always_carries_the_given_messages_and_budget(self):
+        request = build_model_request(
+            model="nvidia/Nemotron-3-Ultra-550b-a55b", system="sys prompt",
+            user="user prompt", temperature=0.1, max_tokens=12000)
+        self.assertEqual(request["messages"],
+                         [{"role": "system", "content": "sys prompt"},
+                          {"role": "user", "content": "user prompt"}])
+        self.assertEqual(request["max_tokens"], 12000)
 
 
 class ReproductionFailureTests(unittest.TestCase):
