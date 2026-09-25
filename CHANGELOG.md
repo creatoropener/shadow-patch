@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.6.0-rc.9 — generation-failure observability and repeat detection, 2026-09-25
+
+- A rejected verifier-generation attempt (before any sandbox involvement) now
+  logs to stderr: the JSON payload's field names and a 200-char prefix of
+  `test_content`/`rationale` on a schema violation, or a 200-char prefix of
+  `test_content` on a content-validation violation. Previously nothing about
+  the model's actual output survived a generation-stage rejection anywhere.
+- The rejected `PatchProofError` now carries the offending `test_content` as
+  `.rejected_content` when available, for the next point below.
+- When a validation diagnostic exactly repeats the immediately preceding
+  attempt's diagnostic, the retry feedback now shows the model its own
+  just-rejected test back verbatim with an explicit instruction to make the
+  one described change, instead of appending the same paragraph a third time.
+  A single occurrence is unaffected; only a genuine repeat escalates.
+- Built directly from a live Issue #3 run (rc.8): two consecutive identical
+  "missing async success guard" rejections followed by a schema violation on
+  the third attempt. New tests reconstruct that exact sequence.
+
+No new image or target dependencies are required. Replace `proof.py` in the
+target repository (`runtimes.py` is unchanged since rc.8). Live Issue #3
+acceptance is still pending.
+
 ## v0.6.0-rc.8 — missing test-runner imports, 2026-09-25
 
 - Reject a generated TypeScript regression that calls `test` or `assert` without

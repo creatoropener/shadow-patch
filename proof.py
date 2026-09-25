@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.8"
+APP_VERSION = "0.6.0-rc.9"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -404,6 +404,23 @@ def model_json(
     raise InferenceError(f"{last_failure} Inference stopped after 3 requests.")
 
 
+def _redacted_payload_preview(payload: dict[str, Any]) -> str:
+    """Log-safe summary of a rejected verifier JSON payload.
+
+    Prints field names and a bounded prefix of any string field, never the
+    full content, so it is safe to print even though the payload derives from
+    an untrusted repository issue or model output.
+    """
+    parts = [f"keys={sorted(payload)}"]
+    for name in ("test_content", "rationale"):
+        value = payload.get(name)
+        if isinstance(value, str):
+            parts.append(f"{name}[0:200]={value[:200]!r} (len={len(value)})")
+        elif name in payload:
+            parts.append(f"{name} type={type(value).__name__}")
+    return "; ".join(parts)
+
+
 def generate_regression_test(
     *,
     issue: Issue,
@@ -465,14 +482,58 @@ Markdown fences."""
         user=user,
         temperature=0.1,
     )
-    test_content, rationale = validate_verifier_payload(payload)
+    try:
+        test_content, rationale = validate_verifier_payload(payload)
+    except PatchProofError as error:
+        # Generation-stage rejections previously left no trace of what the
+        # model actually returned. This is a bounded, field-name-and-prefix
+        # preview, never the full content, but it is enough to tell a wrong
+        # field name apart from a wrong field count on the next run.
+        print(
+            f"Verifier payload rejected: {error} | {_redacted_payload_preview(payload)}",
+            file=sys.stderr,
+        )
+        raise
     try:
         adapter.validate_generated_test(test_content, test_path)
     except (SyntaxError, ValueError) as error:
-        raise PatchProofError(
+        print(
+            f"Verifier test_content rejected: {error} | "
+            f"test_content[0:200]={test_content[:200]!r} (len={len(test_content)})",
+            file=sys.stderr,
+        )
+        wrapped = PatchProofError(
             f"Verifier returned an invalid regression test: {error}"
-        ) from error
+        )
+        wrapped.rejected_content = test_content
+        raise wrapped from error
     return test_content.rstrip() + "\n", rationale.strip()
+
+
+def repeated_failure_feedback(diagnostic: str, previous_content: str | None) -> str:
+    """Feedback when a validation diagnostic exactly repeats the previous attempt.
+
+    One plain-text repetition of the rule was not enough, so this shows the
+    model its own rejected test back with an explicit instruction to make the
+    one described change rather than another unguided rewrite. previous_content
+    is only available when the earlier attempt got as far as adapter-level
+    content validation (a schema-shaped-but-still-wrong payload has none).
+    """
+    parts = [
+        "\nENGINE DIAGNOSIS: This is the second attempt in a row rejected with "
+        "the exact same diagnosis:\n" + diagnostic,
+        "\nRepeating the same broken pattern is not an acceptable next attempt. "
+        "Do not restate your previous reasoning or resubmit similar content; "
+        "make the one specific change the diagnosis above describes.",
+    ]
+    if previous_content:
+        parts.append(
+            "\nHere is exactly what you submitted last time, which still has "
+            "this problem:\n```\n" + previous_content.strip() + "\n```\n"
+            "Return a corrected version of this same test: change only what "
+            "the diagnosis above requires and leave everything else the same."
+        )
+    return "".join(parts)
 
 
 def generate_regression_with_retry(
@@ -481,6 +542,8 @@ def generate_regression_with_retry(
     generation_attempts: list[dict[str, Any]] | None = None,
 ) -> tuple[str, str]:
     last_error: Exception | None = None
+    previous_diagnostic: str | None = None
+    previous_content: str | None = None
     for attempt in range(1, 4):
         try:
             result = generate_regression_test(
@@ -502,7 +565,19 @@ def generate_regression_with_retry(
                 generation_attempts.append({"attempt": len(generation_attempts) + 1,
                                             "status": "validation_failed", "diagnostic": str(error)})
             last_error = error
-            retry_feedback += f"\nTest-generation validation error: {error}"
+            diagnostic = str(error)
+            rejected_content = getattr(error, "rejected_content", None)
+            if diagnostic == previous_diagnostic:
+                # A second identical diagnosis means plainly restating the rule
+                # did not help. Show the model exactly what it just submitted
+                # instead of repeating the same paragraph a third time.
+                example = rejected_content if isinstance(rejected_content, str) else previous_content
+                retry_feedback += repeated_failure_feedback(diagnostic, example)
+            else:
+                retry_feedback += f"\nTest-generation validation error: {error}"
+            previous_diagnostic = diagnostic
+            if isinstance(rejected_content, str):
+                previous_content = rejected_content
             if attempt < 3:
                 print(
                     f"Verifier returned an invalid test: {error}; "

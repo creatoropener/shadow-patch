@@ -9,8 +9,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import contextlib
+import io
+
 from proof import (Issue, PatchProofError, classify_reproduction, extract_json_object,
-                   generate_regression_with_retry, reproduction_feedback,
+                   generate_regression_test, generate_regression_with_retry,
+                   repeated_failure_feedback, reproduction_feedback,
                    validate_verifier_payload)
 from runtimes import _node_assertion_failure, detect_runtime
 
@@ -58,6 +62,147 @@ class VerifierPayloadTests(unittest.TestCase):
                 self.assertEqual(rationale, "Expected behavior.")
                 self.assertIn("Keep rationale outside test_content",
                               model.call_args.kwargs["user"])
+
+
+class GenerationDiagnosticLoggingTests(unittest.TestCase):
+    """rc.9: a rejected generation-stage attempt used to leave no trace of what
+    the model actually returned. These reproduce the real proof.json #3 run
+    (schema violation on the third attempt) and check the fix directly."""
+
+    def make_adapter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
+            yield detect_runtime(root)
+
+    def test_schema_violation_logs_all_returned_keys(self):
+        # Mirrors the real attempt 3: an extra field alongside the two required ones.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
+            adapter = detect_runtime(root)
+            payload = {"test_content": "test();", "rationale": "Regression.",
+                      "notes": "unexpected extra field"}
+            buffer = io.StringIO()
+            with patch('proof.model_json', return_value=payload), \
+                 contextlib.redirect_stderr(buffer), \
+                 self.assertRaises(PatchProofError):
+                generate_regression_test(
+                    issue=Issue(3, "t", "b"), context="", api_key="unused",
+                    model="unused", adapter=adapter,
+                    test_path="test_patchproof_issue_3.test.mjs")
+            logged = buffer.getvalue()
+            self.assertIn("Verifier payload rejected", logged)
+            self.assertIn("'test_content'", logged)
+            self.assertIn("'rationale'", logged)
+            self.assertIn("'notes'", logged)
+
+    def test_content_violation_logs_prefix_and_attaches_it_to_the_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
+            (root / "tsconfig.json").write_text("{}\n")
+            adapter = detect_runtime(root)
+            bad_source = (FIXTURES / "missing_node_test_import.test.ts").read_text(encoding="utf-8")
+            payload = {"test_content": bad_source, "rationale": "Round trip."}
+            buffer = io.StringIO()
+            with patch('proof.model_json', return_value=payload), \
+                 contextlib.redirect_stderr(buffer), \
+                 self.assertRaises(PatchProofError) as raised:
+                generate_regression_test(
+                    issue=Issue(3, "t", "b"), context="", api_key="unused",
+                    model="unused", adapter=adapter,
+                    test_path="test_patchproof_issue_3.test.ts")
+            logged = buffer.getvalue()
+            self.assertIn("Verifier test_content rejected", logged)
+            self.assertIn(bad_source[:50], logged)
+            self.assertEqual(raised.exception.rejected_content, bad_source)
+
+
+class RepeatedFailureEscalationTests(unittest.TestCase):
+    """rc.9: an identical diagnosis twice in a row now shows the model its own
+    rejected content instead of repeating the same paragraph a third time."""
+
+    def test_helper_includes_diagnosis_and_verbatim_previous_content(self):
+        feedback = repeated_failure_feedback("some diagnosis", "const x = 1;")
+        self.assertIn("second attempt in a row", feedback)
+        self.assertIn("some diagnosis", feedback)
+        self.assertIn("const x = 1;", feedback)
+
+    def test_helper_without_content_still_names_the_repeat(self):
+        feedback = repeated_failure_feedback("some diagnosis", None)
+        self.assertIn("second attempt in a row", feedback)
+        self.assertNotIn("```", feedback)
+
+    def test_first_failure_is_not_treated_as_a_repeat(self):
+        # Single occurrence of a diagnosis (the existing rc.8 schema test's shape)
+        # must not trigger escalation -- only a second, identical one does.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
+            adapter = detect_runtime(root)
+            with patch('proof.model_json', side_effect=[
+                {"test_content": "test();"},
+                {"test_content": "test();", "rationale": "Expected behavior."},
+            ]) as model:
+                generate_regression_with_retry(
+                    issue=Issue(3, "Round trip", "Preserve input"), context="",
+                    api_key="unused", model="unused", adapter=adapter,
+                    test_path="test_patchproof_issue_3.test.mjs")
+                second_call_user = model.call_args_list[1].kwargs["user"]
+                self.assertNotIn("second attempt in a row", second_call_user)
+
+    def test_real_run_shape_two_identical_then_a_different_diagnosis(self):
+        # Reconstructs proof.json's actual sequence: the same missing-success-guard
+        # violation twice (different content, same rule), then an unrelated schema
+        # violation. Verifies the SECOND call is escalated with the FIRST call's
+        # own rejected content, and the THIRD call is not (its diagnosis differs).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
+            (root / "tsconfig.json").write_text("{}\n")
+            adapter = detect_runtime(root)
+            missing_guard_source_1 = (
+                "import test from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                "import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.mjs';\n"
+                "test('a', async () => {\n"
+                "  const encoded = await collectBytes(readableFromBytes(input, 8).pipeThrough(forward));\n"
+                "  const decoded = await collectBytes(readableFromBytes(encoded, 8).pipeThrough(inverse));\n"
+                "  assert.deepStrictEqual(decoded, input);\n"
+                "});\n"
+            )
+            missing_guard_source_2 = missing_guard_source_1.replace("test('a'", "test('b'")
+            valid_source = (
+                "import test from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                "import { readableFromBytes, collectBytes } from 'file:///patchproof/web_streams.mjs';\n"
+                "test('c', async () => {\n"
+                "  await assert.doesNotReject(async () => {\n"
+                "    const encoded = await collectBytes(readableFromBytes(input, 8).pipeThrough(forward));\n"
+                "    const decoded = await collectBytes(readableFromBytes(encoded, 8).pipeThrough(inverse));\n"
+                "    assert.deepStrictEqual(decoded, input);\n"
+                "  });\n"
+                "});\n"
+            )
+            with patch('proof.model_json', side_effect=[
+                {"test_content": missing_guard_source_1, "rationale": "r1"},
+                {"test_content": missing_guard_source_2, "rationale": "r2"},
+                {"test_content": valid_source, "extra": "field"},
+            ]) as model:
+                with self.assertRaises(PatchProofError) as raised:
+                    generate_regression_with_retry(
+                        issue=Issue(3, "t", "b"), context="", api_key="unused",
+                        model="unused", adapter=adapter,
+                        test_path="test_patchproof_issue_3.test.ts")
+            self.assertIn("test_content and rationale as separate JSON",
+                          str(raised.exception))
+            second_call_user = model.call_args_list[1].kwargs["user"]
+            self.assertNotIn("second attempt in a row", second_call_user)
+            third_call_user = model.call_args_list[2].kwargs["user"]
+            self.assertIn("second attempt in a row", third_call_user)
+            self.assertIn("doesNotReject", third_call_user)
+            # The concrete example shown back is attempt 2's own content, not attempt 1's.
+            self.assertIn("test('b'", third_call_user)
+            self.assertNotIn("test('a'", third_call_user)
 
 
 class ReproductionFailureTests(unittest.TestCase):
