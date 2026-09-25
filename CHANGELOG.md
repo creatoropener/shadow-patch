@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.6.0-rc.11 — family-wide Nemotron detection, truncated-response logging, 2026-09-25
+
+- rc.10 is confirmed working: a live run against `nvidia/Nemotron-3-Ultra-550b-a55b`
+  showed `reasoning_tokens=0`, matching Lightning's earlier behavior. Silencing
+  its hidden reasoning genuinely works through Nebius Token Factory.
+- Raising `NEBIUS_MAX_TOKENS` to 32,000 (a workflow config change, not this
+  release) did not fix the underlying problem: the same run's *visible* answer
+  alone used the full 32,000-token budget (`final_chars=36470`) and still hit
+  `finish_reason=length` without completing. What the model was actually
+  generating was invisible to us -- `model_json` discarded the content on a
+  length rejection without logging even a prefix, the same blind spot rc.9
+  fixed for validation-stage rejections but not for this earlier, network-level
+  one. Fixed: a length rejection now logs the first and last 200 characters of
+  what was generated, which is usually enough to tell "a legitimate but long
+  answer" apart from a repeating/degenerate pattern.
+- Replaced the exact-string Nemotron allowlist in `build_model_request` with
+  a family-wide match (`"nemotron" in model.lower()`). The three models tried
+  so far have each used a different id casing/format (`NVIDIA-Nemotron-3-Nano-30B-A3B`,
+  `Nemotron-3_5-Lightning`, `Nemotron-3-Ultra-550b-a55b`), and an exact
+  allowlist means every new sibling risks a silent, un-noticed miss if its
+  id doesn't match hardcoded casing exactly. The two models with an actual
+  tuning history (Lightning's temperature/top_p, Nano's temperature) keep
+  their specific overrides via a normalized (lowercased) comparison; any
+  other Nemotron model only gets its reasoning silenced.
+- Nebius Token Factory's Nemotron-3 lineup (per NVIDIA's own listing) also
+  includes a "Super" 120B tier between the Nano/Lightning models tried so far
+  and the 550B Ultra model -- smaller and reportedly faster than Ultra, with
+  no observed reliability issues of its own yet since it hasn't been tried
+  against this issue. The new family-wide match covers it (or any other
+  Nemotron sibling) without needing its exact id added here first.
+
+No new image or target dependencies are required. Replace `proof.py` in the
+target repository (`runtimes.py` is unchanged since rc.8). Live Issue #3
+acceptance is still pending.
+
 ## v0.6.0-rc.10 — silence reasoning for Nemotron-3-Ultra-550b-a55b, 2026-09-25
 
 - Add `nvidia/Nemotron-3-Ultra-550b-a55b` to the set of models sent

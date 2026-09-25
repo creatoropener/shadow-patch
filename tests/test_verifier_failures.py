@@ -11,11 +11,12 @@ from unittest.mock import patch
 
 import contextlib
 import io
+from types import SimpleNamespace
 
-from proof import (Issue, PatchProofError, build_model_request,
+from proof import (InferenceError, Issue, PatchProofError, build_model_request,
                    classify_reproduction, extract_json_object,
                    generate_regression_test, generate_regression_with_retry,
-                   repeated_failure_feedback, reproduction_feedback,
+                   model_json, repeated_failure_feedback, reproduction_feedback,
                    validate_verifier_payload)
 from runtimes import _node_assertion_failure, detect_runtime
 
@@ -118,6 +119,123 @@ class GenerationDiagnosticLoggingTests(unittest.TestCase):
             self.assertIn("Verifier test_content rejected", logged)
             self.assertIn(bad_source[:50], logged)
             self.assertEqual(raised.exception.rejected_content, bad_source)
+
+
+class NemotronFamilyDetectionTests(unittest.TestCase):
+    """rc.11: an exact-string allowlist needed a perfect-casing guess for
+    every new Nemotron sibling tried (Nano, Lightning, and Ultra have each
+    used a different capitalization/format). Matching on the family name
+    instead means the next one tried -- e.g. a Super tier -- is covered
+    without hardcoding its exact id first, and without a silent miss."""
+
+    def test_known_models_are_still_recognised_regardless_of_casing(self):
+        for model in (
+            "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+            "NVIDIA/nvidia-nemotron-3-nano-30b-a3b",
+            "nvidia/Nemotron-3_5-Lightning",
+            "nvidia/NEMOTRON-3_5-LIGHTNING",
+            "nvidia/Nemotron-3-Ultra-550b-a55b",
+        ):
+            with self.subTest(model=model):
+                request = build_model_request(
+                    model=model, system="s", user="u", temperature=0.1,
+                    max_tokens=12000)
+                self.assertEqual(
+                    request["extra_body"]["chat_template_kwargs"]["enable_thinking"],
+                    False)
+
+    def test_an_untried_nemotron_sibling_is_covered_without_a_code_change(self):
+        # A plausible next model (exact id unconfirmed) still gets the toggle.
+        request = build_model_request(
+            model="nvidia/Nemotron-3-Super-120b-a12b", system="s", user="u",
+            temperature=0.25, max_tokens=12000)
+        self.assertEqual(
+            request["extra_body"]["chat_template_kwargs"]["enable_thinking"], False)
+        self.assertEqual(request["temperature"], 0.25)  # no tuning history: unchanged
+        self.assertNotIn("top_p", request)
+
+    def test_tuned_overrides_still_apply_regardless_of_casing(self):
+        lightning = build_model_request(
+            model="NVIDIA/NEMOTRON-3_5-LIGHTNING", system="s", user="u",
+            temperature=0.1, max_tokens=12000)
+        self.assertEqual(lightning["temperature"], 1.0)
+        self.assertEqual(lightning["top_p"], 0.95)
+
+        nano = build_model_request(
+            model="nvidia/nvidia-nemotron-3-nano-30b-a3b", system="s", user="u",
+            temperature=0.1, max_tokens=12000)
+        self.assertEqual(nano["temperature"], 0.0)
+        self.assertNotIn("top_p", nano)
+
+    def test_a_non_nemotron_model_is_untouched(self):
+        request = build_model_request(
+            model="deepseek-ai/DeepSeek-V3.2", system="s", user="u",
+            temperature=0.42, max_tokens=12000)
+        self.assertNotIn("extra_body", request)
+        self.assertEqual(request["temperature"], 0.42)
+
+
+class TruncatedResponseLoggingTests(unittest.TestCase):
+    """rc.11: a response rejected for finish_reason=length was discarded
+    with no trace of its actual content. Built from a real Issue #3 run
+    where a non-reasoning-budget answer alone used the full 32,000-token
+    ceiling (final_chars=36,470) and still didn't finish."""
+
+    class _FakeChoice:
+        def __init__(self, content, finish_reason):
+            self.finish_reason = finish_reason
+            self.message = SimpleNamespace(content=content, refusal=None,
+                                           reasoning_content=None)
+
+    class _FakeResponse:
+        def __init__(self, content, finish_reason):
+            self.choices = [TruncatedResponseLoggingTests._FakeChoice(content, finish_reason)]
+            self.usage = SimpleNamespace(
+                completion_tokens=32000,
+                completion_tokens_details={"reasoning_tokens": 0})
+
+    class _FakeClient:
+        def __init__(self, response):
+            self._response = response
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create))
+
+        def _create(self, **kwargs):
+            return self._response
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+    def test_length_rejection_logs_head_and_tail_of_what_was_generated(self):
+        long_content = "A" * 300 + "MIDDLE" + "Z" * 300
+        response = self._FakeResponse(long_content, "length")
+        buffer = io.StringIO()
+        with patch("openai.OpenAI", return_value=self._FakeClient(response)), \
+             patch.dict(os.environ, {"NEBIUS_MAX_TOKENS": "32000"}), \
+             contextlib.redirect_stderr(buffer), \
+             self.assertRaises(InferenceError) as raised:
+            model_json(api_key="x", model="nvidia/Nemotron-3-Ultra-550b-a55b",
+                      system="s", user="u", temperature=0.1)
+        logged = buffer.getvalue()
+        self.assertIn("Truncated response preview", logged)
+        self.assertIn("A" * 200, logged)
+        self.assertIn("Z" * 200, logged)
+        self.assertNotIn("MIDDLE", logged)  # only head/tail are shown, not the middle
+        self.assertIn("Review NEBIUS_MAX_TOKENS", str(raised.exception))
+
+    def test_short_truncated_content_logs_without_a_separate_tail(self):
+        response = self._FakeResponse("short", "length")
+        buffer = io.StringIO()
+        with patch("openai.OpenAI", return_value=self._FakeClient(response)), \
+             patch.dict(os.environ, {"NEBIUS_MAX_TOKENS": "12000"}), \
+             contextlib.redirect_stderr(buffer), \
+             self.assertRaises(InferenceError):
+            model_json(api_key="x", model="some/model", system="s", user="u",
+                      temperature=0.1)
+        self.assertIn("head[0:200]='short'", buffer.getvalue())
 
 
 class RepeatedFailureEscalationTests(unittest.TestCase):
