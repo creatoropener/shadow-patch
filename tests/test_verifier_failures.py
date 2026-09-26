@@ -440,13 +440,22 @@ class TypeScriptLintIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "package.json").write_text('{}')
-            (root / "node_modules").symlink_to(Path(os.environ['TS_LINT_NODE_MODULES']).resolve(),
+            # Deliberately no root/node_modules: the linter must never resolve
+            # `typescript` from the target repo. PATCHPROOF_TYPESCRIPT_RUNTIME
+            # points it at a real installed TypeScript instead, the same way
+            # prepare-image.yml's pinned /opt/patchproof/node does in prod.
+            runtime_root = Path(directory) / "_patchproof_runtime"
+            (runtime_root).mkdir()
+            (runtime_root / "package.json").write_text('{}')
+            (runtime_root / "node_modules").symlink_to(Path(os.environ['TS_LINT_NODE_MODULES']).resolve(),
                                               target_is_directory=True)
+            env = {**os.environ, "PATCHPROOF_TYPESCRIPT_RUNTIME": str(runtime_root)}
             for fixture, marker, code in cases:
                 with self.subTest(fixture=fixture):
                     (root / "generated.test.ts").write_text((FIXTURES / fixture).read_text())
                     run = subprocess.run(["node", str(LINTER), "generated.test.ts"],
-                                         cwd=root, text=True, capture_output=True, timeout=30)
+                                         cwd=root, text=True, capture_output=True, timeout=30,
+                                         env=env)
                     output = run.stdout + run.stderr
                     self.assertEqual(run.returncode, code, output)
                     self.assertIn(marker, output)

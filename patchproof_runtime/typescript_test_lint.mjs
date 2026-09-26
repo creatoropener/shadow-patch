@@ -25,8 +25,19 @@ if (!targetArg) {
     fail('Generated TypeScript test must be an existing repository-relative .ts file.');
   } else {
     try {
-      const requireFromProject = createRequire(path.join(root, 'package.json'));
-      const ts = requireFromProject('typescript');
+      // Resolve `typescript` from PatchProof's own pinned runtime toolchain
+      // (baked into the sandbox image alongside tsx — see prepare-image.yml),
+      // never from the target repository's own node_modules. This AST-based
+      // structural lint needs the classic TypeScript Compiler API; a target
+      // repo pinned to a bare TypeScript 7.x (the native Go compiler, which
+      // does not ship that API until 7.1) would otherwise break this step
+      // for every one of its generated tests, regardless of content.
+      // PATCHPROOF_TYPESCRIPT_RUNTIME lets local/dev runs (see
+      // TypeScriptLintIntegrationTests) point this at an arbitrary installed
+      // TypeScript for testing; it always defaults to the real sandbox path.
+      const runtimeRoot = process.env.PATCHPROOF_TYPESCRIPT_RUNTIME || '/opt/patchproof/node';
+      const requireFromPatchProofRuntime = createRequire(path.join(runtimeRoot, 'package.json'));
+      const ts = requireFromPatchProofRuntime('typescript');
       const source = fs.readFileSync(target, 'utf8');
       const sourceFile = ts.createSourceFile(
         target,

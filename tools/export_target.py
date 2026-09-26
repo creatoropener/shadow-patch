@@ -46,7 +46,7 @@ def main() -> None:
             "Configure NEBIUS_API_KEY, NEBIUS_PROJECT_ID, NEBIUS_MODEL and a compatible "
             "CONTREE_IMAGE (or runtime-specific image secret) in GitHub Actions.\n"
             "For node-typescript, pin tsx and TypeScript in the target baseline and configure "
-            "CONTREE_IMAGE_NODE_TYPESCRIPT with a v0.6 web-image UUID.\n"
+            "CONTREE_IMAGE_NODE_TYPESCRIPT with a v0.7 web-image UUID.\n"
             "Commit the workflows to the default branch before applying shadow-fix to an issue.\n\n"
             "Full setup and the optional file-sharing example:\n"
             "https://github.com/creatoropener/shadow-patch/blob/main/docs/SETUP.md\n"
