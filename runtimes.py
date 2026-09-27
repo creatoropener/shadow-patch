@@ -100,7 +100,7 @@ class RuntimeAdapter:
     test_directory: str = ""
     tool_command: str = ""
 
-    def test_path(self, issue_number: int) -> str:
+    def test_path(self, issue_number: int, root: Path | None = None) -> str:
         identifier = str(issue_number) if issue_number else "manual"
         if self.test_runtime == "junit":
             return f"src/test/java/PatchProofIssue{identifier}Test.java"
@@ -109,9 +109,30 @@ class RuntimeAdapter:
         if self.id == "rust":
             return f"tests/patchproof_issue_{identifier}.rs"
         prefix = "tests/" if self.id == "web-playwright" else ""
+        filename_prefix = ""
+        if self.id == "node-typescript" and root is not None:
+            # node-typescript has no fixed test directory of its own (unlike
+            # web-playwright). A generated test placed at the repo root
+            # breaks any relative import (e.g. '../src/x.ts') a model wrote
+            # to match a project whose own tests already live in tests/ --
+            # so match that existing convention when one is evident on disk,
+            # and otherwise keep the long-standing root placement unchanged.
+            existing_tests_dir = root / "tests"
+            if existing_tests_dir.is_dir() and any(
+                existing_tests_dir.glob(f"*{self.test_suffix}")
+            ):
+                prefix = "tests/"
+                # A leading dot keeps the file out of the project's own
+                # shell-expanded baseline glob (e.g. `tsx --test
+                # tests/*.test.ts`), which would otherwise sweep the hidden,
+                # still-failing pre-fix regression into the *baseline* run
+                # and corrupt "does the existing suite pass" -- while an
+                # explicit path (what regression_command always uses) still
+                # runs it directly regardless of the leading dot.
+                filename_prefix = "."
         if self.test_suffix == ".py":
-            return f"{prefix}test_patchproof_issue_{identifier}.py"
-        return f"{prefix}test_patchproof_issue_{identifier}{self.test_suffix}"
+            return f"{prefix}{filename_prefix}test_patchproof_issue_{identifier}.py"
+        return f"{prefix}{filename_prefix}test_patchproof_issue_{identifier}{self.test_suffix}"
 
     def regression_command(self, test_path: str) -> str:
         target = shlex.quote(test_path)

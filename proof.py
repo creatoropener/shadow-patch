@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.13"
+APP_VERSION = "0.6.0-rc.14"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1290,7 +1290,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         }
     )
 
-    test_path = adapter.test_path(issue.number)
+    test_path = adapter.test_path(issue.number, root=root)
     if not (root / test_path).resolve().is_relative_to(root.resolve()):
         raise PatchProofError("Regression test path escapes the repository.")
     if (root / test_path).exists():

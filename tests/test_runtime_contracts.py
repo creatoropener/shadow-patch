@@ -36,6 +36,27 @@ class NodeTypeScriptContractTests(unittest.TestCase):
         self.assertLess(command.index("typescript_check.py"), command.index("/tsx "))
         self.assertIn("./node_modules/.bin/tsc --version", adapter.preflight_command)
 
+    def test_matches_existing_tests_directory_for_relative_imports(self) -> None:
+        # QRcrafts and file-sharing-app both keep real tests in tests/, and
+        # a model faithfully copies that convention in its relative imports
+        # (e.g. '../src/x.ts'). Placed at the repo root instead (the old,
+        # unconditional behavior), that import breaks. The dot-prefixed
+        # filename keeps the hidden, still-failing pre-fix regression out of
+        # the project's own shell-globbed baseline (tests/*.test.ts) while
+        # still resolving relative imports from the right directory.
+        root = self.make_project()
+        (root / "tests").mkdir()
+        (root / "tests" / "existing.test.ts").write_text("test('x', () => {});", encoding="utf-8")
+        adapter = detect_runtime(root)
+        self.assertEqual(
+            adapter.test_path(1, root=root), "tests/.test_patchproof_issue_1.test.ts"
+        )
+
+    def test_keeps_root_placement_when_no_tests_directory_exists(self) -> None:
+        root = self.make_project()
+        adapter = detect_runtime(root)
+        self.assertEqual(adapter.test_path(1, root=root), "test_patchproof_issue_1.test.ts")
+
     def test_explicit_typescript_runtime_is_supported(self) -> None:
         adapter = detect_runtime(self.make_project(explicit=True))
         self.assertEqual(adapter.id, "node-typescript")

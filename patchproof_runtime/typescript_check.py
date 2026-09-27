@@ -62,17 +62,37 @@ def main(argv: list[str]) -> int:
             declaration.write(declaration_source.read_text(encoding="utf-8"))
             declaration_path = Path(declaration.name)
 
+        compiler_options: dict[str, object] = {
+            "composite": False,
+            "incremental": False,
+            "noEmit": True,
+            "noErrorTruncation": True,
+            "plugins": [],
+            "rootDir": ".",
+            "skipLibCheck": True,
+        }
+        # If the project's own tsconfig restricts "types" (common in Vite
+        # projects, e.g. `"types": ["vite/client"]`), that restriction is
+        # inherited via `extends` and silently drops @types/node's ambient
+        # `node:test` / `node:assert` declarations for this check-only pass
+        # -- even though @types/node is installed and tsx itself doesn't
+        # care. Every generated regression imports 'node:test', so keep
+        # whatever the project already restricted "types" to and just make
+        # sure "node" is also present, rather than leaving it unreachable.
+        try:
+            project_types = json.loads(tsconfig.read_text(encoding="utf-8")).get(
+                "compilerOptions", {}
+            ).get("types")
+        except (json.JSONDecodeError, OSError):
+            project_types = None
+        if isinstance(project_types, list):
+            compiler_options["types"] = list(
+                dict.fromkeys([*project_types, "node"])
+            )
+
         config = {
             "extends": "./tsconfig.json",
-            "compilerOptions": {
-                "composite": False,
-                "incremental": False,
-                "noEmit": True,
-                "noErrorTruncation": True,
-                "plugins": [],
-                "rootDir": ".",
-                "skipLibCheck": True,
-            },
+            "compilerOptions": compiler_options,
             "files": [
                 target.relative_to(root).as_posix(),
                 declaration_path.relative_to(root).as_posix(),
