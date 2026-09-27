@@ -1,5 +1,95 @@
 # Changelog
 
+## v0.6.0-rc.14 — match existing tests/ convention for relative imports, restore node types after tsconfig restricts them, 2026-09-27
+
+- rc.13's runtime-resolution fix worked against a live QRcrafts rerun (no
+  more "lint tooling unavailable"), which let the pipeline progress far
+  enough to hit two more real, previously-masked bugs rather than a clean
+  run.
+- `test_path()` always placed the generated test at the target repo's
+  root. QRcrafts' own real tests live in `tests/` and import via
+  `'../src/...'` (`tests/qrBuilder.test.ts`); the model faithfully copied
+  that exact convention in its generated test, but placement at root
+  turned `'../src/utils/qrBuilder.ts'` into a path outside the repo.
+  `test_path()` now accepts the repo root and places the file inside
+  `tests/` -- with a leading dot on the filename -- whenever an existing
+  `tests/*{suffix}` file is already there, and keeps the previous root
+  placement otherwise. The leading dot keeps the hidden, still-failing
+  pre-fix regression out of the target's own shell-globbed baseline
+  command (e.g. `tsx --test tests/*.test.ts`); confirmed empirically that
+  without it, `CI=1 npm test` sweeps the regression file into the
+  *baseline* result and reports it as a failing baseline test.
+- QRcrafts' tsconfig restricts `"types": ["vite/client"]`, which is
+  inherited by the synthesized check-only tsconfig via `extends` and
+  silently drops @types/node's ambient `node:test`/`node:assert`
+  declarations, even though @types/node is installed and tsx itself
+  never type-checks at all. `typescript_check.py` now reads the
+  project's own `types` array (if any) and adds `"node"` to it, and
+  leaves `types` untouched entirely when the project doesn't restrict it
+  (e.g. file-sharing-app, which has no `types` key).
+- Validated against both real targets, not just QRcrafts: replayed
+  QRcrafts' actual rejected attempt at the new location -- lint,
+  type-check, and execution all now pass cleanly and correctly reproduce
+  the real WiFi-escaping bug, with baseline unaffected. Replayed
+  file-sharing-app's actual historical `test_patchproof_issue_3.test.ts`
+  (issue #3, already VERIFIED) at the new location too -- lint,
+  type-check, and baseline are all unchanged, confirming zero regression
+  on the flagship result.
+- New tests: `test_path()`'s tests/-detection and its root-placement
+  fallback; `typescript_check.py`'s types-merge and its no-op when the
+  project doesn't restrict types.
+
+No new image or target dependencies are required -- this is a pure engine
+change (`proof.py`, `runtimes.py`, `patchproof_runtime/typescript_check.py`).
+Replace those three files in the target repository; the sandbox image from
+rc.13 is unaffected.
+
+## v0.6.0-rc.13 — resolve the TypeScript lint step from a pinned runtime, not the target repo, 2026-09-27
+
+- QRcrafts (TypeScript pinned to `^7.0.2`, Microsoft's native Go-based
+  compiler rewrite) failed every regression attempt identically with
+  "generated TypeScript lint tooling unavailable" /
+  `Cannot read properties of undefined (reading 'Latest')`, before a
+  single candidate was ever evaluated. TypeScript 7.0.x does not ship
+  the classic JS-facing Compiler API (`ts.ScriptTarget`, etc.) until
+  7.1; `typescript_test_lint.mjs` required `typescript` from the target
+  repo's own `node_modules`, so any repo pinned to bare TS 7.x broke
+  this step for every one of its generated tests, regardless of content.
+- `typescript_test_lint.mjs` now resolves `typescript` from a fixed
+  runtime location (`/opt/patchproof/node`, the same pattern already
+  used for `jsdom`) via a new `PATCHPROOF_TYPESCRIPT_RUNTIME`
+  environment variable, rather than from the target repository.
+  `prepare-image.yml` now pins `typescript@6.0.3` (the last classic-API
+  release) into that same location alongside `tsx`; the image tag moves
+  to `v0.7` so this can't be served from a cached `v0.6` image.
+- The existing (previously always-skipped-locally)
+  `TypeScriptLintIntegrationTests` now routes through
+  `PATCHPROOF_TYPESCRIPT_RUNTIME` instead of symlinking into the target
+  repo's own `node_modules`, since the fix means that's never read.
+- A second, separate test class (`StructuralContractTests`,
+  stream/chunk-coverage contract checks) used the identical old symlink
+  pattern and was missed in the first pass -- it broke in engine-checks
+  CI immediately after this shipped (`Cannot find module 'typescript'`,
+  9 failures) since it never set the new environment variable and the
+  new default (`/opt/patchproof/node`) doesn't exist on the CI runner.
+  Fixed the same way; confirmed the full local suite clean using the
+  exact CI-pinned `typescript@5.6.3` in a clean environment.
+- Validated by reproducing the exact QRcrafts failure organically
+  (`npm install typescript@7.0.2` in a real, throwaway target repo)
+  before the fix and confirming it resolves via a real pinned
+  `typescript@6.0.3` after, regardless of the target's own version;
+  confirmed the structural checks (unused-binding, stream contract)
+  still fire correctly through the new resolution path using the real
+  fixture-based integration test.
+
+Requires a sandbox image rebuild: run "Prepare Sandbox Image" (profile
+`web` or `all`) and replace `CONTREE_IMAGE_NODE_TYPESCRIPT` with the new
+`v0.7` UUID before rerunning any node-typescript target. Replace
+`patchproof_runtime/typescript_test_lint.mjs`,
+`.github/workflows/prepare-image.yml`, and `proof.py` in the target
+repository; also update `tests/test_verifier_failures.py` and
+`tests/test_stream_contracts.py` in shadow-patch itself.
+
 ## v0.6.0-rc.12 — record rejected candidates' actual diffs, 2026-09-25
 
 - First real run to reach `candidate-evaluation`: the regression test
