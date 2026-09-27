@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.6.0-rc.15 — TypeScript quoting guidance for the generator; issue-scoped fixtures stay in the issue, not the engine, 2026-09-27
+
+- With rc.14's placement and types fixes in, QRcrafts issue #1 progressed
+  cleanly to the reproduction stage but every attempt still failed with
+  "generated TypeScript regression failed syntax parsing." Root cause was
+  the model, not the engine: one fixture value needed a literal apostrophe
+  (`Pa'ss`), and the model wrote it inside a single-quoted string with an
+  under-escaped backslash-then-quote sequence, closing the string early.
+  Confirmed via `reproduction_feedback()` that the model already receives
+  the full previous content and exact parser error each retry -- this
+  wasn't a missing-feedback problem, the model needed explicit guidance on
+  the escaping mechanics themselves.
+- `node-typescript`'s `verifier_guidance` now explicitly covers TypeScript
+  string-quoting: prefer the quote style that avoids escaping a needed
+  apostrophe (`"Pa'ss"` over `'Pa\'ss'`), spells out the correct source
+  sequences for a literal backslash and a literal double quote, and
+  explicitly instructs the generator never to sidestep a needed character
+  by rewording or dropping it from a fixture. This is general TypeScript
+  guidance (applies to every node-typescript issue), not WiFi-specific.
+- Deliberately did NOT hardcode WiFi's reserved-character set (`;`, `,`,
+  `:`, `\`) into the general verifier, and did NOT add any post-generation
+  string-replacement "repair" of escaping -- either would risk silently
+  changing test inputs or expected values, or narrow a general-purpose
+  adapter around one issue. Scoping which punctuation a specific
+  regression should exercise belongs in that issue's own body (it already
+  flows into the generation prompt as-is via `Issue.body`), not in code.
+- The bounded-retry budget and the syntax gate itself are unchanged:
+  `PATCHPROOF_TYPESCRIPT_PARSE=failed` still gates before candidate
+  evaluation and still counts toward the retry budget like any other
+  rejection -- invalid source still never counts as reproduction evidence.
+- Full local suite: 64 tests, same 2 pre-existing unrelated `openai`-not-
+  installed errors as every prior round.
+
+No image rebuild or target-repo file changes beyond `runtimes.py` and
+`proof.py`; this doesn't touch the sandbox toolchain.
+
 ## v0.6.0-rc.14 — match existing tests/ convention for relative imports, restore node types after tsconfig restricts them, 2026-09-27
 
 - rc.13's runtime-resolution fix worked against a live QRcrafts rerun (no
