@@ -20,7 +20,7 @@ jobs:
           cache-dependency-path: requirements-patchproof.txt
 
       - name: Install PatchProof dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt
+        run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt pyyaml==6.0.3
 
       - uses: actions/setup-node@v4
         with:
