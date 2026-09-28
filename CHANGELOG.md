@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.6.0-rc.17 — Useless-escape gate; sandbox image removed from the report, 2026-09-28
+
+- **Root cause (first live Action run, QRcrafts #1, rc.16 REJECTED).** The model wrote the
+  regression test with `\;`, `\,`, `\:`, `\"` inside single-quoted strings and a stray
+  `\c`. JavaScript drops the backslash from these identity escapes, so the fixture and the
+  expected payload were not what the model intended and no correct fix could match. The
+  syntax gate passed (`\;` is legal) and the pre-fix failure was a real assertion, so the
+  reproduction gate accepted the test. Two of three candidates had correct WiFi escaping
+  and were rejected by the bad test; the third had a stray space in its regex.
+- New gate in `typescript_test_lint.mjs`: string and template literals are scanned with
+  ESLint `no-useless-escape` semantics. Meaningful escapes (`\\ \n \r \t \b \f \v \0
+  \xNN \uNNNN`, the literal's own quote, and `\`` / `\${` in templates) pass. Regex
+  literals and tagged templates such as `String.raw` are not scanned. Each finding is
+  reported as `file:line:col` with the fix (`\\;` for a literal backslash and `;`).
+- New marker `PATCHPROOF_TYPESCRIPT_LITERAL=failed`. It is reported alongside, not instead
+  of, the unused-binding marker. `classify_reproduction` treats it as a protected
+  non-reproduction, and the retry feedback explains the dropped backslash. This is a gate
+  with exact diagnostics on the existing verifier retry budget, not automatic repair.
+- The verification report (PR description and issue comment) no longer prints the
+  sandbox image UUID. `proof.json` keeps image identifiers for diagnostics.
+- Tests: `tests/test_string_escape_gate.py` (classification, feedback, report redaction,
+  and, with `TS_LINT_NODE_MODULES`, the real rc.16 test plus valid-escape, template,
+  `String.raw`, regex and combined-failure cases). Fixtures added under `tests/fixtures/`.
+- No adapter, solver prompt, retry-count or sandbox-image change; no image rebuild needed.
+
 ## v0.6.0-rc.16 — Shadow Patch as a reusable GitHub Action (beta), 2026-09-28
 
 - New root `action.yml` (composite Action). A target repository now needs one

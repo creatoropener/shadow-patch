@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.16"
+APP_VERSION = "0.6.0-rc.17"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -739,6 +739,21 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
             "an encode/decode or encrypt/decrypt round trip, apply both transforms before "
             "collectBytes and compare only the final decoded bytes with the original input."
         )
+    if "PATCHPROOF_TYPESCRIPT_LITERAL=failed" in output:
+        feedback += (
+            "\nENGINE DIAGNOSIS: A string or template literal in the generated test contains an "
+            "escape that JavaScript silently drops. Only \\\\, \\n, \\r, \\t, \\b, \\f, \\v, \\0, "
+            "\\xNN, \\uNNNN and the literal's own quote character are real escapes; a sequence "
+            "such as \\; \\, \\: \\c, or a double quote escaped inside a single-quoted string, "
+            "evaluates to the bare character and the backslash is lost, so the string is not "
+            "what you intended and the assertion can never match correct behavior. To put a "
+            "literal backslash in a value, write TWO backslashes in the source (a backslash "
+            "followed by a semicolon is written \\\\; in source). Prefer the quote style that "
+            "avoids escaping quote characters. Re-derive every fixture and expected value "
+            "character by character from the issue, keep the input fixture exactly as the "
+            "issue describes it, and do not weaken or drop the assertion. Return the complete "
+            "corrected file; resubmitting identical content fails again."
+        )
     if "PATCHPROOF_TYPESCRIPT_LINT=unavailable" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: The TypeScript linter could not run. This is a tooling/setup "
@@ -767,6 +782,8 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
         return False, True, "generated TypeScript regression failed syntax parsing"
     if "PATCHPROOF_TYPESCRIPT_CONTRACT=failed" in output:
         return False, True, "generated TypeScript regression failed stream contract"
+    if "PATCHPROOF_TYPESCRIPT_LITERAL=failed" in output:
+        return False, True, "generated TypeScript regression failed string-escape lint"
     if "PATCHPROOF_TYPESCRIPT_LINT=unavailable" in output:
         return False, True, "generated TypeScript lint tooling unavailable"
     if adapter.is_regression_failure(exit_code, output):
@@ -1147,7 +1164,6 @@ def render_report(proof: dict[str, Any]) -> str:
         f"- Application language(s): {', '.join(proof.get('runtime', {}).get('application_languages', []))}",
         f"- Test runtime: `{proof.get('runtime', {}).get('test_runtime', '')}`",
         "- Passing-test counts for candidates/replay refer to the explicit regression run; the baseline suite must also pass.",
-        f"- Sandbox image: `{proof.get('sandbox', {}).get('base_image', '')}`",
         f"- Regression test: `{regression.get('path', '')}`",
     ]
     generations = regression.get("generation_attempts") or []

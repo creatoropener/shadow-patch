@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: creatoropener/shadow-patch@v0.6.0-rc.16   # pin an exact tag
+      - uses: creatoropener/shadow-patch@v0.6.0-rc.17   # pin an exact tag
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           nebius-project-id: ${{ secrets.NEBIUS_PROJECT_ID }}

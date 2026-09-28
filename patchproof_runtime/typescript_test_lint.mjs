@@ -9,6 +9,33 @@ function fail(message, marker = 'PATCHPROOF_TYPESCRIPT_LINT=unavailable') {
   process.exitCode = 2;
 }
 
+// Escapes that carry meaning inside a JavaScript/TypeScript string or template
+// literal. Anything else (`\;`, `\,`, `\:`, `\c`, or the "wrong" quote character)
+// is an identity escape: the backslash is silently dropped, so the runtime value
+// is NOT what the author most likely intended (typically a literal backslash).
+const MEANINGFUL_ESCAPES = new Set([
+  '\\', 'n', 'r', 't', 'b', 'f', 'v', 'u', 'x',
+  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+  '\n', '\r', '\u2028', '\u2029',
+]);
+
+function uselessEscapes(inner, delimiter) {
+  const found = [];
+  for (let index = 0; index < inner.length; index += 1) {
+    if (inner[index] !== '\\') continue;
+    const next = inner[index + 1];
+    if (next === undefined) break;
+    const meaningful = MEANINGFUL_ESCAPES.has(next)
+      || next === delimiter
+      || (delimiter === '`'
+        && ((next === '$' && inner[index + 2] === '{')
+          || (next === '{' && inner[index - 1] === '$')));
+    if (!meaningful) found.push({ index, char: next });
+    index += 1; // the escaped character is consumed
+  }
+  return found;
+}
+
 const [targetArg] = process.argv.slice(2);
 if (!targetArg) {
   fail('usage: typescript_test_lint.mjs <generated-test.ts>');
@@ -63,6 +90,38 @@ if (!targetArg) {
         const contractErrors = [];
         const visit = (node, fn) => { fn(node); ts.forEachChild(node, child => visit(child, fn)); };
         const callName = node => ts.isCallExpression(node) ? node.expression.getText(sourceFile) : '';
+        // Useless-escape gate (ESLint no-useless-escape semantics, strings and
+        // templates only; regex literals and tagged templates such as String.raw
+        // are left alone). Reported once per literal position, capped for brevity.
+        const escapeDiagnostics = [];
+        const scanLiteral = (node, delimiter, startTrim, endTrim) => {
+          const text = node.getText(sourceFile);
+          const inner = text.slice(startTrim, text.length - endTrim);
+          for (const item of uselessEscapes(inner, delimiter)) {
+            const position = sourceFile.getLineAndCharacterOfPosition(
+              node.getStart(sourceFile) + startTrim + item.index,
+            );
+            escapeDiagnostics.push(
+              `${targetArg}:${position.line + 1}:${position.character + 1}: useless string escape `
+              + `'\\${item.char}' evaluates to '${item.char}' (the backslash is dropped); `
+              + `write '\\\\${item.char}' for a literal backslash followed by '${item.char}'`,
+            );
+          }
+        };
+        visit(sourceFile, node => {
+          if (ts.isStringLiteral(node)) {
+            scanLiteral(node, node.getText(sourceFile)[0], 1, 1);
+          } else if (ts.isNoSubstitutionTemplateLiteral(node)
+            && !(node.parent && ts.isTaggedTemplateExpression(node.parent))) {
+            scanLiteral(node, '`', 1, 1);
+          } else if (ts.isTemplateExpression(node)
+            && !(node.parent && ts.isTaggedTemplateExpression(node.parent))) {
+            scanLiteral(node.head, '`', 1, 2);
+            for (const span of node.templateSpans) {
+              scanLiteral(span.literal, '`', 1, ts.isTemplateMiddle(span.literal) ? 2 : 1);
+            }
+          }
+        });
         visit(sourceFile, node => {
           if (!ts.isCallExpression(node) || !['test', 'it'].includes(callName(node))) return;
           const callback = node.arguments.find(arg => ts.isArrowFunction(arg) || ts.isFunctionExpression(arg));
@@ -181,6 +240,17 @@ if (!targetArg) {
         }
         count(sourceFile);
 
+        let literalFailed = false;
+        if (escapeDiagnostics.length > 0) {
+          literalFailed = true;
+          for (const line of escapeDiagnostics.slice(0, 12)) process.stderr.write(`${line}\n`);
+          if (escapeDiagnostics.length > 12) {
+            process.stderr.write(`...and ${escapeDiagnostics.length - 12} more useless escapes\n`);
+          }
+          process.stderr.write('PATCHPROOF_TYPESCRIPT_LITERAL=failed\n');
+          process.exitCode = 2;
+        }
+
         const unused = [];
         for (const [name, nodes] of declarations) {
           if ((references.get(name) ?? 0) === 0) {
@@ -202,7 +272,7 @@ if (!targetArg) {
           );
         } else if (contractErrors.length) {
           fail(contractErrors.join('\n'), 'PATCHPROOF_TYPESCRIPT_CONTRACT=failed');
-        } else {
+        } else if (!literalFailed) {
           process.stdout.write('PATCHPROOF_TYPESCRIPT_LINT=passed\n');
         }
       }
