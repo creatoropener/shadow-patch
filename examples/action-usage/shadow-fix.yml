@@ -1,0 +1,36 @@
+# Copy this single file to .github/workflows/shadow-fix.yml in your repository.
+# No engine files are copied: the engine runs from the pinned Action version.
+name: Shadow Fix
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: shadow-fix-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  verify-and-open-pr:
+    if: github.event.label.name == 'shadow-fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: creatoropener/shadow-patch@v0.6.0-rc.16   # pin an exact tag
+        with:
+          nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
+          nebius-project-id: ${{ secrets.NEBIUS_PROJECT_ID }}
+          nebius-model: ${{ vars.NEBIUS_MODEL || secrets.NEBIUS_MODEL }}
+          # Pass only the image(s) your repository's adapter needs:
+          image-node-typescript: ${{ secrets.CONTREE_IMAGE_NODE_TYPESCRIPT }}
+          # sandbox-image: ${{ secrets.CONTREE_IMAGE }}
+          # image-python-pytest: ${{ secrets.CONTREE_IMAGE_PYTHON_PYTEST }}
+          # image-node-package: ${{ secrets.CONTREE_IMAGE_NODE_PACKAGE }}

@@ -1,0 +1,242 @@
+name: Shadow Patch
+description: >-
+  Turns a labelled GitHub issue into a pull request whose fix was proven in
+  Nebius Sandboxes first (hidden regression test, three candidate repairs,
+  clean-image replay). A human always approves the merge. Beta.
+author: creatoropener
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  nebius-api-key:
+    description: Nebius API key (also needs Sandbox permission). Pass from a repository secret.
+    required: true
+  nebius-project-id:
+    description: Nebius project authorized for Sandboxes. Pass from a repository secret.
+    required: true
+  nebius-model:
+    description: Model identifier, for example nvidia/nemotron-3-super-120b-a12b.
+    required: true
+  nebius-max-tokens:
+    description: Completion token budget per model call.
+    required: false
+    default: '12000'
+  sandbox-image:
+    description: Shared sandbox image UUID (used when no runtime-specific image is given).
+    required: false
+    default: ''
+  image-python-pytest:
+    description: Sandbox image UUID for the python-pytest adapter.
+    required: false
+    default: ''
+  image-node-package:
+    description: Sandbox image UUID for the node-package adapter.
+    required: false
+    default: ''
+  image-node-typescript:
+    description: Sandbox image UUID for the node-typescript adapter (needs the v0.7 web image).
+    required: false
+    default: ''
+  image-static-web:
+    description: Sandbox image UUID for the static-web adapter.
+    required: false
+    default: ''
+  image-web-playwright:
+    description: Sandbox image UUID for the web-playwright adapter.
+    required: false
+    default: ''
+  image-java-junit:
+    description: Sandbox image UUID for the java-junit adapter.
+    required: false
+    default: ''
+  image-java-maven:
+    description: Sandbox image UUID for the java-maven adapter.
+    required: false
+    default: ''
+  image-java-gradle:
+    description: Sandbox image UUID for the java-gradle adapter.
+    required: false
+    default: ''
+  image-go:
+    description: Sandbox image UUID for the go adapter.
+    required: false
+    default: ''
+  image-rust:
+    description: Sandbox image UUID for the rust adapter.
+    required: false
+    default: ''
+  github-token:
+    description: Token used to comment on the issue and open the pull request.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  verdict:
+    description: verified, rejected or blocked.
+    value: ${{ steps.summary.outputs.verdict }}
+  pull-request-url:
+    description: URL of the opened pull request, empty if none was opened.
+    value: ${{ steps.create-pr.outputs.pull-request-url }}
+
+runs:
+  using: composite
+  steps:
+    # The caller checks out its own repository first (actions/checkout with
+    # fetch-depth: 0). The engine stays in this action's folder, so no engine
+    # file is ever copied into, or committed to, the target repository.
+    - name: Comment on issue
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: "🤖 **Shadow Patch** received the `shadow-fix` label. PatchProof is generating an independent regression test and evaluating isolated candidate repairs."
+          });
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install PatchProof dependencies
+      shell: bash
+      run: python -m pip install --disable-pip-version-check -r "${{ github.action_path }}/requirements-patchproof.txt"
+
+    - name: Check runtime selection
+      shell: bash
+      env:
+        PYTHONDONTWRITEBYTECODE: '1'
+        PATCHPROOF_HOME: ${{ github.action_path }}
+      run: |
+        python - <<'PY'
+        import os, sys
+        sys.path.insert(0, os.environ["PATCHPROOF_HOME"])
+        from pathlib import Path
+        import proof
+        from runtimes import detect_runtime
+        adapter = detect_runtime(Path.cwd())
+        print(f"PatchProof {proof.APP_VERSION}; runtime: {adapter.id}; baseline: {adapter.baseline_command}")
+        PY
+
+    - name: Validate configuration
+      shell: bash
+      env:
+        NEBIUS_PROJECT_ID: ${{ inputs.nebius-project-id }}
+        NEBIUS_API_KEY: ${{ inputs.nebius-api-key }}
+        NEBIUS_MODEL: ${{ inputs.nebius-model }}
+        IMAGES: >-
+          ${{ inputs.sandbox-image }}${{ inputs.image-python-pytest }}${{ inputs.image-node-package }}${{ inputs.image-node-typescript }}${{ inputs.image-static-web }}${{ inputs.image-web-playwright }}${{ inputs.image-java-junit }}${{ inputs.image-java-maven }}${{ inputs.image-java-gradle }}${{ inputs.image-go }}${{ inputs.image-rust }}
+      run: |
+        missing=0
+        for name in NEBIUS_PROJECT_ID NEBIUS_API_KEY NEBIUS_MODEL; do
+          if [[ -z "${!name}" ]]; then
+            echo "::error::Missing input for $name. Pass it from a repository secret or variable."
+            missing=1
+          fi
+        done
+        if [[ -z "${IMAGES//[[:space:]]/}" ]]; then
+          echo "::error::Pass sandbox-image or at least one runtime-specific image-* input."
+          missing=1
+        fi
+        exit "$missing"
+
+    - name: Run PatchProof verification
+      id: patchproof
+      shell: bash
+      continue-on-error: true
+      env:
+        # Keep Python imports from creating stray bytecode in the target checkout.
+        PYTHONDONTWRITEBYTECODE: '1'
+        NEBIUS_PROJECT_ID: ${{ inputs.nebius-project-id }}
+        NEBIUS_API_KEY: ${{ inputs.nebius-api-key }}
+        NEBIUS_MODEL: ${{ inputs.nebius-model }}
+        NEBIUS_MAX_TOKENS: ${{ inputs.nebius-max-tokens }}
+        CONTREE_IMAGE: ${{ inputs.sandbox-image }}
+        CONTREE_IMAGE_PYTHON_PYTEST: ${{ inputs.image-python-pytest }}
+        CONTREE_IMAGE_NODE_PACKAGE: ${{ inputs.image-node-package }}
+        CONTREE_IMAGE_NODE_TYPESCRIPT: ${{ inputs.image-node-typescript }}
+        CONTREE_IMAGE_STATIC_WEB: ${{ inputs.image-static-web }}
+        CONTREE_IMAGE_WEB_PLAYWRIGHT: ${{ inputs.image-web-playwright }}
+        CONTREE_IMAGE_JAVA_JUNIT: ${{ inputs.image-java-junit }}
+        CONTREE_IMAGE_JAVA_MAVEN: ${{ inputs.image-java-maven }}
+        CONTREE_IMAGE_JAVA_GRADLE: ${{ inputs.image-java-gradle }}
+        CONTREE_IMAGE_GO: ${{ inputs.image-go }}
+        CONTREE_IMAGE_RUST: ${{ inputs.image-rust }}
+      run: python "${{ github.action_path }}/proof.py" --repo "$GITHUB_WORKSPACE"
+
+    - name: Upload verification evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: patchproof-issue-${{ github.event.issue.number }}
+        path: |
+          proof.json
+          verification-report.md
+        if-no-files-found: ignore
+        retention-days: 30
+
+    - name: Publish verification summary
+      id: summary
+      if: always()
+      shell: bash
+      run: |
+        if [[ -f verification-report.md ]]; then
+          cat verification-report.md >> "$GITHUB_STEP_SUMMARY"
+        fi
+        verdict=$(python -c "import json,sys; print(json.load(open('proof.json')).get('verdict','rejected'))" 2>/dev/null || echo rejected)
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+
+    - name: Open pull request with verified fix
+      if: steps.patchproof.outcome == 'success'
+      id: create-pr
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ inputs.github-token }}
+        commit-message: "PatchProof: verified repair for issue #${{ github.event.issue.number }}"
+        title: "Shadow Patch: verified repair for #${{ github.event.issue.number }}"
+        body-path: verification-report.md
+        branch: shadow-fix/issue-${{ github.event.issue.number }}
+        delete-branch: true
+
+    - name: Comment with verified pull request
+      if: steps.patchproof.outcome == 'success' && steps.create-pr.outcome == 'success' && steps.create-pr.outputs.pull-request-url != ''
+      continue-on-error: true
+      uses: actions/github-script@v7
+      env:
+        PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        retries: 2
+        script: |
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: `✅ **PatchProof verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\nThe verification report is in the pull request description and the Actions artifact. Human merge approval is required.`
+          });
+
+    - name: Comment when verification rejects all repairs
+      if: steps.patchproof.outcome == 'failure'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const report = fs.existsSync('verification-report.md')
+            ? fs.readFileSync('verification-report.md', 'utf8')
+            : 'PatchProof stopped before producing a report. Check the workflow logs.';
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: `❌ **PatchProof rejected the attempted repair.**\n\n${report}`
+          });
+
+    - name: Enforce PatchProof verdict
+      if: steps.patchproof.outcome == 'failure'
+      shell: bash
+      run: exit 1

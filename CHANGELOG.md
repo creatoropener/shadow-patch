@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6.0-rc.16 — Shadow Patch as a reusable GitHub Action (beta), 2026-09-28
+
+- New root `action.yml` (composite Action). A target repository now needs one
+  workflow file that checks out its code and calls
+  `creatoropener/shadow-patch@v0.6.0-rc.16`; no engine file is copied into it.
+  The engine runs from `github.action_path` with `--repo "$GITHUB_WORKSPACE"`, so
+  `proof.json`, the report and any edits land in the target checkout only.
+- Secrets are passed as inputs from the caller (composite Actions cannot read the
+  `secrets` context). Each adapter has an `image-*` input wired to the same
+  `CONTREE_IMAGE_<ADAPTER>` variable the engine already derives; empty inputs fall
+  back to `sandbox-image`, exactly as before.
+- Behaviour is otherwise identical to the rc.15 copy-install workflow: same comment,
+  artifact, PR and verdict-enforcement steps. New outputs: `verdict`,
+  `pull-request-url`. The PR title now reads "Shadow Patch: verified repair".
+- Added `examples/action-usage/shadow-fix.yml`, `docs/ACTION.md`, and
+  `tests/test_action_manifest.py` (composite type, required inputs, every adapter's
+  image wiring, bash shell on every run step, no `secrets` context, and that the
+  example pins the current version). Engine Checks now installs PyYAML for it.
+- Verified locally: actionlint is clean on the example and on the Action's steps;
+  the engine imports from a separate folder and writes evidence into a different
+  working repository. No live Nebius run has been made through the Action yet.
+- No adapter, prompt, sandbox image or retry logic changed; no image rebuild needed.
+
 ## v0.6.0-rc.15 — TypeScript quoting guidance for the generator; issue-scoped fixtures stay in the issue, not the engine, 2026-09-27
 
 - With rc.14's placement and types fixes in, QRcrafts issue #1 progressed

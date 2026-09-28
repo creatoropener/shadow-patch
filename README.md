@@ -51,6 +51,15 @@ Candidates run **sequentially in separate branches**, not concurrently. Existing
 baseline failures can be supplied for one bounded correction. Hidden-regression
 results are never fed back to a solver. Details: [architecture](docs/ARCHITECTURE.md).
 
+## Use as a GitHub Action (beta)
+
+The lightest way to try it: add one workflow file that calls
+`creatoropener/shadow-patch@v0.6.0-rc.16` and pass your Nebius secrets and sandbox
+image. No engine files are copied into your repository. See
+[docs/ACTION.md](docs/ACTION.md) and
+[examples/action-usage/shadow-fix.yml](examples/action-usage/shadow-fix.yml). The
+copy-install route below remains supported.
+
 ## Install in a target repository
 
 Export the installation files, then copy their contents into the target repository:

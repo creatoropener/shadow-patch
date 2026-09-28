@@ -1,5 +1,7 @@
 # Setup and first run
 
+> Prefer the one-file route: see [ACTION.md](ACTION.md) (beta). This page describes the copy-install route.
+
 ## Install the engine
 
 From this repository, run:
