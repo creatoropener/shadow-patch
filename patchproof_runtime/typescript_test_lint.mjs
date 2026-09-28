@@ -25,7 +25,12 @@ function uselessEscapes(inner, delimiter) {
     if (inner[index] !== '\\') continue;
     const next = inner[index + 1];
     if (next === undefined) break;
+    // A backslash before ANY quote character yields exactly that quote character,
+    // which is what the author almost always means (\" inside '...' is a style
+    // nit, not a changed value). Only escapes that silently turn an intended
+    // literal backslash into nothing (\; \, \: \c ...) are gated.
     const meaningful = MEANINGFUL_ESCAPES.has(next)
+      || next === '"' || next === "'" || next === '`'
       || next === delimiter
       || (delimiter === '`'
         && ((next === '$' && inner[index + 2] === '{')
@@ -103,8 +108,9 @@ if (!targetArg) {
             );
             escapeDiagnostics.push(
               `${targetArg}:${position.line + 1}:${position.character + 1}: useless string escape `
-              + `'\\${item.char}' evaluates to '${item.char}' (the backslash is dropped); `
-              + `write '\\\\${item.char}' for a literal backslash followed by '${item.char}'`,
+              + `'\\${item.char}' evaluates to just '${item.char}' (the backslash is dropped). `
+              + `If you want only '${item.char}', remove the backslash. If you want a literal `
+              + `backslash followed by '${item.char}', write two backslashes: '\\\\${item.char}'`,
             );
           }
         };

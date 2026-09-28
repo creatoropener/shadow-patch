@@ -56,6 +56,13 @@ adapter (`python-pytest`, `node-package`, `node-typescript`, `static-web`,
 
 Outputs: `verdict` (`verified`, `rejected`, `blocked`) and `pull-request-url`.
 
+## Writing an issue the verifier can test
+
+The regression test is generated from the issue and repository context before candidate repairs, so precision matters.
+State the exact characters or inputs involved, give one concrete input and the exact
+expected output in a code block, and say what must NOT change (for example, "newlines
+are not escaped"). Ambiguity can produce incorrect expected values and rejected runs.
+
 ## Known beta limits
 
 - The caller must run `actions/checkout` with `fetch-depth: 0` before the Action.
@@ -64,3 +71,5 @@ Outputs: `verdict` (`verified`, `rejected`, `blocked`) and `pull-request-url`.
 - Whether one sandbox image UUID can be reused across repositories in the same Nebius
   project is not yet recorded; treat it as per-repository until verified.
 - The copy-install path (`tools/export_target.py`) still works and is unchanged.
+
+For QRcrafts Issue #1, see [the proposed issue clarification](QRCRAFTS-ISSUE-1.md).

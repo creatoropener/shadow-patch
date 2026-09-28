@@ -1,4 +1,4 @@
-"""rc.17: the useless-escape gate, its feedback, and the report's image redaction."""
+"""rc.17/rc.18: the useless-escape gate, its feedback, and the report's image redaction."""
 from __future__ import annotations
 
 import os
@@ -32,8 +32,10 @@ class EscapeFeedbackTests(unittest.TestCase):
         feedback = reproduction_feedback("SRC", "generated TypeScript regression failed string-escape lint",
                                          self.output)
         self.assertIn("silently drops", feedback)
+        self.assertIn("remove the backslash", feedback)
         self.assertIn("TWO backslashes", feedback)
-        self.assertIn("do not weaken or drop the assertion", feedback)
+        self.assertIn("String.raw", feedback)
+        self.assertIn("keep the assertion strict", feedback)
         self.assertNotIn("constructed a value but never used", feedback)
         self.assertNotIn("syntax error", feedback)
 
@@ -76,8 +78,10 @@ class EscapeGateIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 2, output)
         self.assertIn("PATCHPROOF_TYPESCRIPT_LITERAL=failed", output)
         self.assertNotIn("PATCHPROOF_TYPESCRIPT_LINT=passed", output)
-        self.assertIn("'\\;' evaluates to ';'", output)
-        self.assertIn("'\\c' evaluates to 'c'", output)
+        self.assertIn("'\\;' evaluates to just ';'", output)
+        self.assertIn("'\\c' evaluates to just 'c'", output)
+        self.assertIn("remove the backslash", output)
+        self.assertIn("write two backslashes", output)
         self.assertIn("generated.test.ts:25:", output)
 
     def test_meaningful_escapes_templates_string_raw_and_regex_pass(self):
@@ -85,6 +89,19 @@ class EscapeGateIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertIn("PATCHPROOF_TYPESCRIPT_LINT=passed", output)
         self.assertNotIn("LITERAL", output)
+
+    def test_quote_character_escapes_are_not_gated(self):
+        # rc.17 rejected this real generated test only for \" inside single quotes,
+        # which evaluates to the intended quote character.
+        code, output = self.lint("rc17_qrcrafts_quote_escapes_only.test.ts")
+        self.assertEqual(code, 0, output)
+        self.assertIn("PATCHPROOF_TYPESCRIPT_LINT=passed", output)
+        self.assertNotIn("LITERAL", output)
+
+    def test_string_raw_backslash_fixture_is_accepted(self):
+        code, output = self.lint("rc18_string_raw_expected.test.ts")
+        self.assertEqual(code, 0, output)
+        self.assertIn("PATCHPROOF_TYPESCRIPT_LINT=passed", output)
 
     def test_escape_and_unused_binding_are_both_reported(self):
         code, output = self.lint("rc17_escapes_and_unused.test.ts")

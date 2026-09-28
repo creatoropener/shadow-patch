@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.6.0-rc.19 — First-attempt TypeScript string guidance
+
+- Apply string-value guidance before the first TypeScript generation and every retry.
+- Distinguish control characters, literal backslashes, source newlines and JSON transport escaping.
+- Prefer String.raw for suitable backslash-heavy values without changing expected behavior.
+- Preserve rc.18 lint fixes, bounded retries, test protection and acceptance gates.
+- Include QRcrafts issue clarification as documentation, not a supplied regression.
+- Live Nebius acceptance remains pending.
+
+## v0.6.0-rc.18 — Useless-escape gate no longer fires on quote escapes; better retry guidance, 2026-09-28
+
+- **What rc.17 showed (QRcrafts #1, second live Action run).** The new gate fired on the
+  model's first two generations and the run was rejected before any candidate was
+  evaluated. The only escapes it flagged were `\"` inside single-quoted strings. That
+  sequence evaluates to the quote character the author meant, so the flag was a false
+  positive, and the diagnostic (which only offered "write two backslashes") pointed the
+  model the wrong way; generation 2 over-escaped further and generation 3 repeated it.
+- Fix: a backslash before any quote character (`"`, `'`, `` ` ``) is no longer gated.
+  The gate still catches escapes that silently drop an intended literal backslash
+  (`\;`, `\,`, `\:`, `\c`, ...), including the real rc.16 test.
+- The diagnostic now offers both remedies: remove the backslash if only the bare
+  character is wanted, or write two backslashes for a literal backslash. The retry
+  feedback also recommends `String.raw` for fixtures and expected values that contain
+  literal backslashes, and warns against adding characters or extra escaping the issue
+  does not ask for. This text is sent only after the gate fires, so first-generation
+  prompts and other runtimes are unchanged.
+- Offline check (no sandbox): both rc.17 generated tests were run against the real
+  QRcrafts code with a correct escaping fix applied and still failed. Generation 1
+  mixed up real CR/LF characters with their escaped text; generation 2 over-escaped
+  the expected payload. So the tests were unsound, not the repairs. A `String.raw`
+  version of the same test failed on the buggy code and passed on the correct fix.
+- Not detectable by the engine: an expected value that is internally consistent
+  but disagrees with the issue (for example CR/LF handling). The issue text is the
+  contract; see docs/ACTION.md.
+- Tests: quote-only-escape fixture (the real rc.17 generation 1) now passes the gate,
+  `String.raw` fixture passes, rc.16's test is still rejected, and diagnostics are
+  asserted. No adapter, solver prompt, retry-count or image change; no image rebuild.
+
 ## v0.6.0-rc.17 — Useless-escape gate; sandbox image removed from the report, 2026-09-28
 
 - **Root cause (first live Action run, QRcrafts #1, rc.16 REJECTED).** The model wrote the

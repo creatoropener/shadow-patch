@@ -25,7 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.17"
+APP_VERSION = "0.6.0-rc.19"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -499,6 +499,22 @@ must participate in the asserted behavior. For a round trip, exercise every
 forward and inverse operation before collecting and asserting the final output;
 never compare an encoded intermediate directly with the original decoded value.
 Do not modify or propose modifications to application source."""
+    if adapter.id == "node-typescript":
+        system += r"""
+TypeScript string-value contract (applies on the first attempt and every retry):
+Derive input and expected runtime characters separately from the issue's stated
+behavior. Distinguish actual CR/LF control characters from literal backslash-r
+and backslash-n text. Do not introduce control characters, transformations, or
+unrelated edge cases unless the reported behavior requires them.
+For backslash-heavy fixtures and expected values, prefer String.raw tagged
+backtick literals when suitable: backslashes are literal there. Do not copy
+ordinary quoted-string escaping into String.raw. Interpolation and backtick
+delimiters still need care; use ordinary literals if they express the value more
+clearly. In ordinary strings, a literal backslash requires two source backslashes.
+Keep actual source line breaks as line breaks after JSON decoding, not literal
+backslash-n text between statements. JSON transport escaping is a separate layer.
+Check each expected runtime value character by character against the issue;
+keep assertions strict and exercise the real imported application function."""
     user = f"""ISSUE #{issue.number}
 Title: {issue.title}
 Body:
@@ -742,17 +758,18 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
     if "PATCHPROOF_TYPESCRIPT_LITERAL=failed" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: A string or template literal in the generated test contains an "
-            "escape that JavaScript silently drops. Only \\\\, \\n, \\r, \\t, \\b, \\f, \\v, \\0, "
-            "\\xNN, \\uNNNN and the literal's own quote character are real escapes; a sequence "
-            "such as \\; \\, \\: \\c, or a double quote escaped inside a single-quoted string, "
-            "evaluates to the bare character and the backslash is lost, so the string is not "
-            "what you intended and the assertion can never match correct behavior. To put a "
-            "literal backslash in a value, write TWO backslashes in the source (a backslash "
-            "followed by a semicolon is written \\\\; in source). Prefer the quote style that "
-            "avoids escaping quote characters. Re-derive every fixture and expected value "
-            "character by character from the issue, keep the input fixture exactly as the "
-            "issue describes it, and do not weaken or drop the assertion. Return the complete "
-            "corrected file; resubmitting identical content fails again."
+            "escape that JavaScript silently drops: a backslash before a character such as ; , : "
+            "or a letter that is not n r t b f v 0 x u. The runtime value loses that backslash, so "
+            "the string is not what you intended. If you want only that character, remove the "
+            "backslash. If you want a literal backslash followed by it, write TWO backslashes in "
+            "the source. Do not add characters, control characters, or extra escaping that the "
+            "issue does not ask for. For fixtures and expected values that contain literal "
+            "backslashes, prefer String.raw with backticks, where every backslash is literal: "
+            "String.raw`WIFI:T:WPA;S:a\\;b;;` is exactly the characters WIFI:T:WPA;S:a, a "
+            "backslash, then ;b;; (use it for the input too, so input and expectation are written "
+            "the same way). Re-derive each value character by character from the issue, keep the "
+            "assertion strict, and return the complete corrected file; resubmitting identical "
+            "content fails again."
         )
     if "PATCHPROOF_TYPESCRIPT_LINT=unavailable" in output:
         feedback += (
