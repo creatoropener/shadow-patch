@@ -5,7 +5,7 @@
       "id": "qrcrafts-1",
       "split": "dev",
       "repo": "creatoropener/QRcrafts",
-      "base_commit": "TODO: full 40-character SHA of the commit BEFORE the fix was merged",
+      "base_commit": "b8d3a7e5f921c60b94328a9b7410c53d1000f42b",
       "issue": {
         "number": 1,
         "title": "TODO: exact issue title",
