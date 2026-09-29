@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.6.0-rc.20 — Verifier output as marked plain text instead of JSON
+
+- **Why.** In the rc.16, rc.17 and rc.19 live QRcrafts #1 runs the generated regression
+  test was the failing part, not the candidate repairs. The verifier returned source
+  code inside a JSON string field, which stacked JSON escaping (`\\`, `\"`, `\n`) on
+  top of TypeScript's own. The escaping mistakes seen in those tests fit a model
+  confusing the two layers, but that is not proven to be the only cause. This change
+  removes the avoidable layer for the verifier only; the planned benchmark will show
+  how much it matters.
+- Verifier reply format: test source between `<<<PATCHPROOF_TEST_BEGIN>>>` and
+  `<<<PATCHPROOF_TEST_END>>>`, rationale between the `RATIONALE` markers. Markers are
+  used instead of Markdown fences because TypeScript template literals use backticks.
+- `parse_verifier_blocks` is strict: every marker exactly once, no swapped, nested or
+  interleaved blocks, nothing but whitespace outside the blocks, no fenced or empty
+  test block. Only the newline that delimits each marker is removed, so the source
+  reaches the adapter byte for byte.
+- Parse failures are `PatchProofError` with an actionable diagnostic, so the existing
+  three-generation retry loop (and its repeated-diagnosis escalation) handles them.
+  They are no longer collapsed into an `InferenceError` that aborts the run.
+- `model_json` is split into a shared `_infer` plus `model_json` (solver, unchanged
+  behavior) and `model_text` (verifier). `model_text` never sends `response_format`,
+  since JSON mode would fight the marker format.
+- Prompt wording that referred to JSON fields or `test_content` is updated in the
+  verifier system and user prompts and in the parser-failure retry feedback. The
+  TypeScript string guidance now says the source has no transport escaping.
+- Unchanged: solver candidates still use JSON edits, retry counts, runtime adapters,
+  sandbox image, lint and reproduction gates.
+- Tests: marker parser (byte-exact escapes, every missing and duplicated marker,
+  ordering, outside text, fences, empty blocks), transport (no JSON mode for text,
+  JSON mode kept for solver, empty and truncated replies), and the updated retry and
+  logging tests. All 13 existing TypeScript fixtures round-trip byte-exact. Live
+  Nebius acceptance is pending.
+
 ## v0.6.0-rc.19 — First-attempt TypeScript string guidance
 
 - Apply string-value guidance before the first TypeScript generation and every retry.

@@ -13,23 +13,31 @@ import contextlib
 import io
 from types import SimpleNamespace
 
-from proof import (InferenceError, Issue, PatchProofError, build_model_request,
+from proof import (InferenceError, Issue, PatchProofError, RATIONALE_BEGIN,
+                   RATIONALE_END, TEST_BEGIN, TEST_END, build_model_request,
                    classify_reproduction, extract_json_object,
                    generate_regression_test, generate_regression_with_retry,
-                   model_json, repeated_failure_feedback, reproduction_feedback,
-                   validate_verifier_payload)
+                   model_json, model_text, parse_verifier_blocks,
+                   repeated_failure_feedback, reproduction_feedback)
 from runtimes import _node_assertion_failure, detect_runtime
 
 FIXTURES = Path(__file__).parent / "fixtures"
 LINTER = Path(__file__).resolve().parents[1] / "patchproof_runtime/typescript_test_lint.mjs"
 
 
-class VerifierPayloadTests(unittest.TestCase):
+def marked(test: str, rationale: str = "Regression.") -> str:
+    """A well-formed verifier response in the rc.20 marker format."""
+    return (f"{TEST_BEGIN}\n{test}\n{TEST_END}\n"
+            f"{RATIONALE_BEGIN}\n{rationale}\n{RATIONALE_END}\n")
+
+
+class SolverJsonParsingTests(unittest.TestCase):
+    """Solver candidates still travel as JSON; the strict parser is unchanged."""
+
     def test_accepts_exact_json_and_complete_fence(self):
-        payload = {"test_content": "test();", "rationale": "Regression."}
+        payload = {"summary": "s", "edits": []}
         for text in (json.dumps(payload), "```json\n" + json.dumps(payload) + "\n```"):
-            self.assertEqual(validate_verifier_payload(extract_json_object(text)),
-                             ("test();", "Regression."))
+            self.assertEqual(extract_json_object(text), payload)
 
     def test_rejects_ambiguous_or_non_object_json(self):
         for text in ('{} {}', '{} trailing', 'prefix {}', '[]', 'null',
@@ -38,23 +46,96 @@ class VerifierPayloadTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(PatchProofError):
                 extract_json_object(text)
 
-    def test_requires_separate_nonempty_string_fields(self):
-        for payload in (None, [], {"test_content": "source"},
-                        {"test_content": "source", "rationale": None},
-                        {"test_content": 1, "rationale": "reason"},
-                        {"test_content": "source", "rationale": " "},
-                        {"test_content": "source", "rationale": "reason", "extra": 1}):
-            with self.subTest(payload=payload), self.assertRaises(PatchProofError):
-                validate_verifier_payload(payload)
 
-    def test_schema_rejection_retries_with_actionable_feedback(self):
+class VerifierMarkerParserTests(unittest.TestCase):
+    def test_accepts_well_formed_response(self):
+        self.assertEqual(parse_verifier_blocks(marked("test();")),
+                         ("test();", "Regression."))
+
+    def test_source_is_byte_exact_with_no_escape_layer(self):
+        # The point of the transport: backslashes, quotes, control-character
+        # text and template literals reach the test file untouched.
+        source = (
+            "import test from 'node:test';\n"
+            "const a = 'x\\;y\\,z';\n"
+            "const b = String.raw`C:\\path\\n \\r\\n \"q\" ${1}`;\n"
+            "const c = \"tab\\there\";\n"
+        )
+        test, _ = parse_verifier_blocks(marked(source))
+        self.assertEqual(test, source)
+        # A JSON round trip would have needed a second layer of escaping.
+        self.assertNotEqual(json.dumps(source)[1:-1], source)
+
+    def test_accepts_rationale_first_and_blank_lines_between_blocks(self):
+        text = (f"\n{RATIONALE_BEGIN}\nWhy.\n{RATIONALE_END}\n\n\n"
+                f"{TEST_BEGIN}\ntest();\n{TEST_END}\n")
+        self.assertEqual(parse_verifier_blocks(text), ("test();", "Why."))
+
+    def test_accepts_crlf_after_begin_marker_and_reasoning_prefix(self):
+        text = "<think>plan</think>\n" + marked("test();").replace("\n", "\r\n")
+        self.assertEqual(parse_verifier_blocks(text), ("test();", "Regression."))
+
+    def test_preserves_internal_indentation_and_blank_lines(self):
+        source = "test('a', () => {\n\n    nested();\n\n});"
+        test, _ = parse_verifier_blocks(marked(source))
+        self.assertEqual(test, source)
+
+    def test_rejects_every_missing_marker(self):
+        good = marked("test();")
+        for marker in (TEST_BEGIN, TEST_END, RATIONALE_BEGIN, RATIONALE_END):
+            with self.subTest(marker=marker):
+                with self.assertRaises(PatchProofError) as raised:
+                    parse_verifier_blocks(good.replace(marker, "", 1))
+                self.assertIn(marker, str(raised.exception))
+                self.assertIn("exactly once", str(raised.exception))
+
+    def test_rejects_every_duplicated_marker(self):
+        good = marked("test();")
+        for marker in (TEST_BEGIN, TEST_END, RATIONALE_BEGIN, RATIONALE_END):
+            with self.subTest(marker=marker), self.assertRaises(PatchProofError) as raised:
+                parse_verifier_blocks(good + marker + "\n")
+            self.assertIn("found 2", str(raised.exception))
+
+    def test_rejects_marker_text_inside_the_source(self):
+        with self.assertRaises(PatchProofError):
+            parse_verifier_blocks(marked(f"const s = '{TEST_END}';"))
+
+    def test_rejects_swapped_nested_and_interleaved_blocks(self):
+        cases = {
+            "end before begin": f"{TEST_END}\nx\n{TEST_BEGIN}\n{RATIONALE_BEGIN}\nr\n{RATIONALE_END}",
+            "nested": f"{TEST_BEGIN}\n{RATIONALE_BEGIN}\nr\n{RATIONALE_END}\nx\n{TEST_END}",
+            "interleaved": f"{TEST_BEGIN}\nx\n{RATIONALE_BEGIN}\n{TEST_END}\nr\n{RATIONALE_END}",
+        }
+        for name, text in cases.items():
+            with self.subTest(name=name), self.assertRaises(PatchProofError):
+                parse_verifier_blocks(text)
+
+    def test_rejects_text_outside_the_blocks(self):
+        for text in ("Here is the test:\n" + marked("test();"),
+                     marked("test();") + "Hope this helps.",
+                     marked("test();").replace(f"{TEST_END}\n", f"{TEST_END}\nnote\n")):
+            with self.subTest(text=text[:30]), self.assertRaises(PatchProofError) as raised:
+                parse_verifier_blocks(text)
+            self.assertIn("outside the marked blocks", str(raised.exception))
+
+    def test_rejects_markdown_fenced_source_and_empty_blocks(self):
+        for text in (marked("```ts\ntest();\n```"), marked(""), marked("test();", " "),
+                     json.dumps({"test_content": "x", "rationale": "y"})):
+            with self.subTest(text=text[:30]), self.assertRaises(PatchProofError):
+                parse_verifier_blocks(text)
+
+    def test_unclosed_reasoning_is_not_an_answer(self):
+        with self.assertRaises(PatchProofError):
+            parse_verifier_blocks("<think>never closes " + marked("test();"))
+
+    def test_malformed_response_retries_with_actionable_feedback(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
             adapter = detect_runtime(root)
-            with patch('proof.model_json', side_effect=[
-                {"test_content": "test();"},
-                {"test_content": "test();", "rationale": "Expected behavior."},
+            with patch('proof.model_text', side_effect=[
+                json.dumps({"test_content": "test();", "rationale": "r"}),
+                marked("test();", "Expected behavior."),
             ]) as model:
                 content, rationale = generate_regression_with_retry(
                     issue=Issue(3, "Round trip", "Preserve input"), context="",
@@ -62,8 +143,9 @@ class VerifierPayloadTests(unittest.TestCase):
                     test_path="test_patchproof_issue_3.test.mjs")
                 self.assertEqual(content, "test();\n")
                 self.assertEqual(rationale, "Expected behavior.")
-                self.assertIn("Keep rationale outside test_content",
-                              model.call_args.kwargs["user"])
+                retry_user = model.call_args.kwargs["user"]
+                self.assertIn("exactly once", retry_user)
+                self.assertIn(TEST_BEGIN, retry_user)
 
 
 class GenerationDiagnosticLoggingTests(unittest.TestCase):
@@ -77,16 +159,16 @@ class GenerationDiagnosticLoggingTests(unittest.TestCase):
             (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
             yield detect_runtime(root)
 
-    def test_schema_violation_logs_all_returned_keys(self):
-        # Mirrors the real attempt 3: an extra field alongside the two required ones.
+    def test_malformed_response_logs_head_and_tail_preview(self):
+        # Mirrors the earlier real rc.9 case (a response the parser rejects):
+        # the run log must show what the model actually returned.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
             adapter = detect_runtime(root)
-            payload = {"test_content": "test();", "rationale": "Regression.",
-                      "notes": "unexpected extra field"}
+            raw = "PREAMBLE_TEXT\n" + marked("test();") + "TRAILING_NOTE"
             buffer = io.StringIO()
-            with patch('proof.model_json', return_value=payload), \
+            with patch('proof.model_text', return_value=raw), \
                  contextlib.redirect_stderr(buffer), \
                  self.assertRaises(PatchProofError):
                 generate_regression_test(
@@ -94,10 +176,28 @@ class GenerationDiagnosticLoggingTests(unittest.TestCase):
                     model="unused", adapter=adapter,
                     test_path="test_patchproof_issue_3.test.mjs")
             logged = buffer.getvalue()
-            self.assertIn("Verifier payload rejected", logged)
-            self.assertIn("'test_content'", logged)
-            self.assertIn("'rationale'", logged)
-            self.assertIn("'notes'", logged)
+            self.assertIn("Verifier response rejected", logged)
+            self.assertIn("outside the marked blocks", logged)
+            self.assertIn("PREAMBLE_TEXT", logged)
+            self.assertIn("TRAILING_NOTE", logged)
+
+    def test_preview_is_bounded_for_huge_responses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
+            adapter = detect_runtime(root)
+            raw = "A" * 300 + "MIDDLE" + "Z" * 300
+            buffer = io.StringIO()
+            with patch('proof.model_text', return_value=raw), \
+                 contextlib.redirect_stderr(buffer), \
+                 self.assertRaises(PatchProofError):
+                generate_regression_test(
+                    issue=Issue(3, "t", "b"), context="", api_key="unused",
+                    model="unused", adapter=adapter,
+                    test_path="test_patchproof_issue_3.test.mjs")
+            logged = buffer.getvalue()
+            self.assertNotIn("MIDDLE", logged)
+            self.assertIn("len=606", logged)
 
     def test_content_violation_logs_prefix_and_attaches_it_to_the_error(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -106,9 +206,9 @@ class GenerationDiagnosticLoggingTests(unittest.TestCase):
             (root / "tsconfig.json").write_text("{}\n")
             adapter = detect_runtime(root)
             bad_source = (FIXTURES / "missing_node_test_import.test.ts").read_text(encoding="utf-8")
-            payload = {"test_content": bad_source, "rationale": "Round trip."}
+            raw = marked(bad_source, "Round trip.")
             buffer = io.StringIO()
-            with patch('proof.model_json', return_value=payload), \
+            with patch('proof.model_text', return_value=raw), \
                  contextlib.redirect_stderr(buffer), \
                  self.assertRaises(PatchProofError) as raised:
                 generate_regression_test(
@@ -260,9 +360,9 @@ class RepeatedFailureEscalationTests(unittest.TestCase):
             root = Path(directory)
             (root / "package.json").write_text('{"scripts":{"test":"node --test"}}')
             adapter = detect_runtime(root)
-            with patch('proof.model_json', side_effect=[
-                {"test_content": "test();"},
-                {"test_content": "test();", "rationale": "Expected behavior."},
+            with patch('proof.model_text', side_effect=[
+                f"{TEST_BEGIN}\ntest();\n{TEST_END}\n",
+                marked("test();", "Expected behavior."),
             ]) as model:
                 generate_regression_with_retry(
                     issue=Issue(3, "Round trip", "Preserve input"), context="",
@@ -302,18 +402,17 @@ class RepeatedFailureEscalationTests(unittest.TestCase):
                 "  });\n"
                 "});\n"
             )
-            with patch('proof.model_json', side_effect=[
-                {"test_content": missing_guard_source_1, "rationale": "r1"},
-                {"test_content": missing_guard_source_2, "rationale": "r2"},
-                {"test_content": valid_source, "extra": "field"},
+            with patch('proof.model_text', side_effect=[
+                marked(missing_guard_source_1, "r1"),
+                marked(missing_guard_source_2, "r2"),
+                f"{TEST_BEGIN}\n{valid_source}\n{TEST_END}\n",  # rationale block missing
             ]) as model:
                 with self.assertRaises(PatchProofError) as raised:
                     generate_regression_with_retry(
                         issue=Issue(3, "t", "b"), context="", api_key="unused",
                         model="unused", adapter=adapter,
                         test_path="test_patchproof_issue_3.test.ts")
-            self.assertIn("test_content and rationale as separate JSON",
-                          str(raised.exception))
+            self.assertIn(f"marker {RATIONALE_BEGIN} exactly once", str(raised.exception))
             second_call_user = model.call_args_list[1].kwargs["user"]
             self.assertNotIn("second attempt in a row", second_call_user)
             third_call_user = model.call_args_list[2].kwargs["user"]
@@ -398,7 +497,8 @@ class ReproductionFailureTests(unittest.TestCase):
             "PATCHPROOF_TYPESCRIPT_LINT=failed", "PATCHPROOF_TYPESCRIPT_PARSE=failed")
         feedback = reproduction_feedback("source", "syntax failure", output)
         self.assertIn("syntax error", feedback)
-        self.assertIn("separate JSON string fields", feedback)
+        self.assertIn("between the test markers", feedback)
+        self.assertNotIn("JSON string fields", feedback)
         self.assertNotIn("constructed a value but never used", feedback)
         digest = output.split("PATCHPROOF_TEST_HASH_BEFORE=")[1].splitlines()[0]
         reproduced, protected, reason = classify_reproduction(None, 2, output, digest)
@@ -465,3 +565,77 @@ class TypeScriptLintIntegrationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class VerifierTransportTests(unittest.TestCase):
+    """rc.20: the verifier reply is plain text, so the endpoint must never be
+    asked for JSON mode (it would fight the marker format), while solver
+    candidates keep JSON mode."""
+
+    class _Client:
+        def __init__(self, content, finish_reason="stop"):
+            self.calls = []
+            self._response = SimpleNamespace(
+                choices=[SimpleNamespace(
+                    finish_reason=finish_reason,
+                    message=SimpleNamespace(content=content, refusal=None,
+                                            reasoning_content=None))],
+                usage=SimpleNamespace(completion_tokens=10,
+                                      completion_tokens_details={"reasoning_tokens": 0}))
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+        def _create(self, **kwargs):
+            self.calls.append(kwargs)
+            return self._response
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+    def run_call(self, function, content, **extra):
+        client = self._Client(content, **extra)
+        with patch("openai.OpenAI", return_value=client), \
+             contextlib.redirect_stderr(io.StringIO()):
+            result = function(api_key="x", model="some/model", system="s",
+                              user="u", temperature=0.1)
+        return result, client
+
+    def test_model_text_returns_raw_text_and_never_requests_json_mode(self):
+        raw = marked("const a = 'x\\;y';")
+        result, client = self.run_call(model_text, raw)
+        self.assertEqual(result, raw)
+        self.assertEqual(len(client.calls), 1)
+        self.assertNotIn("response_format", client.calls[0])
+
+    def test_model_json_still_requests_json_mode(self):
+        result, client = self.run_call(model_json, '{"summary": "s", "edits": []}')
+        self.assertEqual(result, {"summary": "s", "edits": []})
+        self.assertEqual(client.calls[0]["response_format"], {"type": "json_object"})
+
+    def test_empty_text_response_is_an_inference_failure_without_repeat_requests(self):
+        client = self._Client("   ")
+        with patch("openai.OpenAI", return_value=client), \
+             contextlib.redirect_stderr(io.StringIO()), \
+             self.assertRaises(InferenceError):
+            model_text(api_key="x", model="some/model", system="s", user="u",
+                       temperature=0.1)
+        self.assertEqual(len(client.calls), 1)
+
+    def test_truncated_text_response_names_text_not_json(self):
+        client = self._Client("partial", finish_reason="length")
+        with patch("openai.OpenAI", return_value=client), \
+             contextlib.redirect_stderr(io.StringIO()), \
+             self.assertRaises(InferenceError) as raised:
+            model_text(api_key="x", model="some/model", system="s", user="u",
+                       temperature=0.1)
+        self.assertIn("final text is not accepted", str(raised.exception))
+
+    def test_malformed_marker_text_is_not_swallowed_as_an_inference_failure(self):
+        # A structurally bad reply reaches the caller intact so the retry loop
+        # can return a specific diagnostic instead of aborting the run.
+        result, _ = self.run_call(model_text, "no markers at all")
+        with self.assertRaises(PatchProofError) as raised:
+            parse_verifier_blocks(result)
+        self.assertNotIsInstance(raised.exception, InferenceError)

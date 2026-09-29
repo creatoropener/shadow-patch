@@ -56,9 +56,15 @@ claims for one resolvable literal fixture and one explicit application chunkSize
 It supports numeric byte-array literals and TextEncoder string literals, including
 escapes. Computed or ambiguous fixtures are not assessed for coverage. These are
 bounded structural checks, not general data-flow or coverage proofs.
-Verifier responses must contain separate non-empty `test_content` and `rationale`
-strings. The JSON decoder rejects trailing data and duplicate fields; it does not
-salvage the first object from mixed prose or strip metadata from test source.
+Verifier responses are plain text, not JSON: the test source sits between
+`<<<PATCHPROOF_TEST_BEGIN>>>` and `<<<PATCHPROOF_TEST_END>>>`, and a short rationale
+between the matching `RATIONALE` markers. Each marker must appear exactly once, the
+blocks must not overlap, and only whitespace may sit outside them. Source reaches the
+adapter exactly as written, with no JSON escaping layer; a malformed response is
+rejected with a specific diagnostic on the existing three-generation budget. The
+endpoint is not asked for JSON mode on this call. Solver candidates still use JSON,
+where the decoder rejects trailing data and duplicate fields and does not salvage
+the first object from mixed prose.
 Node operational failures are still rejected as reproduction evidence. Retry
 feedback explains how to assert successful asynchronous behavior explicitly before
 checking the returned value. Parser errors, unused bindings, and unavailable lint

@@ -10,8 +10,9 @@ class VerifierStringPromptTests(unittest.TestCase):
             test_runtime='node-test', verifier_guidance='ADAPTER_GUIDANCE',
             validate_generated_test=Mock())
         source = "import test from 'node:test';\ntest('case', () => {});\n"
-        with patch.object(proof, 'model_json', return_value={
-                'test_content': source, 'rationale': 'Exercise the reported behavior.'}) as model:
+        raw = (f"{proof.TEST_BEGIN}\n{source}\n{proof.TEST_END}\n"
+               f"{proof.RATIONALE_BEGIN}\nExercise the reported behavior.\n{proof.RATIONALE_END}\n")
+        with patch.object(proof, 'model_text', return_value=raw) as model:
             result = proof.generate_regression_test(
                 issue=SimpleNamespace(number=1, title='Example', body='Expected behavior'),
                 context='CONTEXT', api_key='unused', model='unused', adapter=adapter,
@@ -22,7 +23,7 @@ class VerifierStringPromptTests(unittest.TestCase):
 
     def test_first_attempt_receives_string_guidance(self):
         request = self.generate('node-typescript')
-        for phrase in ('String.raw', 'actual CR/LF', 'JSON transport escaping',
+        for phrase in ('String.raw', 'actual CR/LF', 'plain text between markers',
                        'keep assertions strict', 'real imported application function'):
             self.assertIn(phrase, request['system'])
         self.assertNotIn('PREVIOUS ATTEMPT', request['user'])
@@ -33,6 +34,17 @@ class VerifierStringPromptTests(unittest.TestCase):
         request = self.generate('node-typescript', 'EXACT_PREVIOUS_SOURCE_AND_DIAGNOSTIC')
         self.assertIn('String.raw', request['system'])
         self.assertIn('EXACT_PREVIOUS_SOURCE_AND_DIAGNOSTIC', request['user'])
+
+    def test_every_adapter_receives_the_marker_format_and_no_json_field_names(self):
+        for runtime in ('node-typescript', 'node-package', 'python-pytest'):
+            with self.subTest(runtime=runtime):
+                request = self.generate(runtime)
+                for marker in proof.VERIFIER_MARKERS:
+                    self.assertIn(marker, request['system'])
+                self.assertIn('between the test markers', request['user'])
+                for stale in ('test_content', 'JSON object', 'string fields'):
+                    self.assertNotIn(stale, request['system'])
+                    self.assertNotIn(stale, request['user'])
 
     def test_other_adapters_do_not_receive_typescript_guidance(self):
         for runtime in ('node-package', 'python-pytest', 'static-web'):
