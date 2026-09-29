@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — Benchmark harness (no engine change)
+
+- Adds a manual **Benchmark** workflow (`.github/workflows/benchmark.yml`) and a
+  standard-library harness (`bench/harness.py`) that runs one or more engine tags
+  over a fixed case list, several trials each, without commenting on issues or
+  opening pull requests. See `docs/BENCHMARK.md`.
+- Every trial is classified against something the engine never saw: a per-case
+  reference test (oracle) or a recorded label keyed by candidate diff. This separates
+  correct accepts from false accepts, and false rejects (a correct candidate refused
+  because of a bad generated test) from real failures, which the engine's own
+  verdict cannot do.
+- Verifier-stage failures (no repair ever evaluated) are reported separately so the
+  effect of the rc.20 transport change is visible on its own.
+- Cases are frozen in `bench/manifest.json` with issue text stored verbatim, a full
+  base commit SHA, and a `dev` or `heldout` split; unfinished cases refuse to run.
+- `APP_VERSION` is unchanged and no new tag is required. The harness is not part of
+  the files exported to target repositories.
+
 ## v0.6.0-rc.20 — Verifier output as marked plain text instead of JSON
 
 - **Why.** In the rc.16, rc.17 and rc.19 live QRcrafts #1 runs the generated regression

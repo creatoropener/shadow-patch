@@ -1,0 +1,83 @@
+{
+  "app_version": "0.6.0-rc.20",
+  "verdict": "verified",
+  "stage": "completed",
+  "winner": {
+    "candidate": 2,
+    "changed_files": [
+      "src/utils/qrBuilder.ts"
+    ],
+    "selection": "fewest changed files, then fewest changed lines, then duration",
+    "summary": "Escape special characters in SSID and password fields of WiFi QR payload."
+  },
+  "runtime": {
+    "id": "node-typescript"
+  },
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "issue": {
+    "number": 1,
+    "title": "WiFi QR codes do not escape reserved characters",
+    "url": "https://github.com/creatoropener/QRcrafts/issues/1"
+  },
+  "regression_test": {
+    "sha256": "dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+    "path": "tests/.test_patchproof_issue_1.test.ts",
+    "failed_before_fix": true,
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "generation_attempts": [
+      {
+        "attempt": 1,
+        "execution_attempt": 1,
+        "sha256": "dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+        "status": "validated"
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "candidate": 1,
+      "changed_files": [
+        "src/utils/qrBuilder.ts"
+      ],
+      "changed_lines": 5,
+      "diff": "--- src/utils/qrBuilder.ts\n+++ src/utils/qrBuilder.ts\n@@ -28,9 +28,10 @@\n     }\n \n     case 'wifi': {\n-      const ssid = formData.wifi.ssid.trim();\n+      const ssid = formData.wifi.ssid.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n       if (!ssid) return null;\n-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;\n+      const pass = formData.wifi.pass.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n+      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${pass};;`;\n     }\n \n     case 'vcard': {\n",
+      "exit_code": 0,
+      "passed": true,
+      "stage": "regression",
+      "strategy": "minimal targeted correction",
+      "summary": "Escape special characters in SSID and password fields for WiFi QR payload.",
+      "tests_passed": 3,
+      "image": "sandbox-image"
+    },
+    {
+      "candidate": 2,
+      "changed_files": [
+        "src/utils/qrBuilder.ts"
+      ],
+      "changed_lines": 4,
+      "diff": "--- src/utils/qrBuilder.ts\n+++ src/utils/qrBuilder.ts\n@@ -30,7 +30,9 @@\n     case 'wifi': {\n       const ssid = formData.wifi.ssid.trim();\n       if (!ssid) return null;\n-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;\n+      const escapedSsid = ssid.replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n+      const escapedPass = formData.wifi.pass.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n+      return `WIFI:T:${formData.wifi.sec};S:${escapedSsid};P:${escapedPass};;`;\n     }\n \n     case 'vcard': {\n",
+      "exit_code": 0,
+      "passed": true,
+      "stage": "regression",
+      "strategy": "defensive edge-case correction",
+      "summary": "Escape special characters in SSID and password fields of WiFi QR payload.",
+      "tests_passed": 3,
+      "image": "sandbox-image"
+    },
+    {
+      "candidate": 3,
+      "changed_files": [
+        "src/utils/qrBuilder.ts"
+      ],
+      "changed_lines": 5,
+      "diff": "--- src/utils/qrBuilder.ts\n+++ src/utils/qrBuilder.ts\n@@ -28,9 +28,10 @@\n     }\n \n     case 'wifi': {\n-      const ssid = formData.wifi.ssid.trim();\n+      const ssid = formData.wifi.ssid.trim().replace(/([;,\\\\\\\\:\\\\\"])/g, '\\\\$1');\n       if (!ssid) return null;\n-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;\n+      const pass = formData.wifi.pass.trim().replace(/([;,\\\\\\\\:\\\\\"])/g, '\\\\$1');\n+      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${pass};;`;\n     }\n \n     case 'vcard': {\n",
+      "exit_code": 0,
+      "passed": true,
+      "stage": "regression",
+      "strategy": "maintainable behavior-preserving correction",
+      "summary": "Escape special characters ; , : \\ \" in WiFi SSID and password fields.",
+      "tests_passed": 3,
+      "image": "sandbox-image"
+    }
+  ]
+}
