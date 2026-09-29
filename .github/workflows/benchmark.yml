@@ -1,0 +1,187 @@
+name: Benchmark
+
+# Manual only. Runs the engine at one or more tags against the cases in
+# bench/manifest.json and reports how often it produced a correct, accepted
+# repair. It never comments on issues and never opens pull requests.
+on:
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: 'Engine tag(s) to benchmark, comma-separated, e.g. v0.6.0-rc.20 or v0.6.0-rc.19,v0.6.0-rc.20'
+        required: true
+        default: v0.6.0-rc.20
+      trials:
+        description: 'Trials per case and engine (1 to 5)'
+        required: true
+        default: '3'
+      split:
+        description: 'Which cases to run'
+        type: choice
+        options: [all, dev, heldout]
+        default: all
+      cases:
+        description: 'Optional: only these case ids, comma-separated (blank = every case in the split)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      oracle_cases: ${{ steps.plan.outputs.oracle_cases }}
+      has_oracle: ${{ steps.plan.outputs.has_oracle }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build the job matrix
+        id: plan
+        env:
+          ENGINES: ${{ inputs.engines }}
+          TRIALS: ${{ inputs.trials }}
+          SPLIT: ${{ inputs.split }}
+          CASES: ${{ inputs.cases }}
+        run: >
+          python bench/harness.py plan
+          --engines "$ENGINES" --trials "$TRIALS" --split "$SPLIT" --cases "$CASES"
+          --github-output "$GITHUB_OUTPUT"
+
+  trial:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    name: trial ${{ matrix.engine }} ${{ matrix.case }} t${{ matrix.trial }}
+    strategy:
+      fail-fast: false
+      # Two at a time keeps sandbox and inference load close to a normal run.
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      NEBIUS_PROJECT_ID: ${{ secrets.NEBIUS_PROJECT_ID }}
+      NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
+      CONTREE_IMAGE: ${{ secrets.CONTREE_IMAGE }}
+      CONTREE_IMAGE_PYTHON_PYTEST: ${{ secrets.CONTREE_IMAGE_PYTHON_PYTEST }}
+      CONTREE_IMAGE_NODE_PACKAGE: ${{ secrets.CONTREE_IMAGE_NODE_PACKAGE }}
+      CONTREE_IMAGE_NODE_TYPESCRIPT: ${{ secrets.CONTREE_IMAGE_NODE_TYPESCRIPT }}
+      CONTREE_IMAGE_STATIC_WEB: ${{ secrets.CONTREE_IMAGE_STATIC_WEB }}
+      CONTREE_IMAGE_WEB_PLAYWRIGHT: ${{ secrets.CONTREE_IMAGE_WEB_PLAYWRIGHT }}
+      CONTREE_IMAGE_JAVA_JUNIT: ${{ secrets.CONTREE_IMAGE_JAVA_JUNIT }}
+      CONTREE_IMAGE_JAVA_MAVEN: ${{ secrets.CONTREE_IMAGE_JAVA_MAVEN }}
+      CONTREE_IMAGE_JAVA_GRADLE: ${{ secrets.CONTREE_IMAGE_JAVA_GRADLE }}
+      CONTREE_IMAGE_GO: ${{ secrets.CONTREE_IMAGE_GO }}
+      CONTREE_IMAGE_RUST: ${{ secrets.CONTREE_IMAGE_RUST }}
+      NEBIUS_MODEL: ${{ vars.NEBIUS_MODEL || secrets.NEBIUS_MODEL }}
+      NEBIUS_MAX_TOKENS: ${{ vars.NEBIUS_MAX_TOKENS || '12000' }}
+    steps:
+      # Harness and manifest come from the ref this workflow was started on.
+      - uses: actions/checkout@v4
+      # The engine under test comes from its own tag.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.engine }}
+          path: engine
+      # The repository the engine works on, at the pinned unfixed commit.
+      # If that repository is private, add a BENCH_TOKEN secret with read access.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.base_commit }}
+          path: subject
+          fetch-depth: 0
+          token: ${{ secrets.BENCH_TOKEN || github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install engine dependencies
+        run: python -m pip install -r engine/requirements-patchproof.txt
+      - name: Run the engine
+        env:
+          CASE: ${{ matrix.case }}
+          TRIAL: ${{ matrix.trial }}
+          ENGINE: ${{ matrix.engine }}
+        run: >
+          python bench/harness.py run
+          --case "$CASE" --trial "$TRIAL" --engine-ref "$ENGINE"
+          --engine-dir engine --subject subject --out trial-out
+      - name: Save the trial
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trial-${{ matrix.engine_slug }}-${{ matrix.case }}-t${{ matrix.trial }}
+          path: trial-out
+          if-no-files-found: warn
+          retention-days: 30
+
+  oracle:
+    needs: [plan, trial]
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.has_oracle == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    name: oracle ${{ matrix.case }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.oracle_cases) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.base_commit }}
+          path: subject
+          fetch-depth: 0
+          token: ${{ secrets.BENCH_TOKEN || github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: trial-*
+          path: trials
+      - name: Judge every distinct candidate diff
+        env:
+          CASE: ${{ matrix.case }}
+        run: >
+          python bench/harness.py oracle
+          --case "$CASE" --results trials --checkout subject --out oracle-out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oracle-${{ matrix.case }}
+          path: oracle-out
+          retention-days: 30
+
+  report:
+    needs: [plan, trial, oracle]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: trial-*
+          path: trials
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: oracle-*
+          path: oracle-results
+      - name: Build the report
+        run: python bench/harness.py report --results trials --oracle oracle-results --out report
+      - name: Show it on the run page
+        run: cat report/results.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: report
+          retention-days: 90
