@@ -5,14 +5,14 @@
       "id": "qrcrafts-1",
       "split": "dev",
       "repo": "creatoropener/QRcrafts",
-      "base_commit": "TODO: full 40-character SHA of the commit BEFORE the fix was merged",
+      "base_commit": "8d21aa8faca48df31dd9010fb210f6697fff24b8",
       "issue": {
         "number": 1,
-        "title": "TODO: exact issue title",
+        "title": "WiFi QR codes do not escape reserved characters",
         "body_file": "bench/issues/qrcrafts-1.md"
       },
       "oracle": null,
-      "note": "Iterated on through rc.16-rc.20, so this is a development case."
+      "note": "Verified repository revision with unescaped WiFi fields, preceding the rc.20 repair branch. Development case used during engine tuning; independent judging is still required."
     },
     {
       "id": "file-sharing-app-1",
@@ -25,46 +25,20 @@
         "body_file": "bench/issues/file-sharing-app-1.md"
       },
       "oracle": null,
-      "note": "Base commit is the head of the recorded run in docs/evidence/github-run-35464615209.json."
+      "note": "Recorded successful v0.5.5 run 35464615209 head SHA. Development case; frozen-engine baseline compatibility and independent judging still require validation."
     },
     {
-      "id": "dev-3",
+      "id": "file-sharing-app-3",
       "split": "dev",
-      "repo": "creatoropener/TODO",
-      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
+      "repo": "creatoropener/file-sharing-app",
+      "base_commit": "bf939812d176434f0b11dcdd9df4260dbd80dc8f",
       "issue": {
-        "number": 1,
-        "title": "TODO: exact issue title",
-        "body_file": "bench/issues/dev-3.md"
+        "number": 3,
+        "title": "P2P/stream transfer cannot be decrypted — IV seed is never sent to the receiver",
+        "body_file": "bench/issues/file-sharing-app-3.md"
       },
       "oracle": null,
-      "note": "Any third issue the engine was already tuned on. Rename this id to something readable."
-    },
-    {
-      "id": "heldout-1",
-      "split": "heldout",
-      "repo": "creatoropener/TODO",
-      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
-      "issue": {
-        "number": 1,
-        "title": "TODO: exact issue title",
-        "body_file": "bench/issues/heldout-1.md"
-      },
-      "oracle": null,
-      "note": "Must be an issue written after the harness was frozen and never used to tune the engine."
-    },
-    {
-      "id": "heldout-2",
-      "split": "heldout",
-      "repo": "creatoropener/TODO",
-      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
-      "issue": {
-        "number": 1,
-        "title": "TODO: exact issue title",
-        "body_file": "bench/issues/heldout-2.md"
-      },
-      "oracle": null,
-      "note": "Prefer a repository the engine has never run on."
+      "note": "Parent of verified rc.12 repair commit 357ef0b664d3cba60abc99775bd553f6acd4d786. Development case used during engine tuning; independent judging is still required."
     }
   ]
 }
