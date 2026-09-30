@@ -1,0 +1,26 @@
+{
+  "2e6f8898ee038c38": {
+    "correct": true,
+    "note": "Escapes ; , : \\ \" in trimmed SSID and password. Matches both issue examples; ordinary, trimmed, apostrophe, LF, empty-password and empty-SSID cases unchanged."
+  },
+  "302b1308f1b26f3a": {
+    "correct": true,
+    "note": "Same behavior via escapedSsid/escapedPass. Empty-SSID check still runs before escaping, trimming preserved, all five characters escaped."
+  },
+  "5e2d40a801ae4b82": {
+    "correct": true,
+    "note": "Escapes all five characters in SSID and password with one backslash. Matches both issue examples and leaves ordinary credentials alone."
+  },
+  "c3bfc3a289d0c413": {
+    "correct": true,
+    "note": "Escapes all five characters. Character class repeats the backslash, which is harmless. Matches both issue examples."
+  },
+  "e691ada6b68ddc2c": {
+    "correct": true,
+    "note": "Escapes all five characters. Character class repeats the comma, which is harmless. Matches both issue examples."
+  },
+  "f703f49b7f3c2432": {
+    "correct": true,
+    "note": "Local escape() helper applied to trimmed SSID and password. Behavior correct; the name shadows the deprecated global escape, a style point only."
+  }
+}
