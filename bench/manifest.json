@@ -12,7 +12,7 @@
         "body_file": "bench/issues/qrcrafts-1.md"
       },
       "oracle": null,
-      "note": "Verified repository revision with unescaped WiFi fields, preceding the rc.20 repair branch. Development case used during engine tuning; independent judging is still required."
+      "note": "Iterated on through rc.16-rc.20, so this is a development case."
     },
     {
       "id": "file-sharing-app-1",
@@ -25,20 +25,46 @@
         "body_file": "bench/issues/file-sharing-app-1.md"
       },
       "oracle": null,
-      "note": "Recorded successful v0.5.5 run 35464615209 head SHA. Development case; frozen-engine baseline compatibility and independent judging still require validation."
+      "note": "Base commit is the head of the recorded run in docs/evidence/github-run-35464615209.json."
     },
     {
-      "id": "file-sharing-app-3",
+      "id": "dev-3",
       "split": "dev",
-      "repo": "creatoropener/file-sharing-app",
-      "base_commit": "bf939812d176434f0b11dcdd9df4260dbd80dc8f",
+      "repo": "creatoropener/TODO",
+      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
       "issue": {
-        "number": 3,
-        "title": "P2P/stream transfer cannot be decrypted — IV seed is never sent to the receiver",
-        "body_file": "bench/issues/file-sharing-app-3.md"
+        "number": 1,
+        "title": "TODO: exact issue title",
+        "body_file": "bench/issues/dev-3.md"
       },
       "oracle": null,
-      "note": "Parent of verified rc.12 repair commit 357ef0b664d3cba60abc99775bd553f6acd4d786. Development case used during engine tuning; independent judging is still required."
+      "note": "Any third issue the engine was already tuned on. Rename this id to something readable."
+    },
+    {
+      "id": "heldout-1",
+      "split": "heldout",
+      "repo": "creatoropener/TODO",
+      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
+      "issue": {
+        "number": 1,
+        "title": "TODO: exact issue title",
+        "body_file": "bench/issues/heldout-1.md"
+      },
+      "oracle": null,
+      "note": "Must be an issue written after the harness was frozen and never used to tune the engine."
+    },
+    {
+      "id": "heldout-2",
+      "split": "heldout",
+      "repo": "creatoropener/TODO",
+      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
+      "issue": {
+        "number": 1,
+        "title": "TODO: exact issue title",
+        "body_file": "bench/issues/heldout-2.md"
+      },
+      "oracle": null,
+      "note": "Prefer a repository the engine has never run on."
     }
   ]
 }
