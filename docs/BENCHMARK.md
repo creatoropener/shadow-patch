@@ -34,6 +34,16 @@ Secrets are per repository, so the ones your target repositories use must exist 
 | `NEBIUS_MODEL` | Variable | Always (same model as your normal runs) |
 | `BENCH_TOKEN` | Secret | Only if a target repository is private (read access to contents) |
 
+### If a trial reports "CONTREE_IMAGE is missing"
+
+The engine needs a sandbox image UUID, and GitHub secrets are not shared between
+repositories, so shadow-patch needs its own. Use the adapter-specific secret when you
+have one (`CONTREE_IMAGE_NODE_PACKAGE` for file-sharing-app, `CONTREE_IMAGE_NODE_TYPESCRIPT`
+for QRcrafts), or a single shared `CONTREE_IMAGE`. If you no longer have the UUID, run
+**Prepare Sandbox Image** in shadow-patch (`all` covers every adapter) and copy the UUID
+it prints into the secret. A blocked trial like this stops in under a second and costs
+nothing, and the report lists it as an infrastructure failure, not a result.
+
 ## Fill in the cases
 
 `bench/manifest.json` lists the cases. Each needs three things:

@@ -346,6 +346,27 @@ class ReportTests(unittest.TestCase):
             self.assertIn("+NEW", needed)
             self.assertIn("0/2 (up to 2)", (out / "results.md").read_text())
 
+    def test_blocked_configuration_trial_is_shown_with_its_reason_and_no_rates(self):
+        # The real first live trial: CONTREE_IMAGE was not set in shadow-patch.
+        manifest = {"schema": 1, "cases": [{"id": "c1", "split": "dev"}]}
+        proof = {"app_version": "0.6.0-rc.20", "verdict": "blocked", "stage": "configuration",
+                 "candidates": [], "error": "Required environment variable CONTREE_IMAGE is missing."}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_trial(root / "r", "v1", "c1", 1, proof, exit_code=1)
+            written = h.write_report(root / "r", root / "o", root / "out", manifest=manifest,
+                                     labels_dir=root / "l")
+            row = written["rows"][0]
+            self.assertEqual(row["outcome"], h.INFRA)
+            self.assertIn("CONTREE_IMAGE is missing", row["reason"])
+            markdown = (root / "out/results.md").read_text()
+            self.assertIn("0/0", markdown)
+            self.assertIn("no held-out cases", markdown)
+            self.assertNotIn("Only 0 held-out", markdown)
+            summary = json.loads((root / "out/results.json").read_text())["summary"]["v1/dev"]
+            self.assertIsNone(summary["end_to_end_ci"])
+            self.assertIsNone(summary["verifier_failure_rate"])
+
     def test_empty_results_directory_is_an_error(self):
         with tempfile.TemporaryDirectory() as directory, self.assertRaises(h.BenchError):
             h.write_report(Path(directory), Path(directory) / "o", Path(directory) / "out",

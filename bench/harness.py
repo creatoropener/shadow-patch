@@ -587,7 +587,10 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
         warnings.append(f"{len(needed)} distinct candidate diff(s) have no oracle result or label yet; "
                         "see labels-needed.md.")
     heldout_cases = {r["case"] for r in rows if r["split"] == "heldout"}
-    if len(heldout_cases) < 3:
+    if not heldout_cases:
+        warnings.append("This run has no held-out cases, so it says nothing about issues the engine has not "
+                        "been tuned on.")
+    elif len(heldout_cases) < 3:
         warnings.append(f"Only {len(heldout_cases)} held-out case(s): trials of one case are not independent "
                         "evidence about new issues. Read these numbers as examples, not statistics.")
     if warnings:
