@@ -439,6 +439,157 @@ class RunTrialTests(unittest.TestCase):
             self.assertEqual(h.classify_trial(meta, None, judge_from({}))[0], h.INFRA)
 
 
+class PatchproofConfigTests(unittest.TestCase):
+    """A case can replace the pinned commit's patchproof.json before the engine runs."""
+
+    REPORTING_ENGINE = textwrap.dedent('''\
+        import argparse, json, sys
+        from pathlib import Path
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--repo"); parser.add_argument("--issue-number")
+        parser.add_argument("--issue-title"); parser.add_argument("--issue-body")
+        repo = Path(parser.parse_args().repo)
+        config = repo / "patchproof.json"
+        (repo / "proof.json").write_text(json.dumps({"verdict": "rejected", "stage": "verifier-generation",
+            "app_version": "fake", "seen_config": config.read_text() if config.is_file() else None}))
+        sys.exit(1)
+        ''')
+
+    def run_case(self, root, config, *, existing=None):
+        case = write_case_files(root)
+        if config is not None:
+            case["patchproof_config"] = config
+        (root / "bench").mkdir(exist_ok=True)
+        (root / "bench/manifest.json").write_text(json.dumps({"schema": 1, "cases": [case]}))
+        engine = root / "engine"
+        engine.mkdir()
+        (engine / "proof.py").write_text(self.REPORTING_ENGINE)
+        subject = root / "subject"
+        subject.mkdir()
+        if existing is not None:
+            (subject / "patchproof.json").write_text(existing)
+        meta = h.run_trial(case=case, trial=1, engine_ref="v", engine_dir=engine, subject=subject,
+                           out=root / "out", root=root, environ={"PATH": ""})
+        proof = json.loads((root / "out/proof.json").read_text())
+        return case, subject, meta, proof
+
+    def test_pinned_file_is_replaced_not_merged_and_recorded(self):
+        pinned = '{\n  "runtime": "node-package",\n  "test_directory": "old"\n}\n'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, subject, meta, proof = self.run_case(root, {"runtime": "node-typescript"}, existing=pinned)
+            self.assertEqual(json.loads(proof["seen_config"]), {"runtime": "node-typescript"})
+            self.assertEqual(json.loads((subject / "patchproof.json").read_text()), {"runtime": "node-typescript"})
+            self.assertEqual(meta["patchproof_config"], {"runtime": "node-typescript"})
+            self.assertEqual(meta["replaced_patchproof_json_sha256"],
+                             __import__("hashlib").sha256(pinned.encode()).hexdigest())
+            self.assertEqual(json.loads((root / "out/meta.json").read_text())["patchproof_config"],
+                             {"runtime": "node-typescript"})
+
+    def test_override_is_created_when_the_commit_has_no_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, meta, proof = self.run_case(Path(directory), {"runtime": "node-typescript"})
+            self.assertEqual(json.loads(proof["seen_config"]), {"runtime": "node-typescript"})
+            self.assertIsNone(meta["replaced_patchproof_json_sha256"])
+
+    def test_empty_object_removes_the_pin_so_the_engine_auto_detects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, _, meta, proof = self.run_case(Path(directory), {}, existing='{"runtime": "node-package"}')
+            self.assertEqual(json.loads(proof["seen_config"]), {})
+            self.assertEqual(meta["patchproof_config"], {})
+
+    def test_ordinary_case_leaves_the_checkout_and_the_meta_alone(self):
+        pinned = '{"runtime": "node-package"}'
+        with tempfile.TemporaryDirectory() as directory:
+            _, subject, meta, proof = self.run_case(Path(directory), None, existing=pinned)
+            self.assertEqual(proof["seen_config"], pinned)
+            self.assertEqual((subject / "patchproof.json").read_text(), pinned)
+            self.assertNotIn("patchproof_config", meta)
+            self.assertNotIn("replaced_patchproof_json_sha256", meta)
+
+    def test_bad_config_is_a_manifest_problem_and_never_written(self):
+        bad = [
+            ("not-an-object", ["runtime"]),
+            ("unknown key", {"runtime": "node-typescript", "image": "x"}),
+            ("runtime must be a string", {"runtime": 7}),
+            ("runtime id shape", {"runtime": "Node TypeScript"}),
+            ("absolute test directory", {"test_directory": "/etc"}),
+            ("parent test directory", {"test_directory": "../out"}),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for label, config in bad:
+                case = write_case_files(root)
+                case["patchproof_config"] = config
+                problems = h.case_problems(case, root, ready=False)
+                self.assertTrue(problems, label)
+                self.assertTrue(all(p.startswith("one: ") for p in problems), label)
+                subject = root / "subject-" / label.replace(" ", "-")
+                subject.mkdir(parents=True)
+                with self.assertRaises(h.BenchError, msg=label):
+                    h.apply_patchproof_config(subject, case)
+                self.assertFalse((subject / "patchproof.json").exists(), label)
+
+    def test_good_configs_are_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for config in ({}, {"runtime": "node-typescript"}, {"runtime": "go", "test_directory": ""},
+                           {"runtime": "node-package", "test_directory": "spec/unit"}):
+                case = write_case_files(root)
+                case["patchproof_config"] = config
+                self.assertEqual(h.case_problems(case, root, ready=True), [], config)
+
+    def test_engine_accepts_the_written_file_and_can_then_edit_typescript(self):
+        # The file-sharing-app-1 situation in miniature: a stale node-package pin in a
+        # TypeScript project. Under the pin the bug's file is not editable; after the
+        # harness writes the manifest's config, the engine's own detection picks
+        # node-typescript and the file is editable. Guards the key names too.
+        import runtimes
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, text in (("package.json", "{}"), ("tsconfig.json", "{}"),
+                               ("lib/format.ts", "export const x = 1;\n"),
+                               ("patchproof.json", '{"runtime": "node-package"}')):
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(text)
+            pinned = runtimes.detect_runtime(root)
+            self.assertEqual(pinned.id, "node-package")
+            self.assertFalse(pinned.is_editable_source(Path("lib/format.ts")))
+            h.apply_patchproof_config(root, {"id": "one", "patchproof_config": {"runtime": "node-typescript"}})
+            fixed = runtimes.detect_runtime(root)
+            self.assertEqual(fixed.id, "node-typescript")
+            self.assertTrue(fixed.is_editable_source(Path("lib/format.ts")))
+
+    def test_shipped_file_sharing_case_overrides_the_stale_pin(self):
+        case = next(c for c in h.load_manifest()["cases"] if c["id"] == "file-sharing-app-1")
+        self.assertEqual(case["patchproof_config"], {"runtime": "node-typescript"})
+        qr = next(c for c in h.load_manifest()["cases"] if c["id"] == "qrcrafts-1")
+        self.assertNotIn("patchproof_config", qr)
+        self.assertEqual(h.validate_manifest(h.load_manifest(), ready_ids={"file-sharing-app-1", "qrcrafts-1"}), [])
+
+    def test_report_says_which_cases_ran_under_an_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = root / "results"
+            for name, extra in (("one", {"patchproof_config": {"runtime": "node-typescript"}}), ("two", {})):
+                folder = results / f"trial-v-{name}-t1"
+                folder.mkdir(parents=True)
+                (folder / "meta.json").write_text(json.dumps({
+                    "case": name, "split": "dev", "trial": 1, "engine_ref": "v", "model": "m",
+                    "manifest_sha256": "f" * 64, "timed_out": False, "elapsed_seconds": 1.0, **extra}))
+                (folder / "proof.json").write_text(json.dumps(make_proof(
+                    verdict="rejected", stage="verifier-generation")))
+            manifest = {"schema": 1, "cases": [dict(write_case_files(root), id="one"), dict(write_case_files(root), id="two")]}
+            report = h.write_report(results, root / "no-oracle", root / "out", manifest=manifest,
+                                    labels_dir=root / "no-labels")
+            rows = {r["case"]: r for r in report["rows"]}
+            self.assertEqual(rows["one"]["runtime_override"], {"runtime": "node-typescript"})
+            self.assertIsNone(rows["two"]["runtime_override"])
+            text = (root / "out/results.md").read_text()
+            self.assertIn("`one` ran with the repository's patchproof.json replaced", text)
+            self.assertNotIn("`two` ran with the repository's patchproof.json replaced", text)
+
+
 @unittest.skipUnless(HAVE_TOOLS, "needs git, patch and node")
 class OracleTests(unittest.TestCase):
     ORIGINAL = "exports.add = (a, b) => a - b;\n"

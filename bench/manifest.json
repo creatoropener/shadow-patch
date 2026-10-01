@@ -24,8 +24,11 @@
         "title": "File sizes and transfer speeds display JavaScript text instead of readable units",
         "body_file": "bench/issues/file-sharing-app-1.md"
       },
+      "patchproof_config": {
+        "runtime": "node-typescript"
+      },
       "oracle": null,
-      "note": "Base commit is the head of the recorded run in docs/evidence/github-run-35464615209.json."
+      "note": "Base commit is the head of the recorded run in docs/evidence/github-run-35464615209.json. The commit's own patchproof.json pins node-package, which cannot edit lib/utils/format.ts (TypeScript), so no repair can be evaluated under it; the harness replaces that file with patchproof_config before each trial. Trials recorded before this override (rc.20 t1-t3, rc.21 smoke) used the old pin and are not comparable."
     },
     {
       "id": "dev-3",

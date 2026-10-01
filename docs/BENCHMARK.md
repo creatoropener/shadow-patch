@@ -62,6 +62,30 @@ the real issue later, the benchmark keeps using the frozen copy.
 A case that still contains `TODO` or `<<` placeholders cannot be run; the planning
 step lists what is missing.
 
+### Optional: replace the commit's `patchproof.json` (`patchproof_config`)
+
+A pinned commit carries whatever `patchproof.json` the repository had then, and an old
+one can name a runtime that cannot do the job. `file-sharing-app` at 4f8b912 pins
+`node-package`, which treats only `.js` files as editable source, while the bug is in
+`lib/utils/format.ts`. Under that pin the engine verified the bug but rejected every
+candidate for touching a "protected or unknown file", whichever engine version ran.
+
+Add a `patchproof_config` object to the case and the harness writes it over the
+checkout's `patchproof.json` just before each trial:
+
+```json
+"patchproof_config": { "runtime": "node-typescript" }
+```
+
+- It accepts the same two keys the engine does, `runtime` and `test_directory`.
+- The file is **replaced, not merged**; `{}` removes the pin so the engine auto-detects.
+- Each trial's `meta.json` records the object and the hash of the file it replaced, and
+  the report's "Read before quoting" section names every case that used one.
+- It is a deliberate deviation from the repository at that commit. Only compare trials
+  that used the same override; results from before one was added measure a different
+  configuration. Use it to correct a stale setup, never to make a case easier.
+- Cases without the field are untouched.
+
 ### Development set and held-out set
 
 - **dev** — issues the engine was already tuned on (QRcrafts #1, file-sharing-app #1, …).

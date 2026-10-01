@@ -61,6 +61,16 @@
 
 ## Unreleased — Benchmark harness (no engine change)
 
+- **Per-case runtime override (`patchproof_config`).** A manifest case may now carry
+  an object that the harness writes over the checkout's `patchproof.json` before each
+  trial. Found by the first rc.21 smoke test on `file-sharing-app-1`: the verifier now
+  passed, but all three candidates were rejected before evaluation because the pinned
+  commit's `patchproof.json` selects `node-package`, which cannot edit the TypeScript
+  file that holds the bug. The case now overrides it with `{"runtime": "node-typescript"}`.
+  The object is validated like the engine's own file, recorded in each trial's
+  `meta.json` with the hash of what it replaced, and named in the report's "Read before
+  quoting" section. Earlier trials of that case (rc.20 t1-t3, rc.21 smoke) used the old
+  pin and are not comparable. No engine file changed. See `docs/BENCHMARK.md`.
 - Adds a manual **Benchmark** workflow (`.github/workflows/benchmark.yml`) and a
   standard-library harness (`bench/harness.py`) that runs one or more engine tags
   over a fixed case list, several trials each, without commenting on issues or

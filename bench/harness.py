@@ -38,6 +38,9 @@ REPO_NAME = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 ENGINE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$")
 PLACEHOLDER = re.compile(r"TODO|<<|>>")
+RUNTIME_ID = re.compile(r"^[a-z][a-z0-9-]*$")
+# Keys the engine itself accepts in patchproof.json (runtimes.detect_runtime).
+CONFIG_KEYS = frozenset({"runtime", "test_directory"})
 
 # Trial outcomes. Only `infra` is excluded from rates, and it is always shown.
 INFRA = "infra"
@@ -82,6 +85,23 @@ def _safe_relative(value: Any) -> bool:
         return False
     parts = re.split(r"[\\/]", value)
     return ".." not in parts and ":" not in parts[0]
+
+
+def config_problems(config: Any) -> list[str]:
+    """Problems with a case's `patchproof_config`, phrased without the case name."""
+    if not isinstance(config, dict):
+        return ["patchproof_config must be an object"]
+    out: list[str] = []
+    extra = sorted(str(key) for key in set(config) - CONFIG_KEYS)
+    if extra:
+        out.append("patchproof_config accepts only runtime and test_directory, not " + ", ".join(extra))
+    if "runtime" in config and not (isinstance(config["runtime"], str) and RUNTIME_ID.match(config["runtime"])):
+        out.append("patchproof_config.runtime must be an adapter id such as node-typescript")
+    if "test_directory" in config:
+        directory = config["test_directory"]
+        if not (isinstance(directory, str) and (directory == "" or _safe_relative(directory))):
+            out.append("patchproof_config.test_directory must be a relative path without ..")
+    return out
 
 
 def case_problems(case: Any, root: Path = ROOT, *, ready: bool) -> list[str]:
@@ -130,6 +150,9 @@ def case_problems(case: Any, root: Path = ROOT, *, ready: bool) -> list[str]:
                     bad(f"issue body file {body_file} is empty")
                 elif PLACEHOLDER.search(text):
                     bad(f"issue body file {body_file} still contains a placeholder")
+    if case.get("patchproof_config") is not None:
+        for message in config_problems(case["patchproof_config"]):
+            bad(message)
     oracle = case.get("oracle")
     if oracle is not None:
         if not isinstance(oracle, dict):
@@ -231,6 +254,27 @@ def build_plan(manifest: dict[str, Any], *, engines: list[str], trials: int, spl
 # run
 # --------------------------------------------------------------------------- #
 
+def apply_patchproof_config(subject: Path, case: dict[str, Any]) -> dict[str, Any] | None:
+    """Replace the checkout's patchproof.json with the case's `patchproof_config`.
+
+    The pinned commit's own file is a historical artifact: file-sharing-app at
+    4f8b912 pins `node-package`, an adapter that cannot edit its TypeScript
+    sources, so no repair could ever be evaluated whichever engine ran. The
+    manifest says what to run instead. The file is replaced, never merged, so the
+    result is exactly the manifest's object. Returns what was applied and the hash
+    of the file it replaced (None if there was none), or None for an ordinary case.
+    """
+    if case.get("patchproof_config") is None:
+        return None
+    problems = config_problems(case["patchproof_config"])
+    if problems:
+        raise BenchError(f"{case.get('id', '?')}: " + "; ".join(problems))
+    target = subject / "patchproof.json"
+    replaced = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
+    target.write_text(json.dumps(case["patchproof_config"], indent=2) + "\n", encoding="utf-8")
+    return {"patchproof_config": case["patchproof_config"], "replaced_patchproof_json_sha256": replaced}
+
+
 def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: Path,
               subject: Path, out: Path, timeout_seconds: float = 75 * 60,
               root: Path = ROOT, environ: dict[str, str] | None = None) -> dict[str, Any]:
@@ -238,6 +282,7 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
     out.mkdir(parents=True, exist_ok=True)
     issue = case["issue"]
     body = read_body(case, root)
+    override = apply_patchproof_config(subject, case)
     env = dict(os.environ if environ is None else environ)
     env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     command = [sys.executable, str(engine_dir / "proof.py"), "--repo", str(subject),
@@ -269,6 +314,8 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
         "exit_code": exit_code, "timed_out": timed_out, "elapsed_seconds": elapsed,
         "has_proof": (out / "proof.json").is_file(),
     }
+    if override:
+        meta.update(override)
     (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     return meta
 
@@ -512,6 +559,7 @@ def build_rows(trials: list[dict[str, Any]], manifest: dict[str, Any],
             "elapsed_seconds": meta.get("elapsed_seconds"),
             "verifier_generations": len(((proof or {}).get("regression_test") or {}).get("generation_attempts") or []),
             "winner": ((proof or {}).get("winner") or {}).get("candidate"),
+            "runtime_override": meta.get("patchproof_config"),
         })
     rows.sort(key=lambda r: (r["engine"], r["split"], r["case"], r["trial"]))
     return rows
@@ -586,6 +634,15 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
     if needed:
         warnings.append(f"{len(needed)} distinct candidate diff(s) have no oracle result or label yet; "
                         "see labels-needed.md.")
+    overridden: dict[str, Any] = {}
+    for row in rows:
+        if row.get("runtime_override") is not None:
+            overridden[row["case"]] = row["runtime_override"]
+    for case_id, config in sorted(overridden.items()):
+        warnings.append(f"`{case_id}` ran with the repository's patchproof.json replaced by "
+                        f"`{json.dumps(config, sort_keys=True)}` from the manifest, so it measures that "
+                        "configuration, not the file at the pinned commit. Compare engines only on "
+                        "trials that used the same override.")
     heldout_cases = {r["case"] for r in rows if r["split"] == "heldout"}
     if not heldout_cases:
         warnings.append("This run has no held-out cases, so it says nothing about issues the engine has not "
