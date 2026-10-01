@@ -25,7 +25,7 @@ from typing import Any, Callable
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.20"
+APP_VERSION = "0.6.0-rc.21"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -585,6 +585,7 @@ def generate_regression_test(
     adapter: RuntimeAdapter,
     test_path: str,
     retry_feedback: str = "",
+    root: Path | None = None,
 ) -> tuple[str, str]:
     system = """You are the independent PatchProof verifier, not the repair agent.
 Create one focused regression test for the detected runtime that captures the
@@ -671,6 +672,10 @@ Do not use Markdown fences."""
         raise
     try:
         adapter.validate_generated_test(test_content, test_path)
+        if root is not None:
+            # Before any sandbox run: a relative import that cannot resolve from
+            # the test's destination is certain to fail at load time (rc.21).
+            adapter.validate_generated_imports(test_content, test_path, root)
     except (SyntaxError, ValueError) as error:
         print(
             f"Verifier test_content rejected: {error} | "
@@ -715,6 +720,7 @@ def generate_regression_with_retry(
     *, issue: Issue, context: str, api_key: str, model: str,
     adapter: RuntimeAdapter, test_path: str, retry_feedback: str = "",
     generation_attempts: list[dict[str, Any]] | None = None,
+    root: Path | None = None,
 ) -> tuple[str, str]:
     last_error: Exception | None = None
     previous_diagnostic: str | None = None
@@ -724,7 +730,7 @@ def generate_regression_with_retry(
             result = generate_regression_test(
                 issue=issue, context=context, api_key=api_key, model=model,
                 adapter=adapter, test_path=test_path,
-                retry_feedback=retry_feedback,
+                retry_feedback=retry_feedback, root=root,
             )
             if generation_attempts is not None:
                 generation_attempts.append({"attempt": len(generation_attempts) + 1,
@@ -769,6 +775,54 @@ def has_expected_test_hash(output: str, expected_hash: str) -> bool:
     return markers == [("BEFORE", expected_hash), ("AFTER", expected_hash)]
 
 
+_MISSING_MODULE = re.compile(
+    r"Cannot find (?P<kind>module|package) '(?P<name>[^']+)'(?: imported from (?P<importer>[^\s]+))?"
+)
+
+
+def missing_module(output: str) -> dict[str, str] | None:
+    """The first module the runtime or compiler could not find, if any."""
+    match = _MISSING_MODULE.search(output)
+    if match is None and "ERR_MODULE_NOT_FOUND" not in output:
+        return None
+    name = match.group("name") if match else ""
+    importer = (match.group("importer") or "") if match else ""
+    is_path = name.startswith(("/", ".", "file:"))
+    return {"name": name, "importer": importer, "kind": "path" if is_path or not name else "package"}
+
+
+def module_not_found_feedback(found: dict[str, str]) -> str:
+    name = found["name"] or "(name not reported)"
+    importer = found["importer"]
+    importer_is_test = "test_patchproof_issue" in importer
+    if found["kind"] == "package":
+        return (
+            f"\nENGINE DIAGNOSIS: The runtime could not find the package '{name}'"
+            + (f" (imported from {importer})" if importer else "")
+            + ", so no assertion ran. This is a missing dependency, not evidence about the reported "
+            "behavior. Import only packages listed in package.json and Node built-ins (node:...), "
+            "and do not add or install dependencies. Keep the asserted behavior unchanged."
+        )
+    text = (
+        f"\nENGINE DIAGNOSIS: The test failed to load because the module '{name}'"
+        + (f" (imported from {importer})" if importer else "")
+        + " does not exist, so no assertion ran. This is a wrong import path, not evidence "
+        "about the reported behavior. Relative imports resolve from the directory of the test "
+        "file itself; a path copied from an existing test is wrong when that test lives in a "
+        "different directory. Import only files that appear in the repository context, recompute "
+        "each relative path from this file's directory, and do not import helper modules that "
+        "are not in the repository. Keep the asserted behavior unchanged."
+    )
+    if not importer_is_test:
+        text += (
+            " If the missing module is imported by the application source itself and that is "
+            "the reported defect, load the application module with a dynamic import inside an "
+            "awaited assert.doesNotReject(async () => { ... }) callback so the failure is an "
+            "assertion."
+        )
+    return text
+
+
 def reproduction_feedback(content: str, classification: str, output: str) -> str:
     feedback = (
         f"Previous result: {classification}. Repair only test setup/import/execution errors. "
@@ -784,7 +838,11 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
             "or rejects, use the runtime's does-not-throw/doesNotReject assertion and then "
             "assert the expected result; do not use rejects merely to confirm the bug."
         )
+    not_found = missing_module(output)
+    if not_found is not None:
+        feedback += module_not_found_feedback(not_found)
     if (classification == "test failed without accepted assertion evidence"
+            and not_found is None
             and "ERR_TEST_FAILURE" in output and "ERR_ASSERTION" not in output):
         feedback += (
             "\nENGINE DIAGNOSIS: The application operation threw or rejected before the final "
@@ -810,6 +868,7 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
         missing_runner = any(runner_name.search(line) for line in output.splitlines())
         other_errors = any(
             re.search(r"error TS\d+", line) and not runner_name.search(line)
+            and not re.search(r"error TS(?:2307|2792)\b", line)
             for line in output.splitlines()
         )
         if missing_runner:
@@ -823,7 +882,7 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
                 "and keep the case declared as test('name', async () => { ... }). "
                 "Return the complete corrected file; resubmitting identical content fails again."
             )
-        if other_errors or not missing_runner:
+        if other_errors or not (missing_runner or not_found is not None):
             feedback += (
                 "\nENGINE DIAGNOSIS: The generated TypeScript test failed static API checking. "
                 "Correct every reported compiler diagnostic by re-reading the repository's actual "
@@ -923,6 +982,8 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
         return False, True, "generated TypeScript regression failed semantic lint"
     if "PATCHPROOF_TYPESCRIPT_CHECK=failed" in output:
         return False, True, "generated TypeScript regression failed API type-check"
+    if exit_code != 0 and missing_module(output) is not None:
+        return False, True, "generated test could not load a module"
     if exit_code == 0:
         return False, True, "test passed on the unfixed revision"
     if exit_code == 1:
@@ -1477,7 +1538,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         test_content, rationale = generate_regression_with_retry(
             issue=issue, context=verifier_context, api_key=api_key, model=model,
             adapter=adapter, test_path=test_path,
-            generation_attempts=generation_attempts,
+            generation_attempts=generation_attempts, root=root,
         )
         test_hash = sha256_text(test_content)
         proof["regression_test"] = {
@@ -1502,7 +1563,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     issue=issue, context=verifier_context, api_key=api_key,
                     model=model, adapter=adapter, test_path=test_path,
                     retry_feedback=retry_feedback,
-                    generation_attempts=generation_attempts,
+                    generation_attempts=generation_attempts, root=root,
                 )
                 test_hash = sha256_text(test_content)
             if test_hash in attempted:

@@ -84,6 +84,7 @@ Actions → **Benchmark** → *Run workflow*.
 3. **Compare versions:** engines `v0.6.0-rc.19,v0.6.0-rc.20`. Both run on identical
    cases, interleaved, in one report. Older tags must accept `--issue-title` and
    `--issue-body` (rc.19 and later do).
+   For rc.21 use `v0.6.0-rc.20,v0.6.0-rc.21`. `file-sharing-app-1` is the case that motivated rc.21, so it can show the fix works there but not that rc.21 is better in general; `qrcrafts-1` shows whether anything that worked before still does.
 
 A trial takes about as long as a normal `shadow-fix` run. Two run at a time.
 

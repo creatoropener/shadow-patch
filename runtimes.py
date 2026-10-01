@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import re
 from dataclasses import dataclass
@@ -82,6 +83,149 @@ def _missing_node_test_imports(content: str) -> list[str]:
     return missing
 
 
+# --------------------------------------------------------------------------- #
+# Relative-import resolution for generated Node tests
+# --------------------------------------------------------------------------- #
+
+_IMPORT_SKIP_DIRS = frozenset({
+    ".git", ".pytest_cache", ".ruff_cache", "__pycache__", ".venv", "venv",
+    "node_modules", "target", "build", "dist", "vendor", ".gradle", ".next",
+})
+_RESOLVE_EXTENSIONS = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json")
+# TypeScript's ESM convention: `./x.js` may name the source file `./x.ts`.
+_JS_TO_TS_EXTENSIONS = {
+    ".js": (".ts", ".tsx"), ".jsx": (".tsx",), ".mjs": (".mts",), ".cjs": (".cts",),
+}
+_STATIC_IMPORT = re.compile(
+    r"""^[ \t]*(?:import|export)\b[^;'"`]*?\bfrom\s*(?P<q>['"])(?P<spec>[^'"\n]+)(?P=q)""",
+    re.MULTILINE,
+)
+_SIDE_EFFECT_IMPORT = re.compile(
+    r"""^[ \t]*import\s*(?P<q>['"])(?P<spec>[^'"\n]+)(?P=q)""", re.MULTILINE,
+)
+_CALL_IMPORT = re.compile(
+    r"""\b(?:import|require)\s*\(\s*(?P<q>['"])(?P<spec>[^'"\n]+)(?P=q)\s*\)"""
+)
+
+
+def _blank_block_comments(source: str) -> str:
+    """Replace /* ... */ with spaces of the same length so offsets stay valid."""
+    return re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), source, flags=re.DOTALL)
+
+
+def relative_import_specifiers(source: str) -> list[str]:
+    """Literal relative module specifiers in a Node test, in first-seen order.
+
+    Deliberately conservative: static imports/exports must start a line, dynamic
+    ``import()``/``require()`` need a string literal, and anything on a line that
+    already contains ``//`` is skipped. A missed specifier only means the sandbox
+    run reports it instead; a false positive would wrongly reject a valid test.
+    """
+    text = _blank_block_comments(source)
+    found: list[tuple[int, str]] = []
+    for pattern in (_STATIC_IMPORT, _SIDE_EFFECT_IMPORT, _CALL_IMPORT):
+        for match in pattern.finditer(text):
+            spec = match.group("spec")
+            if not (spec in {".", ".."} or spec.startswith(("./", "../"))):
+                continue
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            if "//" in text[line_start:match.start()]:
+                continue
+            found.append((match.start("spec"), spec))
+    ordered: list[str] = []
+    for _, spec in sorted(found):
+        if spec not in ordered:
+            ordered.append(spec)
+    return ordered
+
+
+def _module_file_exists(base: Path) -> bool:
+    if base.is_file() or base.is_dir():
+        return True  # a directory is left to the sandbox: too many valid layouts
+    for extension in _RESOLVE_EXTENSIONS:
+        if Path(str(base) + extension).is_file():
+            return True
+    for replacement in _JS_TO_TS_EXTENSIONS.get(base.suffix, ()):
+        if base.with_suffix(replacement).is_file():
+            return True
+    return False
+
+
+def _suggest_import_paths(root: Path, base_dir: Path, tail: list[str], limit: int = 3) -> list[str]:
+    """Repository files that match the tail of a missing import, as corrected specifiers."""
+    if not tail:
+        return []
+    wanted_two = "/".join(tail[-2:])
+    wanted_one = tail[-1]
+    exact: list[Path] = []
+    by_name: list[Path] = []
+    seen = 0
+    for directory, names, files in os.walk(root):
+        names[:] = sorted(n for n in names if n not in _IMPORT_SKIP_DIRS and not n.startswith("."))
+        for name in sorted(files):
+            seen += 1
+            if seen > 50000:
+                break
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            if relative == wanted_two or relative.endswith("/" + wanted_two):
+                exact.append(path)
+            elif name == wanted_one:
+                by_name.append(path)
+    suggestions: list[str] = []
+    for path in (exact or by_name)[:limit]:
+        specifier = os.path.relpath(path, base_dir).replace(os.sep, "/")
+        suggestions.append(specifier if specifier.startswith(".") else "./" + specifier)
+    return suggestions
+
+
+def unresolved_relative_imports(content: str, test_path: str, root: Path) -> list[dict[str, object]]:
+    """Relative imports in a generated test that do not exist from the test's location."""
+    root = root.resolve()
+    base_dir = Path(os.path.normpath(root / test_path)).parent
+    problems: list[dict[str, object]] = []
+    for spec in relative_import_specifiers(content):
+        target = Path(os.path.normpath(base_dir / spec))
+        inside = target == root or root in target.parents
+        if inside and _module_file_exists(target):
+            continue
+        tail = [part for part in spec.split("/") if part not in {"", ".", ".."}]
+        problems.append({
+            "specifier": spec,
+            "resolved": target.relative_to(root).as_posix() if inside else None,
+            "suggestions": _suggest_import_paths(root, base_dir, tail),
+        })
+    return problems
+
+
+def describe_unresolved_imports(problems: list[dict[str, object]], test_path: str) -> str:
+    directory = Path(test_path).parent.as_posix()
+    location = "the repository root" if directory in {"", "."} else f"'{directory}/'"
+    lines = [
+        f"The test will be saved as '{test_path}', so relative imports resolve from {location}. "
+        "These relative imports do not point to any file in the repository:"
+    ]
+    for problem in problems[:3]:
+        resolved = problem["resolved"]
+        where = (f"resolves to '{resolved}', which does not exist" if resolved
+                 else "resolves to a location outside the repository")
+        line = f"- '{problem['specifier']}' {where}."
+        suggestions = problem["suggestions"]
+        if suggestions:
+            line += " A file with that name exists; from this location the import is " + \
+                    " or ".join(f"'{item}'" for item in suggestions) + "."
+        else:
+            line += " No similarly named file exists; do not import it."
+        lines.append(line)
+    lines.append(
+        "An import path copied from an existing test is wrong when that test lives in a "
+        "different directory: recompute every relative path from the directory above. "
+        "Import only files that appear in the repository context, and keep the asserted "
+        "behavior unchanged."
+    )
+    return "\n".join(lines)
+
+
 @dataclass(frozen=True)
 class RuntimeAdapter:
     id: str
@@ -110,13 +254,16 @@ class RuntimeAdapter:
             return f"tests/patchproof_issue_{identifier}.rs"
         prefix = "tests/" if self.id == "web-playwright" else ""
         filename_prefix = ""
-        if self.id == "node-typescript" and root is not None:
-            # node-typescript has no fixed test directory of its own (unlike
+        if self.id in {"node-typescript", "node-package"} and root is not None:
+            # The Node adapters have no fixed test directory of their own (unlike
             # web-playwright). A generated test placed at the repo root
             # breaks any relative import (e.g. '../src/x.ts') a model wrote
             # to match a project whose own tests already live in tests/ --
             # so match that existing convention when one is evident on disk,
             # and otherwise keep the long-standing root placement unchanged.
+            # node-package joined in rc.21: file-sharing-app's tests/ import a
+            # helper as '../patchproof_runtime/...', the model copied that line
+            # into a root-level test, and Node resolved it outside the repo.
             existing_tests_dir = root / "tests"
             if existing_tests_dir.is_dir() and any(
                 existing_tests_dir.glob(f"*{self.test_suffix}")
@@ -180,6 +327,14 @@ class RuntimeAdapter:
 
     def is_editable_source(self, path: Path) -> bool:
         return path.suffix.lower() in self.source_extensions
+
+    def validate_generated_imports(self, content: str, test_path: str, root: Path) -> None:
+        """Reject relative imports that cannot resolve before any sandbox run is spent."""
+        if self.id not in {"node-typescript", "node-package"}:
+            return
+        problems = unresolved_relative_imports(content, test_path, root)
+        if problems:
+            raise ValueError(describe_unresolved_imports(problems, test_path))
 
     def validate_generated_test(self, content: str, filename: str) -> None:
         if not content.strip():
@@ -632,7 +787,11 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             preflight_command="node --version && npm --version",
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert. "
-                "The test may import project modules but must not modify the repository."
+                "The test may import project modules but must not modify the repository. "
+                "Relative import paths resolve from the directory that will contain the "
+                "required filename, which can differ from where the repository's existing "
+                "tests live: recompute every relative path from that directory and import "
+                "only files that appear in the repository context."
             ),
             solver_guidance=(
                 "Repair existing JavaScript application files only. "

@@ -1,5 +1,64 @@
 # Changelog
 
+## v0.6.0-rc.21 — Generated Node tests must import files that exist from where they are saved
+
+- **Why.** In three rc.20 benchmark trials on `file-sharing-app-1` (base commit
+  4f8b912, runtime `node-package`) no repair was ever evaluated. The verifier replies
+  parsed cleanly under the rc.20 markers, but all three generated tests imported
+  `../patchproof_runtime/typescript_module.mjs` and died with `ERR_MODULE_NOT_FOUND`
+  before any assertion. That repository keeps a copy of the old loader at its root and
+  its own `tests/format-baseline.test.mjs` imports it with `../`. `node-package` saved
+  the generated test at the repository root, where `../` leaves the repository, so the
+  model copied a line that was correct for the file it was copied from and wrong for
+  the file it wrote. Two trials produced byte-identical tests, so the three trials are
+  about two independent samples; the failure is systematic, not noise.
+- **Placement.** `node-package` now uses the same rule `node-typescript` has had since
+  rc.14: when the project already has `tests/*.test.mjs`, the generated test is saved as
+  `tests/.test_patchproof_issue_N.test.mjs`. The leading dot keeps the still-failing
+  regression out of the project's own `tests/*.test.mjs` baseline glob, and the explicit
+  path in the regression command still runs it. Without such a directory placement is
+  unchanged. Imports the model copies from existing tests now resolve.
+- **Import check before the sandbox.** After the existing content validation, a
+  generated `node-typescript` or `node-package` test is checked for literal relative
+  imports (`import ... from`, `export ... from`, side-effect `import`, and literal
+  `import()` / `require()`) that point to no file when resolved from the test's
+  destination. Explicit extensions, extensionless paths, `.js` naming a `.ts` source and
+  `.mjs` naming a `.mts` source all count as existing, and directories are never
+  rejected. A failure is an ordinary validation error: it costs one of the three
+  generations, not a sandbox run, and flows through the existing retry and
+  repeated-diagnosis escalation. The diagnostic states where the test will be saved,
+  where each import actually resolves, and, when a file with that name exists, the
+  corrected relative path.
+- **Specific feedback for a module that still fails to load.** `ERR_MODULE_NOT_FOUND`
+  and `Cannot find module/package` output now gets its own classification ("generated
+  test could not load a module") and a diagnosis that says it is a wrong import path or
+  missing dependency, not evidence about the bug. Before, the same output received the
+  advice meant for an operation that throws before the assertion, which for this failure
+  was wrong and made the model wrap the same imports in `assert.doesNotReject`. A
+  TypeScript `TS2307` is handled the same way. When the missing module is imported by
+  application code and not by the test, the feedback keeps a hint to load it inside an
+  awaited `assert.doesNotReject` callback so the defect still produces an assertion.
+- **Prompt.** The `node-package` verifier guidance now says that relative paths resolve
+  from the directory of the required filename, which may differ from where the existing
+  tests live.
+- **Scope and limits.** The check is static and conservative: it reads only literal
+  relative specifiers, ignores bare names, `node:` built-ins and the `@/` alias, never
+  inspects directory contents, and skips a specifier it cannot parse with confidence,
+  because wrongly rejecting a valid test is worse than letting the sandbox report a bad
+  one. It looks at the checked-out working tree, not the sandbox image. Path arguments
+  passed to helper functions (for example `loadStandaloneTypeScript('lib/utils/format.ts')`)
+  are not checked.
+- **Evidence.** Offline only; there has been no live run of rc.21. Replaying the three
+  recorded rc.20 tests at the new location against the repository at 4f8b912 gives an
+  accepted `ERR_ASSERTION` failure on the unfixed code in all three, and all three pass
+  with the recorded PR #2 fix. At the old location the new check rejects all three with
+  the corrected path. The two distinct recorded QRcrafts tests produce no
+  false positive. `file-sharing-app-1` motivated this change, so a pass there shows the
+  fix works for that case, not that rc.21 is better in general; compare
+  `v0.6.0-rc.20,v0.6.0-rc.21` and read `qrcrafts-1` as the check that nothing regressed.
+- Tests: `tests/test_import_resolution.py` (30 cases). `action.yml` is unchanged.
+  `README.md` and `examples/action-usage/shadow-fix.yml` now pin `v0.6.0-rc.21`.
+
 ## Unreleased — Benchmark harness (no engine change)
 
 - Adds a manual **Benchmark** workflow (`.github/workflows/benchmark.yml`) and a
