@@ -3,7 +3,7 @@ the WiFi payload without escaping reserved characters. Delimiters in network
 credentials can consequently be interpreted as payload structure.
 
 For this repair, prefix each literal semicolon (;), comma (,), colon (:),
-backslash (), and double quote (") in both SSID and password with one backslash.
+backslash (\\), and double quote (") in both SSID and password with one backslash.
 Keep field delimiters and the WIFI:T:...;S:...;P:...;; envelope unchanged.
 
 Example 1 — runtime values:
