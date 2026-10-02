@@ -1,0 +1,18 @@
+{
+  "b55d841d88aa313e": {
+    "correct": true,
+    "note": "Fixes the formatBytes template only; formatSpeed inherits it. All 7 rows of the issue table match exactly, plus 20 extra bytes/speed cases against the stated rule (TB cap, 1023/1024 boundaries, 99.9 and 100 unit precision). formatEta untouched. Smallest diff that satisfies the issue."
+  },
+  "71b9bf2753843a1e": {
+    "correct": false,
+    "note": "Drops the space between number and unit: formatBytes(1024) returns '1.0KB' and formatSpeed(1536) returns '1.5KB/s'. Only the '512 B' row of the issue table passes (1 of 7)."
+  },
+  "3dd9768b0a9acf62": {
+    "correct": false,
+    "note": "formatBytes and formatSpeed are correct (7/7 table rows), but the diff also rewrites two branches of formatEta, which the issue puts out of scope ('ETA formatting is a separate issue') and asks not to change as unrelated behavior. It also invents unspecified output ('1m30s', no space). Scope violation, not a functional break: flip to true if ETA changes are acceptable."
+  },
+  "6aaa803088c1faa6": {
+    "correct": false,
+    "note": "formatBytes and formatSpeed are correct (7/7 table rows), but the diff also rewrites two branches of formatEta, which the issue puts out of scope ('ETA formatting is a separate issue') and asks not to change as unrelated behavior. It also invents unspecified output ('1m 30s', with space). Scope violation, not a functional break: flip to true if ETA changes are acceptable."
+  }
+}
