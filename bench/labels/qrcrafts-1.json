@@ -7,9 +7,41 @@
     "correct": true,
     "note": "Same behavior via escapedSsid/escapedPass. Empty-SSID check still runs before escaping, trimming preserved, all five characters escaped."
   },
+  "57955713f81abff1": {
+    "correct": true,
+    "note": "Escapes ; , : \\ \" in trimmed SSID and password; each character listed once in the class. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
   "5e2d40a801ae4b82": {
     "correct": true,
     "note": "Escapes all five characters in SSID and password with one backslash. Matches both issue examples and leaves ordinary credentials alone."
+  },
+  "5f5d85b899eb9cf4": {
+    "correct": true,
+    "note": "Same behavior; the class repeats the backslash, which is harmless; variable named password. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
+  "74551ab02706795b": {
+    "correct": true,
+    "note": "Same behavior; the class repeats the backslash, which is harmless. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
+  "7e77aa28a2887dbc": {
+    "correct": true,
+    "note": "Same behavior as the plain inline version; variable named password. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
+  "93f7dbb3a935d862": {
+    "correct": true,
+    "note": "Same behavior; the class lists the backslash twice, which is harmless. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
+  "955918f45c2ca969": {
+    "correct": true,
+    "note": "Escapes via escapedSsid/escapedPass; the empty-SSID check still runs before escaping; the class repeats the backslash, which is harmless. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
+  "c0458d20c0c42369": {
+    "correct": true,
+    "note": "Same behavior; the class repeats the backslash several times, which is harmless. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
+  },
+  "c3be6e1ea0bed896": {
+    "correct": true,
+    "note": "Escapes via escapedSsid/escapedPass; the class repeats the backslash, which is harmless. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
   },
   "c3bfc3a289d0c413": {
     "correct": true,
@@ -22,5 +54,9 @@
   "f703f49b7f3c2432": {
     "correct": true,
     "note": "Local escape() helper applied to trimmed SSID and password. Behavior correct; the name shadows the deprecated global escape, a style point only."
+  },
+  "fe2e4ec60f8b3cd2": {
+    "correct": true,
+    "note": "Escapes via escapedSsid/escapedPass; the class repeats the backslash many times and the replacement is written '\\\\\\$1', which still evaluates to one backslash plus the group. Matches both issue examples exactly and agrees with a reference escape on 9 extra inputs (trimming, apostrophe, empty password, empty and whitespace SSID, existing backslashes)."
   }
 }
