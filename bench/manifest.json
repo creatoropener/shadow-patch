@@ -33,15 +33,15 @@
     {
       "id": "dev-3",
       "split": "dev",
-      "repo": "creatoropener/TODO",
-      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
+      "repo": "creatoropener/Aegisscan-Bug-Auditor",
+      "base_commit": "3019141e7e84c0776417665977e8fa7a26744abc",
       "issue": {
-        "number": 1,
-        "title": "TODO: exact issue title",
+        "number": 2,
+        "title": "Unchecked HTTP 3xx Redirect Loop & SSRF Bypass",
         "body_file": "bench/issues/dev-3.md"
       },
       "oracle": null,
-      "note": "Any third issue the engine was already tuned on. Rename this id to something readable."
+      "note": "Development baseline test case verifying the engine's capability to identify and fix Server-Side Request Forgery (SSRF) bypass vulnerabilities in recursive HTTP redirect loop logic."
     },
     {
       "id": "heldout-1",
