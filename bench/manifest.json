@@ -47,7 +47,7 @@
       "id": "heldout-1",
       "split": "heldout",
       "repo": "creatoropener/Tabloop",
-      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
+      "base_commit": "54e635e69f049baac079aee9a0250f85796b0f94",
       "issue": {
         "number": 1,
         "title": "Mobile \"Back home\" link disappears on privacy, terms and thank-you pages",
@@ -60,10 +60,10 @@
       "id": "heldout-2",
       "split": "heldout",
       "repo": "creatoropener/Tabloop",
-      "base_commit": "Root-absolute form action breaks subpath and staging deploys",
+      "base_commit": "54e635e69f049baac079aee9a0250f85796b0f94",
       "issue": {
-        "number": 1,
-        "title": "TODO: exact issue title",
+        "number": 2,
+        "title": "Root-absolute form action breaks subpath and staging deploys",
         "body_file": "bench/issues/heldout-2.md"
       },
       "oracle": null,
