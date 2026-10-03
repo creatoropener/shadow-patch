@@ -46,28 +46,28 @@
     {
       "id": "heldout-1",
       "split": "heldout",
-      "repo": "creatoropener/TODO",
+      "repo": "creatoropener/Tabloop",
       "base_commit": "TODO: full 40-character SHA of an unfixed commit",
       "issue": {
         "number": 1,
-        "title": "TODO: exact issue title",
+        "title": "Mobile \"Back home\" link disappears on privacy, terms and thank-you pages",
         "body_file": "bench/issues/heldout-1.md"
       },
       "oracle": null,
-      "note": "Must be an issue written after the harness was frozen and never used to tune the engine."
+      "note": "Criteria fixed before any run: correct if, at 960px and below, privacy.html, terms.html and thank-you.html each show a visible link or control to index.html, and index.html's mobile menu and the desktop header are unchanged."
     },
     {
       "id": "heldout-2",
       "split": "heldout",
-      "repo": "creatoropener/TODO",
-      "base_commit": "TODO: full 40-character SHA of an unfixed commit",
+      "repo": "creatoropener/Tabloop",
+      "base_commit": "Root-absolute form action breaks subpath and staging deploys",
       "issue": {
         "number": 1,
         "title": "TODO: exact issue title",
         "body_file": "bench/issues/heldout-2.md"
       },
       "oracle": null,
-      "note": "Prefer a repository the engine has never run on."
+      "note": "Criteria fixed before any run: correct if the contact form's action resolves relative to the page's own folder (for example thank-you.html) and nothing else changes."
     }
   ]
 }
