@@ -1,18 +1,3 @@
-On any viewport 960px wide or narrower, the .nav-cta "Back home" link is hidden, and privacy.html, terms.html and thank-you.html have no other way back to the homepage.
+The fetchWithRedirects function in the passive DAST scanner blindly accepted any user-supplied target URL string and initiated http.request / https.request directly from the server backend without performing DNS hostname resolution or IP range filtering.
 
-In styles.css (lines 189–191), the breakpoint hides both .nav and .nav-cta:
-
-css
-@media (max-width: 960px) { .nav, .nav-cta { display: none; } .menu-toggle { display: block; } ... }
-
-On index.html this works, because .menu-toggle appears and opens the mobile menu. On privacy.html, terms.html and thank-you.html, the header contains only the brand link and the hidden link:
-
-html
-<div class="container nav-wrap">
-  <a class="brand" href="index.html">...</a>
-  <a class="nav-cta" href="index.html">Back home</a>
-</div>
-
-There is no .menu-toggle on these pages, and privacy.html and terms.html have no footer and no in-body link to the homepage. Mobile visitors are stranded.
-
-Expected behavior: at 960px and below, each of these pages shows a visible link or control that leads to index.html. The mobile menu on index.html and the desktop header should not change.
+Enforce pre-flight DNS resolution using dns.promises.lookup() and reject any target host that resolves to loopback (127.0.0.0/8, ::1), RFC 1918 private subnets (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), or link-local/cloud metadata (169.254.0.0/16).
