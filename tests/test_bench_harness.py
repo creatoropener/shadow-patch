@@ -54,12 +54,11 @@ def write_case_files(root: Path, *, ready=True, body="Bug body.\n"):
 
 
 class ManifestTests(unittest.TestCase):
-    def test_shipped_manifest_is_structurally_valid_but_not_ready(self):
+    def test_shipped_manifest_is_structurally_valid_and_ready(self):
         manifest = h.load_manifest()
         self.assertEqual(h.validate_manifest(manifest), [])
         ready = h.validate_manifest(manifest, ready_ids={c["id"] for c in manifest["cases"]})
-        self.assertTrue(ready, "the draft manifest must not look runnable until it is filled in")
-        self.assertTrue(any("placeholder" in p or "40-character" in p for p in ready))
+        self.assertEqual(ready, [], "every shipped case must be filled in: " + "; ".join(ready))
         splits = {c["split"] for c in manifest["cases"]}
         self.assertEqual(splits, {"dev", "heldout"})
 
@@ -703,10 +702,21 @@ class CliTests(unittest.TestCase):
 
     def test_validate_and_unready_plan_exit_codes(self):
         self.assertEqual(self.run_main("validate")[0], 0)
-        code, _, stderr = self.run_main("validate", "--ready")
-        self.assertEqual(code, 1)
-        code, _, stderr = self.run_main("plan", "--engines", "v0.6.0-rc.20", "--cases", "heldout-1")
-        self.assertEqual(code, 2)
+        self.assertEqual(self.run_main("validate", "--ready")[0], 0)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = {"schema": 1, "cases": [write_case_files(root, ready=False)]}
+            path = root / "bench/manifest.json"
+            path.write_text(json.dumps(manifest))
+            original_root, original_manifest = h.ROOT, h.MANIFEST_PATH
+            h.ROOT, h.MANIFEST_PATH = root, path
+            try:
+                validate_code, _, _ = self.run_main("validate", "--ready")
+                plan_code, _, stderr = self.run_main("plan", "--engines", "v0.6.0-rc.20", "--cases", "one")
+            finally:
+                h.ROOT, h.MANIFEST_PATH = original_root, original_manifest
+        self.assertEqual(validate_code, 1)
+        self.assertEqual(plan_code, 2)
         self.assertIn("not ready to run", stderr)
 
     def test_plan_writes_github_outputs(self):
