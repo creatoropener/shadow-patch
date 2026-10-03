@@ -46,15 +46,15 @@
     {
       "id": "heldout-1",
       "split": "heldout",
-      "repo": "creatoropener/Tabloop",
-      "base_commit": "54e635e69f049baac079aee9a0250f85796b0f94",
+      "repo": "creatoropener/Aegisscan-Bug-Auditor",
+      "base_commit": "3019141e7e84c0776417665977e8fa7a26744abc",
       "issue": {
         "number": 1,
-        "title": "Mobile \"Back home\" link disappears on privacy, terms and thank-you pages",
+        "title": "Server-Side Request Forgery (SSRF) & Unrestricted Internal Network Pivot",
         "body_file": "bench/issues/heldout-1.md"
       },
       "oracle": null,
-      "note": "Criteria fixed before any run: correct if, at 960px and below, privacy.html, terms.html and thank-you.html each show a visible link or control to index.html, and index.html's mobile menu and the desktop header are unchanged."
+      "note": "Held-out validation case evaluating the frozen engine's capacity to patch architectural SSRF network boundaries and block internal address space exposure without training bias."
     },
     {
       "id": "heldout-2",
