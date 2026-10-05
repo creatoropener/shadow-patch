@@ -1,0 +1,34 @@
+PATCHPROOF_TYPESCRIPT_LINT=passed
+PATCHPROOF_TYPESCRIPT_CHECK=passed
+TAP version 13
+# Subtest: runDastSiteScan rejects localhost IPv4 address
+not ok 1 - runDastSiteScan rejects localhost IPv4 address
+  ---
+  duration_ms: 10.164185
+  location: '/workspace/repo/test_patchproof_issue_1.test.ts:5:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      Comparison {
+    +   message: 'connect ECONNREFUSED 127.0.0.1:80'
+    -   instanceOf: [Function: Error] {
+    -     stackTraceLimit: 0
+    -   },
+    -   message: /blocked/
+      }
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 321.84656
+
+PATCHPROOF_TEST_HASH_BEFORE=96eb54878c707a2c3174ec842d15c5e841544741f284b09e344515579b0acefe
+PATCHPROOF_TEST_HASH_AFTER=96eb54878c707a2c3174ec842d15c5e841544741f284b09e344515579b0acefe

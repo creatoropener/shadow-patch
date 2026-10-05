@@ -86,7 +86,7 @@ because its issue text names a helper that does not exist at its base commit.
 ## Use as a GitHub Action (beta)
 
 The lightest way to try it: add one workflow file that calls
-`creatoropener/shadow-patch@v0.6.0-rc.21` and pass your Nebius secrets and sandbox
+`creatoropener/shadow-patch@v0.6.0-rc.22` and pass your Nebius secrets and sandbox
 image. No engine files are copied into your repository. See
 [docs/ACTION.md](docs/ACTION.md) and
 [examples/action-usage/shadow-fix.yml](examples/action-usage/shadow-fix.yml). The
@@ -97,7 +97,7 @@ copy-install route below remains supported.
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.21.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.22.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible

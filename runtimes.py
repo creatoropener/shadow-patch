@@ -446,11 +446,49 @@ class RuntimeAdapter:
                 and not re.search(r"\d+ errors?", output))
 
 
+# Message prefixes Node's assert module generates itself. Some assertion forms (for
+# example assert.rejects with an object that contains an `instanceOf` key) are reported
+# by node:test as code ERR_TEST_FAILURE instead of ERR_ASSERTION, so the message is the
+# only reliable sign that an assertion, not an application crash, ended the test.
+_ASSERTION_MESSAGE_PREFIXES = (
+    "Expected values to be strictly deep-equal",
+    "Expected values to be loosely deep-equal",
+    "Expected values to be strictly equal",
+    "Expected values to be loosely equal",
+    "Expected \"actual\" to be strictly unequal to",
+    "Expected \"actual\" not to be strictly deep-equal to",
+    "Expected \"actual\" not to be loosely deep-equal to",
+    "The expression evaluated to a falsy value",
+    "Missing expected rejection",
+    "Missing expected exception",
+    "Got unwanted exception",
+    "Got unwanted rejection",
+    "The input did not match the regular expression",
+    "The input was expected to not match the regular expression",
+    "Input A expected to strictly deep-equal input B",
+)
+
+
+def _node_error_message(body: str, indent: str) -> str:
+    """First line of the YAML `error:` field of one TAP block, or an empty string."""
+    inline = re.search(r"^" + indent + r"  error: (?!\|)['\"]?(.*?)['\"]?\s*$", body, re.MULTILINE)
+    if inline and inline.group(1):
+        return inline.group(1)
+    block = re.search(r"^" + indent + r"  error: \|[-+]?\s*\n" + indent + r"    ([^\n]*)", body, re.MULTILINE)
+    return block.group(1).strip() if block else ""
+
+
 def _node_assertion_failure(output: str) -> bool:
     """Conservatively recognize native TAP assertion diagnostics, not log text.
 
     This is an evidence check, not a security boundary against a malicious process
     capable of writing arbitrary TAP to stdout.
+
+    rc.22: a test wrapped in describe() prints one extra `subtestsFailed` block for the
+    parent suite, and `# fail` counts only the leaf. Suite blocks are therefore allowed
+    in addition to exactly one leaf block per counted failure. A leaf block labelled
+    ERR_TEST_FAILURE is accepted only when its message is one that Node's assert module
+    generates.
     """
     failures = re.findall(r"^# fail (\d+)\s*$", output, re.MULTILINE)
     if len(failures) != 1 or int(failures[0]) == 0:
@@ -461,20 +499,27 @@ def _node_assertion_failure(output: str) -> bool:
         r"^([ ]*)not ok [^\n]*\n\1  ---\n(.*?)^\1  \.\.\.\s*$",
         output, re.MULTILINE | re.DOTALL,
     )
-    if len(blocks) != int(failures[0]):
-        return False
     assertions = 0
+    leaves = 0
     for indent, body in blocks:
         def field(name: str) -> str | None:
             matches = re.findall(r"^" + indent + r"  " + name + r": ['\"]?([A-Za-z_]+)['\"]?\s*$",
                                  body, re.MULTILINE)
             return matches[0] if len(matches) == 1 else None
         code, failure_type = field("code"), field("failureType")
-        if code == "ERR_ASSERTION" and failure_type == "testCodeFailure":
-            assertions += 1
-        elif code != "ERR_TEST_FAILURE" or failure_type != "subtestsFailed":
+        if code == "ERR_TEST_FAILURE" and failure_type == "subtestsFailed":
+            continue
+        leaves += 1
+        if failure_type != "testCodeFailure":
             return False
-    return assertions > 0
+        if code == "ERR_ASSERTION":
+            assertions += 1
+        elif code == "ERR_TEST_FAILURE" and _node_error_message(body, indent).startswith(
+                _ASSERTION_MESSAGE_PREFIXES):
+            assertions += 1
+        else:
+            return False
+    return leaves == int(failures[0]) and assertions > 0
 
 
 def _go_events(output: str) -> list[dict]:
@@ -535,6 +580,67 @@ def _node_baseline(root: Path) -> tuple[str, str]:
     else:
         bootstrap = "npm install --ignore-scripts --no-audit --no-fund"
     return baseline, bootstrap
+
+
+def _strip_jsonc(text: str) -> str:
+    """Remove comments and trailing commas from tsconfig-style JSON, leaving strings alone.
+
+    Glob patterns such as "@/*" and "src/**/*" contain comment-looking sequences, so a
+    plain regular expression would delete real content.
+    """
+    out: list[str] = []
+    i, n, in_string = 0, len(text), False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 1
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+            out.append(ch)
+        elif text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        elif text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        else:
+            out.append(ch)
+        i += 1
+    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
+
+
+def _alias_guidance(root: Path) -> str:
+    """Describe the import aliases this repository's tsconfig really defines (rc.22).
+
+    Earlier releases told the model the project has an '@/' alias and gave an example
+    from one particular repository. On a repository without that alias, or whose alias
+    points at the repository root rather than src/, the model copied the pattern and the
+    import failed the type-check.
+    """
+    try:
+        text = _strip_jsonc((root / "tsconfig.json").read_text(encoding="utf-8"))
+        paths = (json.loads(text).get("compilerOptions") or {}).get("paths") or {}
+    except (OSError, ValueError, AttributeError):
+        return ("Use relative import paths from the test file's own directory, exactly as "
+                "the application's modules import each other. ")
+    rules = []
+    for pattern, targets in paths.items():
+        if isinstance(targets, list) and targets and isinstance(targets[0], str):
+            rules.append(f"'{pattern}' maps to '{targets[0]}'")
+    if not rules:
+        return ("This project defines no path aliases in tsconfig.json: use relative "
+                "import paths, and never write imports that start with '@/'. ")
+    return ("This project's tsconfig.json defines these path aliases: " + "; ".join(rules[:4])
+            + ". Resolve an alias exactly as written there (for example, when '@/*' maps to "
+            "'./*', a file at src/server/x.ts is imported as '@/src/server/x', not "
+            "'@/server/x'), or use relative paths. ")
 
 
 def _compiled_adapter(root: Path, runtime: str, test_directory: str) -> RuntimeAdapter:
@@ -696,13 +802,11 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "import assert from 'node:assert/strict'; "
                 "and every case is declared as test('descriptive name', async () => { ... }); "
                 "never call test() or assert without importing them. Import application "
-                "modules the normal way, exactly as the application itself does, including "
-                "relative paths and this project's '@/' path alias (tsx resolves both from "
-                "tsconfig.json automatically) — for example: "
-                "import { generateSessionKey } from './lib/crypto/aes'; "
-                "or, using the alias form: "
-                "import { generateSessionKey } from '@/lib/crypto/aes'; "
-                "The alias is '@/', never '/@/' — there is no leading slash before the @. "
+                "modules the normal way, exactly as the application itself does. " +
+                _alias_guidance(root) +
+                "When the intended behavior is that an operation must be refused, assert it with "
+                "await assert.rejects(promise, /expected message/) or assert.throws(fn, /expected message/); "
+                "never pass an object containing instanceOf. "
                 "Never invent a helper import or reimplement application logic; call the real "
                 "exported functions directly. Respect every declared TypeScript signature. If "
                 "a factory returns a wrapper object, destructure or select the documented field "

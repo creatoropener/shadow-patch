@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.6.0-rc.22 — Accept real assertion failures the verifier used to refuse; stop hard-coding one repository's alias
+
+- **Why.** The first rc.21 held-out pass (two unseen repositories, 0/6) ended before any
+  repair was evaluated. Reading the saved proofs showed three engine defects, not model
+  luck:
+  1. A correct reproduction was refused. A test using
+     `assert.rejects(p, { instanceOf: Error, message: /blocked/ })` failed because the
+     application connected to 127.0.0.1 instead of refusing, which is exactly the SSRF
+     defect, but node:test labelled the failure `ERR_TEST_FAILURE`, not `ERR_ASSERTION`,
+     so the evidence check said "no accepted assertion evidence" (Node 20, reproduced).
+  2. A correct reproduction wrapped in `describe()` was refused. Node prints a second
+     `not ok` block for the parent suite while `# fail` counts one, and the parser
+     required the two numbers to match.
+  3. The verifier prompt told every TypeScript project it has an `@/` alias and showed
+     an example from file-sharing-app. On other repositories the model copied the shape
+     and invented paths.
+- **What changed.** `_node_assertion_failure` allows parent-suite blocks and accepts an
+  `ERR_TEST_FAILURE` leaf only when its message is one Node's assert module generates;
+  an application crash still fails. The alias paragraph is now built from the repository's
+  own `tsconfig.json` (or says there is no alias). The prompt tells the model to assert a
+  required refusal with a regular expression and not an `instanceOf` object.
+- **What did not change.** Candidate generation, replay, hashes and the type-check.
+- **Evidence.** Offline only; there has been no live run of rc.22. The new tests replay
+  the saved held-out outputs. Heldout-1 and heldout-2 were used to find these defects, so
+  they are development cases from now on; a held-out claim needs new issues.
+
 ## v0.6.0-rc.21 — Generated Node tests must import files that exist from where they are saved
 
 - **Why.** In three rc.20 benchmark trials on `file-sharing-app-1` (base commit
