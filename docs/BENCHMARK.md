@@ -158,3 +158,55 @@ When both exist, the oracle wins and the label fills any gap.
   newline) is reported as unjudged rather than guessed.
 - GitHub starts matrix jobs roughly in order, not strictly, so interleaving is best effort.
 - Model output varies between identical runs; that variation is what trials measure.
+
+
+## Recorded results (October 2026)
+
+Engine versions: v0.6.0-rc.20 and v0.6.0-rc.21 (rc.21 is the frozen release).
+Model for every trial: `nvidia/nemotron-3-super-120b-a12b`. Three trials per case
+and engine. Trials of one case are not independent. Intervals are 95% Wilson.
+Labels are hand-judged against the issue text and stored in `bench/labels/`; they are
+not an independent oracle.
+
+### Development split
+
+| Engine | Case | Correct and accepted |
+| --- | --- | --- |
+| rc.20 | file-sharing-app-1 | 3/3 |
+| rc.20 | qrcrafts-1 | 3/3 |
+| rc.21 | file-sharing-app-1 | 3/3 |
+| rc.21 | qrcrafts-1 | 3/3 |
+
+Each engine: **6/6** (61%-100%). No false accepts and no false rejects. Every winning
+repair was judged correct. `file-sharing-app-1` runs with `patchproof_config` set to
+`node-typescript`, because its pinned commit selects `node-package`, which cannot edit
+the TypeScript file. The two engines are not distinguishable on these cases. rc.21
+needed more than one verifier generation in 2 of its 6 trials (rc.20: 0 of 6);
+the sample is too small to call that a regression.
+
+### Held-out split (rc.21 only)
+
+| Case | Repository / adapter | Correct and accepted | Why it stopped |
+| --- | --- | --- | --- |
+| heldout-1 | Aegisscan-Bug-Auditor, `node-typescript` | 0/3 | verifier failed: generated TypeScript failed the API type-check (1 trial); test failed without accepted assertion evidence (2 trials) |
+| heldout-2 | Tabloop, `static-web` (Experimental) | 0/3 | verifier failed: in the trial inspected, the test reproduced the real defect (form action resolved to `/thank-you.html` instead of `/Tabloop/thank-you.html`) but was rejected because it was wrapped in `describe`, so the engine saw two failed blocks for one failure |
+
+Held-out total: **0/6** (0%-39%). No false accepts; no repair was evaluated, so no
+unverified patch was proposed. Only two held-out cases were run, so read these as
+examples. A planned third held-out case (Tabloop, mobile "Back home" link) was
+replaced by the Aegisscan SSRF case before any run and was never run.
+
+### Reported separately
+
+- **dev-3 (Aegisscan #2, redirect handling): 0/3, verifier failed** (generated
+  TypeScript failed the API type-check in all three trials). Its issue text asks the
+  engine to re-invoke `validateUrlForSsrf`, a helper that does not exist at the pinned
+  base commit, so this is more likely an invalid case than evidence about the engine.
+  It is excluded from the headline development number.
+- **First held-out pass, Aegisscan:** all six trials were infrastructure failures: the
+  repository's own dependencies could not be installed (npm `ERESOLVE`, `esbuild`
+  `^0.25.0` against a `vite` peer range). The repository was re-pinned to a commit that
+  changes only `package.json` and adds a lockfile, with no source changes, and the
+  cases were re-run. The re-run is the one reported above.
+
+The engine was not changed after the held-out cases were written.

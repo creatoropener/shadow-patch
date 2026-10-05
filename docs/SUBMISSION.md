@@ -38,13 +38,14 @@ human decision.
 ## How we built it
 
 The orchestrator is Python running in GitHub Actions. It uses NVIDIA Nemotron
-through Nebius Token Factory inference; the demonstrated model is
-`nvidia/Nemotron-3_5-Lightning`. Nebius Sandboxes execute repository bootstrap,
+through Nebius Token Factory inference; the first recorded repair used
+`nvidia/Nemotron-3_5-Lightning` and the later repairs and the benchmark used
+`nvidia/nemotron-3-super-120b-a12b`. Nebius Sandboxes execute repository bootstrap,
 tests, isolated candidate evaluations and clean replay. Runtime adapters separate
-application language, test framework and image selection. The recorded repair
+application language, test framework and image selection. The first recorded repair
 used the earlier Node adapter and a loader for a standalone TypeScript utility.
-The v0.6 release candidate replaces that narrow loader with an explicit pinned
-`tsx` contract; it is not counted as demonstrated evidence until acceptance passes.
+The v0.6 engine replaces that narrow loader with an explicit pinned `tsx` contract,
+and two further repairs were recorded on it.
 
 The verifier test is created before repair and excluded from solver prompts.
 Source-path restrictions block direct edits to protected files. Hash checks
@@ -62,6 +63,13 @@ and selected candidate 1 from the two passing candidates. Clean replay passed
 three baseline tests and two regression tests. The workflow updated PR #2 and
 finished successfully. This demonstrates one TypeScript utility repair, not
 whole-application or universal multi-language correctness.
+
+Two later repairs on the v0.6 engine are recorded in EVIDENCE.md: a cryptographic
+IV-seed bug in file-sharing-app (#3) and WiFi QR escaping in QRcrafts (#1, PR #3).
+We then froze the engine at v0.6.0-rc.21 and benchmarked it. It repaired and accepted
+6 of 6 trials on the two repositories it was developed against, and 0 of 6 on two
+unseen repositories, where the verifier never accepted a test. There were no false
+accepts. We report this gap rather than hide it; details are in BENCHMARK.md.
 
 ## Challenges and learning
 
@@ -81,7 +89,9 @@ independent verification, or that these mechanisms are individually novel.
 
 ## Next
 
-Demonstrate more repositories and runtimes, record stronger commit-bound evidence,
+Fix the verifier failures seen on unseen repositories (nested tests, repository-specific
+alias guidance, API type-checking), re-measure on new held-out issues, demonstrate
+more repositories and runtimes, record stronger commit-bound evidence,
 improve hostile-code defenses and cost reporting, then turn the Actions MVP into
 an installable GitHub App. Candidate evaluation is currently sequential.
 
@@ -97,6 +107,7 @@ come from this project's development, not a benchmark against other platforms.
 
 - Source repository: https://github.com/creatoropener/shadow-patch
 - Working demonstration: https://github.com/creatoropener/file-sharing-app/pull/2
+- Later repair: https://github.com/creatoropener/QRcrafts/pull/3
 - Recorded run: https://github.com/creatoropener/file-sharing-app/actions/runs/35464615209
 - Public video URL: add after uploading the final recording to YouTube.
 

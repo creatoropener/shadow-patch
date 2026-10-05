@@ -28,6 +28,40 @@ The two passing strategies can produce equivalent patches. Do not present them
 as statistically independent solutions. Counts refer to registered tests, not
 the number of assertions or whole-application coverage.
 
+## Later repairs on the v0.6 engine
+
+These two repairs ran on `nvidia/nemotron-3-super-120b-a12b`. Their run and PR links
+are marked below where they still need to be added; none has been invented.
+
+### file-sharing-app #3 (v0.6.0-rc.12, `node-typescript`)
+
+- Defect: in `lib/crypto/stream-cipher.ts`, `ivFrom(seed, index)` mixed a random
+  per-stream IV seed into every chunk's AES-GCM IV, but the seed was never
+  transmitted, so every peer-to-peer chunk failed its auth-tag check.
+- Reproduction and generation succeeded on attempt 1, with no retries.
+- Selected repair: embeds the 12-byte seed in every frame and updates all three sites
+  (encoder transform, encoder flush, decoder read). Trade-off: the seed is repeated
+  per frame. The two rejected candidates patched only `transform()`.
+- Links: [workflow run URL needed] and [PR URL needed].
+
+### QRcrafts #1 (`node-typescript`)
+
+- Defect: `buildContent` in `src/utils/qrBuilder.ts` did not escape the WiFi reserved
+  characters `;` `,` `:` `\` and `"`.
+- rc.15 run: candidates 1 and 3 passed (one file, four lines each) and candidate 3
+  was selected on elapsed time (11.256 s against 11.606 s). Candidate 2 failed because
+  its shared escape pattern omitted the double quote. Clean replay passed with an
+  unchanged regression hash.
+- Later Action runs on rc.16, rc.17 and rc.19 were rejected; the first verified run
+  through the Action was rc.20, which updated [PR #3](https://github.com/creatoropener/QRcrafts/pull/3)
+  in place. These runs are the reason the benchmark exists.
+- Links: [rc.15 workflow run URL needed] and [rc.20 workflow run URL needed].
+
+## Benchmark results
+
+Development 6/6 on rc.20 and on rc.21; held-out 0/6 on rc.21, with no false accepts.
+Tables, caveats and the infrastructure re-run are in [BENCHMARK.md](BENCHMARK.md).
+
 ## Earlier runs, kept separate
 
 | Local evidence file | Origin | What it shows |

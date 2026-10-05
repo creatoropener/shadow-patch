@@ -7,7 +7,7 @@ regression before asking a solver for a patch, evaluates three repair candidates
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.12 · Recorded verification evidence: v0.5.5 · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.21 (frozen for evaluation) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -15,7 +15,19 @@ clean base image before opening a pull request. A human decides whether to merge
 
 ![Recorded PatchProof evidence](docs/visuals/01-verification.png)
 
-## A demonstrated repair
+## Recorded repairs
+
+Three repairs on two repositories reached a VERIFIED verdict and a pull request:
+
+| Repair | Engine / adapter | What was wrong |
+| --- | --- | --- |
+| file-sharing-app #1 (PR #2) | v0.5.5, Node | Size and speed formatting printed raw template text |
+| file-sharing-app #3 | v0.6.0-rc.12, `node-typescript` | Every P2P chunk failed its AES-GCM auth-tag check because the per-stream IV seed was never transmitted |
+| QRcrafts #1 (PR #3) | v0.6.0-rc.15 and rc.20, `node-typescript` | WiFi QR codes did not escape the reserved characters `;` `,` `:` `\` and `"` |
+
+All three are recorded in [docs/EVIDENCE.md](docs/EVIDENCE.md). The first is described in detail below.
+
+### file-sharing-app #1
 
 The file-sharing app displayed JavaScript expression fragments where users should
 see file sizes such as `1.0 KB`. Its speed display inherited the same defect.
@@ -51,6 +63,26 @@ Candidates run **sequentially in separate branches**, not concurrently. Existing
 baseline failures can be supplied for one bounded correction. Hidden-regression
 results are never fed back to a solver. Details: [architecture](docs/ARCHITECTURE.md).
 
+## Benchmark: what it does and does not show
+
+The engine is frozen at v0.6.0-rc.21 and was measured on a small benchmark with
+three trials per case. Each winning repair was judged against the issue text, not
+just by the engine's own verdict. Full tables and caveats are in
+[docs/BENCHMARK.md](docs/BENCHMARK.md).
+
+| Split | Cases | Result for rc.21 |
+| --- | --- | --- |
+| Development (the engine was built against these) | QRcrafts #1, file-sharing-app #1 | **6/6** correct and accepted (rc.20: also 6/6) |
+| Held-out (unseen repositories) | Aegisscan SSRF issue, Tabloop form-action issue | **0/6**: the verifier never accepted a test, so no repair was evaluated |
+
+Read this plainly: the engine works on the repositories it was developed against and
+**did not generalize** to two unseen repositories. The failures were on the
+verification side. There were **no false accepts**, and no unverified patch was
+proposed. Two held-out cases, three non-independent trials each, are examples, not
+statistics, and the Tabloop case runs on an Experimental adapter. A third development
+case (Aegisscan #2) is reported separately in [docs/BENCHMARK.md](docs/BENCHMARK.md)
+because its issue text names a helper that does not exist at its base commit.
+
 ## Use as a GitHub Action (beta)
 
 The lightest way to try it: add one workflow file that calls
@@ -65,7 +97,7 @@ copy-install route below remains supported.
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.12.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.21.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
@@ -83,10 +115,10 @@ of this MVP.
 
 | Adapter | Toolchain | Evidence in this release |
 | --- | --- | --- |
-| `node-typescript` | Package baseline + pinned tsx + semantic lint + TypeScript checker + Node test runner | v0.6 acceptance run pending; fail-fast and local contract checks included |
-| `node-package` | JavaScript package baseline + Node test runner | JavaScript-only path; no v0.6 live evidence bundled |
+| `node-typescript` | Package baseline + pinned tsx + semantic lint + TypeScript checker + Node test runner | Recorded: file-sharing-app #3 and QRcrafts #1; benchmark dev 6/6; held-out 0/3 on one unseen repository |
+| `node-package` | JavaScript package baseline + Node test runner | Recorded for the v0.5.5 repair only; no v0.6 live evidence |
 | `python-pytest` | Python + pytest | Adapter included; no current-release live evidence bundled |
-| `static-web` | Syntax check + Node/jsdom regression | Adapter included; QRcrafts verification remained unresolved |
+| `static-web` | Syntax check + Node/jsdom regression | Experimental: held-out 0/3 on one unseen site (the verifier rejected a correct reproduction) |
 | `web-playwright` | Python pytest + Playwright | Adapter included; no live evidence bundled |
 | `java-junit` | javac + standalone JUnit | Adapter included; no live evidence bundled |
 | `java-maven` | Maven + JUnit reports | Adapter included; no live evidence bundled |
@@ -104,8 +136,9 @@ works. Known limits and trust boundaries are in [ARCHITECTURE.md](docs/ARCHITECT
 
 ## Nebius and NVIDIA
 
-`proof.py` calls the Nebius Token Factory inference API. The demonstrated model is
-`nvidia/Nemotron-3_5-Lightning`. Repository bootstrap commands, test execution,
+`proof.py` calls the Nebius Token Factory inference API. The first recorded repair
+(v0.5.5) used `nvidia/Nemotron-3_5-Lightning`; the later repairs and every benchmark
+trial used `nvidia/nemotron-3-super-120b-a12b`. Repository bootstrap commands, test execution,
 candidate evaluation, and clean replay use Nebius Sandboxes through `contree-sdk`.
 The GitHub runner orchestrates requests and handles the resulting PR.
 
@@ -125,9 +158,20 @@ that all orchestration or patch assembly executes inside Nebius.
 
 ## Verification status and license
 
-The demonstrated v0.5.5 target ran on Nebius. The v0.6 TypeScript adapter is a
-release candidate until the documented Issue #3 acceptance run passes. Engine
-contract tests and static checks do not replace that sandbox acceptance run.
+All three recorded repairs ran on Nebius and are listed in
+[docs/EVIDENCE.md](docs/EVIDENCE.md). Engine v0.6.0-rc.21 is frozen: the
+benchmark in [docs/BENCHMARK.md](docs/BENCHMARK.md) was measured on this exact tag.
+Engine contract tests and static checks do not replace sandbox runs.
+
+## Limitations
+
+- **No generalization is shown.** Held-out is 0/6 on two unseen repositories; development is 6/6.
+- **The verifier is the weak point.** On unseen repositories every trial stopped before any repair was evaluated.
+- **Nested tests are rejected.** A regression wrapped in `describe(...)` is refused even when it reproduces the real defect, because the engine's assertion-evidence check expects one failure block per failure.
+- **Alias guidance is repository-specific.** The `node-typescript` verifier guidance mentions an `@/` import alias. On a repository without that alias the model can use it, the test is rejected, and a verifier attempt is wasted (seen once in the rc.21 benchmark).
+- **API type-check.** Tests that call functions that do not exist or are not exported fail the type-check. This ended 4 of the 6 trials on the unseen TypeScript repository.
+- **No layout testing.** `static-web` uses jsdom, which cannot evaluate CSS media queries or real layout.
+- **Small, hand-judged benchmark.** Five cases on four repositories, one model, labels recorded by the project team rather than an independent oracle.
 
 The engine is released under the existing [MIT license](LICENSE), copyright
 Tabloop. This is a reproducible MVP with recorded evidence, not a production
