@@ -34,7 +34,7 @@
       "id": "dev-3",
       "split": "dev",
       "repo": "creatoropener/Aegisscan-Bug-Auditor",
-      "base_commit": "3019141e7e84c0776417665977e8fa7a26744abc",
+      "base_commit": "4c6b549c1b2442667e40085441ff71839976cea6",
       "issue": {
         "number": 2,
         "title": "Unchecked HTTP 3xx Redirect Loop & SSRF Bypass",
@@ -47,7 +47,7 @@
       "id": "heldout-1",
       "split": "heldout",
       "repo": "creatoropener/Aegisscan-Bug-Auditor",
-      "base_commit": "3019141e7e84c0776417665977e8fa7a26744abc",
+      "base_commit": "4c6b549c1b2442667e40085441ff71839976cea6",
       "issue": {
         "number": 1,
         "title": "Server-Side Request Forgery (SSRF) & Unrestricted Internal Network Pivot",
