@@ -1,0 +1,6 @@
+{
+  "ea3afdf0911fe906": {
+    "correct": true,
+    "note": "Changes the form action from /thank-you.html to thank-you.html, one attribute, so it resolves relative to the page's folder like every other link. Nothing else changes."
+  }
+}

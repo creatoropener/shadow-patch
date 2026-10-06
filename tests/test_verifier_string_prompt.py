@@ -30,6 +30,15 @@ class VerifierStringPromptTests(unittest.TestCase):
         self.assertIn('ADAPTER_GUIDANCE', request['user'])
         self.assertIn('CONTEXT', request['user'])
 
+    def test_every_adapter_is_told_to_pin_only_what_the_issue_states(self):
+        for runtime in ('node-typescript', 'node-package', 'python-pytest'):
+            with self.subTest(runtime=runtime):
+                system = self.generate(runtime)['system']
+                for phrase in ('Pin only what the issue states', 'exact error message',
+                               'current value of the thing being repaired',
+                               'must never receive a connection'):
+                    self.assertIn(phrase, system)
+
     def test_retry_retains_guidance_and_exact_feedback(self):
         request = self.generate('node-typescript', 'EXACT_PREVIOUS_SOURCE_AND_DIAGNOSTIC')
         self.assertIn('String.raw', request['system'])

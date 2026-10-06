@@ -1,0 +1,14 @@
+{
+  "162d41786232214e": {
+    "correct": true,
+    "note": "Resolves the host with dns.promises.lookup before fetching and throws for 127/8, ::1, 10/8, 172.16/12, 192.168/16 and 169.254/16. Probed by hand on the pinned commit: 127.0.0.1, 127.0.0.2, 10.1.2.3, 172.20.5.6, 192.168.1.100, 169.254.169.254 and localhost all reject; 172.32.0.1 (outside 172.16/12) is allowed; the bracketed IPv6 literal rejects through a lookup failure. Does not cover redirects, which this issue does not mention."
+  },
+  "3ec78db4201fc18d": {
+    "correct": false,
+    "note": "Blocks only the exact address 127.0.0.1, not 127.0.0.0/8: 127.0.0.2 passes the pre-flight check and the request goes out (ECONNREFUSED 127.0.0.2:80). Also splits the hostname on ':', which breaks bracketed IPv6."
+  },
+  "b33bf4ec183ae12a": {
+    "correct": false,
+    "note": "Judgment call. It covers every listed range but never rejects: a blocked target resolves with a normal-looking report (grade F, CRITICAL finding) that describes the target as vulnerable, and a host that merely fails DNS now produces a CRITICAL SSRF finding, which changes unrelated behaviour. The issue asks to reject the target host."
+  }
+}

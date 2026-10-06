@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.0-rc.23 — Verifier tests must not pin wording or the unfixed value
+
+- **Why.** The rc.22 smoke run (heldout-1, heldout-2, one trial each) finally got past
+  the verifier: both tests were accepted and candidates were evaluated. Both runs were
+  then rejected although a correct repair existed, because the accepted test was
+  over-specified:
+  1. heldout-1 asserted an invented message, `/Invalid target: resolves to disallowed IP
+     address/`, that the issue never states. All three candidates failed on wording; the
+     one that rejects every required address range (verified by hand against the pinned
+     repository) was among them.
+  2. heldout-2 asserted that the form's current `action` is `/thank-you.html` as a
+     sanity check before checking the repaired behaviour. The correct repair changes
+     that attribute, so the correct repair failed the test.
+- **What changed.** One paragraph in the shared verifier prompt for every runtime: pin
+  only what the issue states; do not assert an exact message or wording unless the
+  issue gives it; do not assert the current value of the thing being repaired; when the
+  unfixed code also fails but for a different reason, tell them apart by the behaviour
+  the issue requires, for example a side effect that must not happen.
+- **What did not change.** The assertion-evidence check, replay, candidate selection and
+  hashing. This is a prompt change only. There has been no live run of rc.23.
+- **Honest limit.** A prompt rule lowers the rate of over-specified tests; it does not
+  prove their absence. If false rejects remain, the next step is one bounded test-revision
+  round after all candidates fail, flagged in the proof.
+
 ## v0.6.0-rc.22 — Accept real assertion failures the verifier used to refuse; stop hard-coding one repository's alias
 
 - **Why.** The first rc.21 held-out pass (two unseen repositories, 0/6) ended before any

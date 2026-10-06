@@ -25,7 +25,7 @@ from typing import Any, Callable
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.22"
+APP_VERSION = "0.6.0-rc.23"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -610,6 +610,16 @@ must participate in the asserted behavior. For a round trip, exercise every
 forward and inverse operation before collecting and asserting the final output;
 never compare an encoded intermediate directly with the original decoded value.
 Do not modify or propose modifications to application source.
+Pin only what the issue states. Do not assert an exact error message, error text,
+identifier, or wording unless the issue itself specifies it: a correct repair may
+word it differently. Do not assert the current value of the thing being repaired
+(an attribute, field, or setting that the repair changes) as a precondition or
+sanity check, because that assertion fails after a correct repair. Assert only the
+intended post-fix behavior. If a required refusal must happen and the unfixed code
+also fails but for a different reason, tell the two apart by what the issue
+requires, not by invented wording: assert that the unfixed failure does not occur
+(for example no network error code), or observe a side effect (for example a local
+listener that must never receive a connection).
 
 """ + VERIFIER_FORMAT
     if adapter.id == "node-typescript":
