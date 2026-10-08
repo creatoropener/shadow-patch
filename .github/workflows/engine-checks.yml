@@ -29,7 +29,7 @@ jobs:
       - name: Compile Python sources
         run: >-
           python -m py_compile proof.py runtimes.py tools/export_target.py
-          patchproof_runtime/typescript_check.py
+          patchproof_runtime/typescript_check.py patchproof_runtime/typescript_source_check.py
 
       - name: Install pinned compiler for linter integration tests
         run: npm install --prefix "$RUNNER_TEMP/patchproof-lint" --ignore-scripts --no-audit --no-fund typescript@5.6.3
