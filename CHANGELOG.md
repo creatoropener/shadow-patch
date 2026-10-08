@@ -1,5 +1,94 @@
 # Changelog
 
+## v0.6.0-rc.24 — Refuse unsound verifier tests before they run; give a repair that does not compile one correction
+
+- **Why.** The rc.23 benchmark run (heldout-1 and heldout-2, three trials each; both are
+  development cases now, because rc.22 and rc.23 were tuned on them) ended 1 of 6 correct and
+  accepted, with no false accepts, against 0 of 6 on rc.21. The saved proofs show two verifier
+  defects and one solver defect that a prompt rule could not reach:
+  1. **heldout-1: every accepted test matched wording the issue never states.** Trial 1 pinned
+     `/blocked/`; trial 2 pinned `/Invalid URL: http:\/\/127.0.0.1/`; trial 3 pinned
+     `/SSRF protection: Target host resolves to a disallowed IP address/`; the rc.22 smoke had
+     pinned `/Invalid target: resolves to disallowed IP address/`. The rc.23 prompt rule changed
+     nothing visible. Trial 1 rejected a correct repair because its message starts "Blocked request
+     to internal IP address" with a capital B and the test wanted `/blocked/`; trial 2's test
+     demanded a message no reasonable repair would produce, and every candidate also failed the
+     type check before the test mattered; trial 3's test imported `scanSiteUrl` from
+     `@/src/services/api` instead of the scanning code, so its "reproduction" was `Failed to
+     parse URL from /api/scan/site`, a relative fetch URL, not the SSRF defect.
+  2. **heldout-2 (static-web): all six executed generations across trials 1 and 3 called
+     `describe()` or `it()` without importing them**, and two of them also imported `jsdom` by
+     name, which cannot resolve outside the sandbox image. node:test reports `ReferenceError` as a generic
+     `test failed`, so the model heard only "without accepted assertion evidence", swapped
+     `describe` for `it` and back, and never added the import. The pre-execution import check
+     existed for node-typescript only.
+  3. **heldout-1 solver: seven of the nine candidate repairs failed the repository's own type
+     check.** Five put `await` inside a non-async function and four used `dns.ADDRCONFIG`, which
+     `dns/promises` does not export (two did both). Each was rejected without a second chance;
+     one of them behaved correctly apart from that constant.
+- **What changed.**
+  1. *Import check for every node:test adapter* (`runtimes.py`: `missing_node_test_imports`,
+     `imports_bare_jsdom`). node-package and static-web generated tests now go through the same
+     pre-execution check as node-typescript, and the check looks at which names the file actually
+     calls: importing `test` no longer excuses an unimported `describe`. The diagnostic gives the
+     exact import line. On static-web a bare `jsdom` import is refused with the exact
+     `createRequire('/opt/patchproof/node/package.json')('jsdom')` line. `proof.py` adds a specific
+     diagnosis for `ReferenceError: describe|it|test|before|after|beforeEach|afterEach|assert is
+     not defined` in the retry feedback, for any test that still reaches the sandbox.
+  2. *Wording-pin gate* (`runtimes.py`: `ungrounded_message_pins`,
+     `RuntimeAdapter.validate_generated_pins`, called from `generate_regression_test`). The
+     generated test is read for regex or string literals used to match an error message
+     (`assert.rejects` and `assert.throws` with a regex or a `message:` property,
+     `assert.match`/`strictEqual` on `.message`, `/re/.test(x.message)`, `x.message.includes`,
+     `startsWith`, `endsWith`, `==`). Each literal is reduced to its wording (regex operators, class
+     names, error codes and fragments under three letters are dropped) and must appear in the
+     issue title or body. A miss is an ordinary validation failure that costs one generation; the
+     diagnostic says to assert the refusal without a message matcher and to tell it apart from the
+     unfixed failure by its effect, for example a local listener whose connection count must stay
+     0, or by the rejection not being the unfixed network error. Applies to every `node-test`
+     adapter. Any exception inside the heuristic is ignored (it fails open).
+  3. *Compile check for TypeScript candidates* (`patchproof_runtime/typescript_source_check.py`,
+     `proof.py`). Before the first candidate the unmodified project is type-checked once with its
+     own compiler (the same program `tsc --noEmit` builds). Only if that passes, each candidate
+     whose ordinary baseline passed and that changed a TypeScript file is type-checked again with
+     its repair applied and before the hidden regression is added. A failure gets the same single
+     correction a failed baseline gets, with the compiler's diagnostics and the candidate's own diff
+     as feedback; a second failure rejects the candidate at stage `source-check`. A check that
+     cannot run (compiler missing, references-only tsconfig, timeout) counts as a pass and never
+     rejects anything. The proof records `source_check` (enabled, baseline exit code) and, per
+     candidate, `source_check_attempts`. The whole project is checked, not only the changed
+     files, because ambient declarations exist only in the whole program. Registered in
+     `tools/export_target.py`, the sandbox helper list and `engine-checks.yml`.
+- **Evidence.** All from the saved rc.23 proofs and the pinned repositories; no live run yet.
+  - The three heldout-1 accepted tests are refused by the pin gate while the rest of the
+    validator accepts them; the six heldout-2 executions are refused before any sandbox run with
+    the right import line (`tests/test_rc24_evidence.py`, fixtures `tests/fixtures/rc24_*`).
+  - On the pinned Aegisscan commit the unmodified project passes the check, and 7 of the 9
+    heldout-1 candidate diffs fail it with TS1308, TS2339 or TS18046; the two that compile are
+    the correct repair and an import-only non-repair. QRcrafts at its pinned commit (TypeScript
+    7.0.2) and file-sharing-app at its pinned commit also pass the project check.
+  - Verdicts of the old validators on the 14 recorded fixtures are unchanged.
+  - `tests/test_rc24_candidate_check.py` drives `proof.execute()` against a scripted fake sandbox:
+    a failing candidate gets one correction and can win, a second failure rejects it, a project
+    that fails its own check switches the gate off, a check that cannot run never rejects, and
+    nothing about the hidden test reaches a solver. Disabling the gate or leaking the test into
+    the feedback makes those tests fail.
+- **What did not change.** The assertion-evidence check, hashing, candidate selection, clean
+  replay, the solver and verifier prompts, and every non-TypeScript runtime's candidate flow.
+  The bounded test-revision round discussed after rc.23 was not built.
+- **Honest limits.**
+  - The pin gate is a heuristic on source text. It also refuses a legitimate matcher on library
+    or runtime wording the issue does not quote (for example `/Unexpected token/`); the model is
+    told to drop the matcher, which costs one generation. It reads only the forms listed above.
+  - It does not detect a test that exercises the wrong module, or one that could never pass after
+    a correct fix and carries no message pin (heldout-2 trial 3 resolved `form.action`, which jsdom
+    already makes absolute, against a base URL).
+  - A repair that compiles is not thereby correct; the check removes one way for a correct repair
+    to be lost, not the need for the hidden test. It applies to node-typescript only, and only
+    when the unmodified project passes its own type check.
+  - rc.24 has not been run live. heldout-1 and heldout-2 are development cases; a generalization
+    claim needs new issues written before the engine version sees them.
+
 ## v0.6.0-rc.23 — Verifier tests must not pin wording or the unfixed value
 
 - **Why.** The rc.22 smoke run (heldout-1, heldout-2, one trial each) finally got past

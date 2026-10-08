@@ -11,6 +11,7 @@ FILES = (
     "patchproof_runtime/static_web_check.mjs",
     "patchproof_runtime/web_streams.mjs",
     "patchproof_runtime/typescript_check.py",
+    "patchproof_runtime/typescript_source_check.py",
     "patchproof_runtime/typescript_test_lint.mjs",
     "patchproof_runtime/typescript_runtime.d.ts",
     "patchproof_runtime/java_check.py", "patchproof_runtime/junit_check.py",

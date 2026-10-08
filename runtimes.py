@@ -8,6 +8,7 @@ import shlex
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 
 class RuntimeDetectionError(ValueError):
@@ -55,6 +56,7 @@ def _missing_async_success_guard(content: str) -> bool:
     )
 
 
+_TYPESCRIPT_SUFFIXES = frozenset({".ts", ".tsx", ".mts", ".cts"})
 _NODE_TEST_IMPORT = "import test from 'node:test';"
 _NODE_ASSERT_IMPORT = "import assert from 'node:assert/strict';"
 
@@ -81,6 +83,519 @@ def _missing_node_test_imports(content: str) -> list[str]:
     ):
         missing.append(_NODE_ASSERT_IMPORT)
     return missing
+
+
+# --------------------------------------------------------------------------- #
+# node:test names and bare imports in generated ESM tests (rc.24)
+# --------------------------------------------------------------------------- #
+
+# rc.24: the pre-execution import check above only ran for node-typescript. A static-web
+# test that called describe() or it() without importing them was executed in the sandbox,
+# died with "ReferenceError: describe is not defined" (node:test reports that as a generic
+# `test failed`, never accepted as assertion evidence), and the model, told only "test
+# failed without accepted assertion evidence", swapped describe for it and back without
+# ever adding the import (heldout-2, rc.23, trials 1 and 3: six executions in all).
+_NODE_TEST_NAMES = (
+    "describe", "it", "test", "before", "after", "beforeEach", "afterEach",
+)
+_NODE_ASSERT_SPECIFIER = re.compile(
+    r"""(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"](?:node:)?assert(?:/strict)?['"]"""
+)
+
+
+def _import_binds(source: str, name: str) -> bool:
+    """True when an import or require in ``source`` binds the local identifier ``name``."""
+    pattern = rf"(?<![\w$.]){re.escape(name)}(?![\w$])"
+    for match in re.finditer(r"\bimport\s+([^'\"();]*?)\s*from\s*['\"][^'\"]+['\"]", source):
+        if re.search(pattern, match.group(1)):
+            return True
+    for match in re.finditer(
+        r"(?:const|let|var)\s*(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:require|import)\s*\(",
+        source,
+    ):
+        if re.search(pattern, match.group(1)):
+            return True
+    return False
+
+
+def _node_test_bindings(source: str) -> set[str] | None:
+    """Local names bound from 'node:test', or None when that module is never imported."""
+    bound: set[str] = set()
+    found = False
+    for match in re.finditer(r"\bimport\s+([^'\"();]*?)\s*from\s*['\"]node:test['\"]", source):
+        found = True
+        clause = match.group(1)
+        named = re.search(r"\{([^}]*)\}", clause)
+        if named:
+            for part in named.group(1).split(","):
+                part = part.strip()
+                if part:
+                    bound.add(re.split(r"\s+as\s+", part)[-1].strip())
+            clause = clause.replace(named.group(0), " ")
+        namespace = re.search(r"\*\s*as\s+([A-Za-z_$][\w$]*)", clause)
+        if namespace:
+            bound.add(namespace.group(1))  # reached as ns.test(...), never as a bare name
+            clause = clause.replace(namespace.group(0), " ")
+        default = re.search(r"([A-Za-z_$][\w$]*)", clause)
+        if default:
+            bound.add(default.group(1))
+    for match in re.finditer(
+        r"""(?:const|let|var)\s*\{([^}]*)\}\s*=\s*(?:await\s+)?(?:require|import)\s*\(\s*['"]node:test['"]\s*\)""",
+        source,
+    ):
+        found = True
+        for part in match.group(1).split(","):
+            part = part.strip()
+            if part:
+                bound.add(re.split(r"\s*:\s*", part)[-1].strip())
+    for match in re.finditer(
+        r"""(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?(?:require|import)\s*\(\s*['"]node:test['"]\s*\)""",
+        source,
+    ):
+        found = True
+        bound.add(match.group(1))
+    if not found and re.search(
+        r"""(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]node:test['"]""", source
+    ):
+        found = True  # e.g. a side-effect import; nothing is bound
+    return bound if found else None
+
+
+def _node_test_names_used(code: str) -> list[str]:
+    """node:test functions called as bare names (``code`` has strings and comments masked)."""
+    used: list[str] = []
+    for name in _NODE_TEST_NAMES:
+        if not re.search(rf"(?<![\w$.]){name}\s*(?:\(|\.(?:skip|only|todo)\b)", code):
+            continue
+        if re.search(rf"\b(?:function|class|const|let|var)\s+{name}\b", code):
+            continue  # the file defines its own helper with that name
+        used.append(name)
+    return used
+
+
+def _node_test_import_line(names: list[str]) -> str:
+    ordered = [name for name in _NODE_TEST_NAMES if name in names]
+    if ordered == ["test"]:
+        return _NODE_TEST_IMPORT
+    return "import { " + ", ".join(ordered) + " } from 'node:test';"
+
+
+def missing_node_test_imports(content: str) -> list[str]:
+    """Import lines a generated node:test ESM file needs but lacks (rc.24).
+
+    Unlike ``_missing_node_test_imports`` this looks at which names the file really
+    calls: ``describe`` and ``it`` are not globals either, so importing only ``test``
+    does not make ``describe(...)`` work. ``node:assert`` may also be imported as
+    ``assert`` or ``assert/strict``, with or without the ``node:`` prefix.
+    """
+    source = _without_comments(content)
+    code = _js_code_only(source)
+    used = _node_test_names_used(code)
+    bound = _node_test_bindings(source)
+    names = (used or ["test"]) if bound is None else [n for n in used if n not in bound]
+    missing: list[str] = []
+    if names:
+        missing.append(_node_test_import_line(names))
+    uses_assert = re.search(r"(?<![\w$.])assert\s*[.(]", code)
+    if uses_assert and not (
+        _NODE_ASSERT_SPECIFIER.search(source) or _import_binds(source, "assert")
+    ):
+        missing.append(_NODE_ASSERT_IMPORT)
+    return missing
+
+
+def imports_bare_jsdom(content: str) -> bool:
+    """True when a test imports jsdom by name; the package lives outside the repository."""
+    return bool(re.search(
+        r"""(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]jsdom['"]""",
+        _without_comments(content),
+    ))
+
+
+_JSDOM_LOADER = (
+    "import { createRequire } from 'node:module'; "
+    "const { JSDOM } = createRequire('/opt/patchproof/node/package.json')('jsdom');"
+)
+
+
+# --------------------------------------------------------------------------- #
+# Error-message pins in generated tests (rc.24)
+# --------------------------------------------------------------------------- #
+
+# rc.22 and rc.23 told the verifier not to match error wording the issue never states, and
+# on heldout-1 four of four accepted tests did it anyway (/Invalid target: .../, /blocked/,
+# /Invalid URL: http:\/\/127.0.0.1/, /SSRF protection: .../); one of them asked for a message
+# that no reasonable repair would produce. A prompt rule lowers a rate; this is the check. It reads
+# the generated test, finds the regex or string literals used to match an error message,
+# and asks of each whether the issue contains that wording.
+_REGEX_AFTER_WORDS = frozenset(
+    {"return", "typeof", "case", "in", "of", "void", "delete", "throw", "new", "else", "do"}
+)
+
+
+class _Tok(NamedTuple):
+    kind: str  # word, number, string, template, regex or punct
+    text: str
+    start: int
+    end: int
+
+
+class _Pin(NamedTuple):
+    kind: str  # "regex" or "string"
+    text: str  # the regex source, or the string value
+    form: str  # the assertion form it was found in
+
+
+def _skip_quoted(source: str, i: int) -> int:
+    quote, i, n = source[i], i + 1, len(source)
+    while i < n:
+        if source[i] == "\\":
+            i += 2
+        elif source[i] == quote:
+            return i + 1
+        else:
+            i += 1
+    return n
+
+
+def _skip_template(source: str, i: int) -> int:
+    i, n = i + 1, len(source)
+    while i < n:
+        char = source[i]
+        if char == "\\":
+            i += 2
+        elif char == "`":
+            return i + 1
+        elif char == "$" and source[i + 1:i + 2] == "{":
+            i, depth = i + 2, 1
+            while i < n and depth:
+                inner = source[i]
+                if inner == "`":
+                    i = _skip_template(source, i)
+                    continue
+                if inner in "'\"":
+                    i = _skip_quoted(source, i)
+                    continue
+                depth += (inner == "{") - (inner == "}")
+                i += 1
+        else:
+            i += 1
+    return n
+
+
+def _skip_regex(source: str, i: int) -> int:
+    i, n, in_class = i + 1, len(source), False
+    while i < n:
+        char = source[i]
+        if char == "\\":
+            i += 2
+            continue
+        if char == "\n":
+            return i
+        if char == "[":
+            in_class = True
+        elif char == "]":
+            in_class = False
+        elif char == "/" and not in_class:
+            i += 1
+            while i < n and source[i].isalpha():
+                i += 1
+            return i
+        i += 1
+    return n
+
+
+def _js_tokens(source: str) -> list[_Tok]:
+    """A small JavaScript tokenizer: words, punctuation, strings, templates and regexes.
+
+    Comments are dropped. A slash starts a regular expression unless the previous token
+    ends an expression; that is a heuristic, adequate for the assertion forms read below.
+    """
+    tokens: list[_Tok] = []
+    i, n = 0, len(source)
+
+    def add(kind: str, end: int) -> None:
+        nonlocal i
+        tokens.append(_Tok(kind, source[i:end], i, end))
+        i = end
+
+    while i < n:
+        char = source[i]
+        if char.isspace():
+            i += 1
+        elif source.startswith("//", i):
+            end = source.find("\n", i)
+            i = n if end < 0 else end
+        elif source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+        elif char in "'\"":
+            add("string", _skip_quoted(source, i))
+        elif char == "`":
+            add("template", _skip_template(source, i))
+        elif char == "/":
+            last = tokens[-1] if tokens else None
+            starts_regex = (
+                last is None
+                or (last.kind == "punct" and last.text not in {")", "]", "}"})
+                or (last.kind == "word" and last.text in _REGEX_AFTER_WORDS)
+            )
+            add("regex", _skip_regex(source, i)) if starts_regex else add("punct", i + 1)
+        elif char.isalpha() or char in "_$":
+            end = i + 1
+            while end < n and (source[end].isalnum() or source[end] in "_$"):
+                end += 1
+            add("word", end)
+        elif char.isdigit():
+            end = i + 1
+            while end < n and (source[end].isalnum() or source[end] == "."):
+                end += 1
+            add("number", end)
+        else:
+            add("punct", i + 1)
+    return tokens
+
+
+def _call_arguments(tokens: list[_Tok], open_index: int) -> list[list[_Tok]]:
+    """The top-level arguments of the call whose "(" is ``tokens[open_index]``."""
+    arguments: list[list[_Tok]] = []
+    current: list[_Tok] = []
+    depth = 0
+    for token in tokens[open_index:]:
+        if token.kind == "punct" and token.text in "([{":
+            depth += 1
+            if depth > 1:
+                current.append(token)
+        elif token.kind == "punct" and token.text in ")]}":
+            depth -= 1
+            if depth == 0:
+                if current:
+                    arguments.append(current)
+                return arguments
+            current.append(token)
+        elif token.kind == "punct" and token.text == "," and depth == 1:
+            arguments.append(current)
+            current = []
+        else:
+            current.append(token)
+    return arguments
+
+
+def _string_value(token: _Tok) -> str | None:
+    if token.kind == "string" or (token.kind == "template" and "${" not in token.text):
+        return re.sub(r"\\(.)", r"\1", token.text[1:-1])
+    return None
+
+
+def _literal_pin(argument: list[_Tok], form: str) -> _Pin | None:
+    """A regex or plain string literal standing alone as an argument."""
+    if len(argument) != 1:
+        return None
+    token = argument[0]
+    if token.kind == "regex":
+        return _Pin("regex", token.text[1:token.text.rfind("/")], form)
+    value = _string_value(token)
+    return _Pin("string", value, form) if value is not None else None
+
+
+def _object_message_pin(argument: list[_Tok], form: str) -> _Pin | None:
+    """The value of a ``message:`` property when it is a regex or string literal."""
+    if not argument or argument[0].text != "{":
+        return None
+    depth = 0
+    for index, token in enumerate(argument):
+        if token.kind == "punct" and token.text in "([{":
+            depth += 1
+        elif token.kind == "punct" and token.text in ")]}":
+            depth -= 1
+        elif (depth == 1 and token.kind in {"word", "string"}
+              and token.text.strip("'\"") == "message"
+              and index + 1 < len(argument) and argument[index + 1].text == ":"):
+            value, inner = [], 0
+            for follower in argument[index + 2:]:
+                if follower.kind == "punct" and follower.text in "([{":
+                    inner += 1
+                elif follower.kind == "punct" and follower.text in ")]}":
+                    if inner == 0:
+                        break
+                    inner -= 1
+                elif follower.kind == "punct" and follower.text == "," and inner == 0:
+                    break
+                value.append(follower)
+            return _literal_pin(value, form)
+    return None
+
+
+def _message_pins(content: str) -> list[_Pin]:
+    """Regex and string literals this test uses to match an error's message text."""
+    source = _without_comments(content)
+    tokens = _js_tokens(source)
+    pins: list[_Pin] = []
+
+    def negated(index: int) -> bool:
+        before = index - 1
+        while before >= 0 and tokens[before].text == "(":
+            before -= 1
+        return (before >= 0 and tokens[before].text == "!"
+                and not (before + 1 < len(tokens) and tokens[before + 1].text == "="))
+
+    def chain_start(index: int) -> int:
+        while index >= 2 and tokens[index - 1].text == "." and tokens[index - 2].kind == "word":
+            index -= 2
+        return index
+
+    def mentions_message(argument: list[_Tok]) -> bool:
+        return any(t.kind == "word" and t.text in {"message", "stack"} for t in argument) or any(
+            t.kind == "word" and t.text in {"String", "toString"} for t in argument)
+
+    for index, token in enumerate(tokens):
+        text = token.text
+        # assert.rejects(p, /re/) | assert.rejects(p, { message: /re/ }) | assert.throws(...)
+        if (token.kind == "word" and text in {"rejects", "throws"} and index >= 2
+                and tokens[index - 1].text == "." and tokens[index - 2].text in {"assert", "strict"}
+                and index + 1 < len(tokens) and tokens[index + 1].text == "("):
+            arguments = _call_arguments(tokens, index + 1)
+            if len(arguments) >= 2:
+                second = arguments[1]
+                found = (_literal_pin(second, f"assert.{text}") if second and second[0].kind == "regex"
+                         else _object_message_pin(second, f"assert.{text}"))
+                if found:
+                    pins.append(found)
+        # assert.match(err.message, /re/)
+        elif (token.kind == "word" and text == "match" and index >= 2
+              and tokens[index - 1].text == "." and tokens[index - 2].text in {"assert", "strict"}
+              and index + 1 < len(tokens) and tokens[index + 1].text == "("):
+            arguments = _call_arguments(tokens, index + 1)
+            if len(arguments) >= 2 and mentions_message(arguments[0]):
+                found = _literal_pin(arguments[1], "assert.match")
+                if found and found.kind == "regex":
+                    pins.append(found)
+        # assert.strictEqual(err.message, 'text')
+        elif (token.kind == "word" and text in {"strictEqual", "equal", "deepStrictEqual", "deepEqual"}
+              and index >= 2 and tokens[index - 1].text == "."
+              and tokens[index - 2].text in {"assert", "strict"}
+              and index + 1 < len(tokens) and tokens[index + 1].text == "("):
+            arguments = _call_arguments(tokens, index + 1)
+            if len(arguments) >= 2:
+                for message_side, other in ((arguments[0], arguments[1]), (arguments[1], arguments[0])):
+                    ends_in_message = (len(message_side) >= 3 and message_side[-1].text == "message"
+                                       and message_side[-2].text == ".")
+                    found = _literal_pin(other, f"assert.{text}") if ends_in_message else None
+                    if found and found.kind == "string":
+                        pins.append(found)
+        # /re/.test(err.message)
+        elif (token.kind == "regex" and index + 3 < len(tokens)
+              and tokens[index + 1].text == "." and tokens[index + 2].text == "test"
+              and tokens[index + 3].text == "("):
+            arguments = _call_arguments(tokens, index + 3)
+            if arguments and any(t.text == "message" for t in arguments[0]) and not negated(index):
+                found = _literal_pin([token], "regex test on message")
+                if found:
+                    pins.append(found)
+        # err.message.includes('text') | .startsWith | .endsWith | .match(/re/)
+        elif (token.kind == "word" and text == "message" and index + 3 < len(tokens)
+              and tokens[index + 1].text == "." and tokens[index + 2].kind == "word"
+              and tokens[index + 3].text == "(" and index >= 1 and tokens[index - 1].text == "."):
+            method = tokens[index + 2].text
+            if method in {"includes", "startsWith", "endsWith", "match"} and not negated(chain_start(index)):
+                arguments = _call_arguments(tokens, index + 3)
+                found = _literal_pin(arguments[0], f"message.{method}") if arguments else None
+                if found:
+                    pins.append(found)
+        # err.message === 'text'
+        elif (token.kind == "word" and text == "message" and index >= 1
+              and tokens[index - 1].text == "." and index + 3 < len(tokens)
+              and tokens[index + 1].text == "=" and tokens[index + 2].text == "="):
+            after = index + 3 + (1 if tokens[index + 3].text == "=" else 0)
+            if after < len(tokens):
+                found = _literal_pin([tokens[after]], "message comparison")
+                if found and found.kind == "string":
+                    pins.append(found)
+    unique: list[_Pin] = []
+    for pin in pins:
+        if not any(pin.kind == other.kind and pin.text == other.text for other in unique):
+            unique.append(pin)
+    return unique
+
+
+def _normalize_words(text: str) -> str:
+    return re.sub(r"\s+", " ", text.lower()).strip()
+
+
+def _regex_fragments(source: str) -> list[str]:
+    """The literal runs inside a regular expression, with every operator removed."""
+    fragments: list[str] = []
+    current: list[str] = []
+
+    def cut() -> None:
+        text = re.sub(r"\s+", " ", "".join(current)).strip()
+        if text:
+            fragments.append(text)
+        current.clear()
+
+    i, n = 0, len(source)
+    while i < n:
+        char = source[i]
+        if char == "\\" and i + 1 < n:
+            following = source[i + 1]
+            if following in "dDwWsSbBnrtfv0123456789":
+                cut()
+            else:
+                current.append(following)
+            i += 2
+        elif char == "[":
+            cut()
+            i += 1
+            while i < n and source[i] != "]":
+                i += 2 if source[i] == "\\" else 1
+            i += 1
+        elif char == "(":
+            cut()
+            i += 1
+            group = re.match(r"\?(?:<?[=!]|:|<[A-Za-z_$][\w$]*>)", source[i:])
+            if group:
+                i += group.end()
+        elif char == "{":
+            cut()
+            end = source.find("}", i)
+            i = n if end < 0 else end + 1
+        elif char in ").|^$*+?}":
+            cut()
+            i += 1
+        else:
+            current.append(char)
+            i += 1
+    cut()
+    return fragments
+
+
+def _pin_fragments(pin: _Pin) -> list[str]:
+    raw = _regex_fragments(pin.text) if pin.kind == "regex" else [
+        re.sub(r"\s+", " ", pin.text).strip()
+    ]
+    fragments: list[str] = []
+    for fragment in raw:
+        # An error class name or code (TypeError, ERR_INVALID_URL, ECONNREFUSED) names a
+        # kind of failure, not wording a repair might phrase differently.
+        if re.fullmatch(r"[A-Za-z]*Error|[A-Z][A-Z0-9_]{3,}", fragment):
+            continue
+        normalized = _normalize_words(fragment)
+        # Fewer than three letters (an address, a punctuation mark) says nothing about wording.
+        if len(re.findall(r"[a-z]", normalized)) >= 3:
+            fragments.append(normalized)
+    return fragments
+
+
+def ungrounded_message_pins(content: str, issue_text: str) -> list[str]:
+    """Error-message matchers in ``content`` whose wording the issue never contains."""
+    issue = _normalize_words(issue_text)
+    found: list[str] = []
+    for pin in _message_pins(content):
+        if all(fragment in issue for fragment in _pin_fragments(pin)):
+            continue
+        shown = f"/{pin.text}/" if pin.kind == "regex" else repr(pin.text)
+        found.append(shown if len(shown) <= 90 else shown[:87] + "...")
+    return found
 
 
 # --------------------------------------------------------------------------- #
@@ -404,6 +919,86 @@ class RuntimeAdapter:
                     + " Declare each case as test('name', async () => { ... });. "
                     "This is a missing import, not a missing @types package."
                 )
+            # rc.24: the check above only asks whether node:test is imported at all.
+            # Importing `test` does not make describe() or it() available.
+            unbound = missing_node_test_imports(content)
+            if unbound:
+                raise ValueError(
+                    "Generated TypeScript regression calls node:test functions it does "
+                    "not import: they are not globals under tsx. Add exactly: "
+                    + " ".join(unbound) + " This is a missing import, not a missing "
+                    "@types package."
+                )
+        if self.id in {"node-package", "static-web"}:
+            # rc.24: the import check used to run for node-typescript only. A generated
+            # .mjs test that calls describe()/it()/test() without importing them is
+            # certain to die with a ReferenceError, which node:test reports as a generic
+            # failure that is never accepted as evidence.
+            problems: list[str] = []
+            unbound = missing_node_test_imports(content)
+            if unbound:
+                problems.append(
+                    "Generated regression calls node:test or assert functions it does not "
+                    "import: describe, it, test and assert are not globals in an ES module "
+                    "run by node --test. Add exactly: " + " ".join(unbound)
+                    + " Keep the test cases you already wrote; this is a missing import, "
+                    "not evidence about the bug."
+                )
+            if self.id == "static-web" and imports_bare_jsdom(content):
+                problems.append(
+                    "jsdom is not installed in the repository, so importing it by name "
+                    "fails with ERR_MODULE_NOT_FOUND. Load the preinstalled copy exactly "
+                    "like this instead: " + _JSDOM_LOADER
+                )
+            if problems:
+                raise ValueError(" ".join(problems))
+
+    def validate_generated_pins(self, content: str, issue_text: str) -> None:
+        """Reject tests that match error wording the issue never states (rc.24).
+
+        A correct repair may word its refusal differently, so a test that pins invented
+        text can reject every correct repair. Only wording found in the issue may be
+        matched; everything else must be told apart by behaviour.
+        """
+        if self.test_runtime != "node-test":
+            return
+        try:
+            pinned = ungrounded_message_pins(content, issue_text)
+        except Exception:  # noqa: BLE001 - a heuristic must never abort a run; fail open
+            return
+        if pinned:
+            raise ValueError(
+                "The regression test matches error wording the issue never states: "
+                + ", ".join(pinned[:3]) + ". A correct repair may word its refusal "
+                "differently, so this test could reject a correct fix. Do not match on "
+                "message text: no regex, string or `message:` matcher on an error. Assert "
+                "that the operation is refused with `await assert.rejects(promise)` or "
+                "`assert.throws(fn)` and no message matcher, and tell that refusal apart "
+                "from the unfixed failure by the effect the issue forbids. Observe the "
+                "effect directly, for example start http.createServer on 127.0.0.1 with "
+                "an ephemeral port, count its 'connection' events and assert that the "
+                "count is 0; or assert that the rejection is not the unfixed failure, "
+                "such as a network error code (ECONNREFUSED, ENOTFOUND, ETIMEDOUT). Only "
+                "a message the issue itself quotes may be matched."
+            )
+
+    def project_check_command(self) -> str | None:
+        """Sandbox command that type-checks the whole unmodified project, or None (rc.24)."""
+        if self.id != "node-typescript":
+            return None
+        return "python /patchproof/typescript_source_check.py --project"
+
+    def source_check_command(self, changed_paths: list[str]) -> str | None:
+        """Sandbox command that type-checks the project after a repair, or None (rc.24).
+
+        The same whole-project check that has to pass on the unmodified repository, and
+        only when the repair touched a TypeScript file.
+        """
+        if self.id != "node-typescript":
+            return None
+        if not any(Path(p).suffix.lower() in _TYPESCRIPT_SUFFIXES for p in changed_paths):
+            return None
+        return self.project_check_command()
 
     def validate_candidate_file(self, path: str, content: str) -> None:
         if Path(path).suffix.lower() == ".py":

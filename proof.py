@@ -22,10 +22,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
-from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
+from runtimes import (
+    RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports,
+)
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.23"
+APP_VERSION = "0.6.0-rc.24"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -682,6 +684,8 @@ Do not use Markdown fences."""
         raise
     try:
         adapter.validate_generated_test(test_content, test_path)
+        # rc.24: reject a test that matches error wording the issue never states.
+        adapter.validate_generated_pins(test_content, f"{issue.title}\n{issue.body}")
         if root is not None:
             # Before any sandbox run: a relative import that cannot resolve from
             # the test's destination is certain to fail at load time (rc.21).
@@ -851,6 +855,25 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
     not_found = missing_module(output)
     if not_found is not None:
         feedback += module_not_found_feedback(not_found)
+    undefined_runner = re.search(
+        r"ReferenceError: (describe|it|test|before|after|beforeEach|afterEach|assert) "
+        r"is not defined", output,
+    )
+    if undefined_runner is not None:
+        # rc.24: node:test reports this as a generic `test failed`, so before this the
+        # model heard only "without accepted assertion evidence" and swapped describe
+        # for it and back without adding the import (heldout-2, rc.23, trials 1 and 3).
+        needed = missing_node_test_imports(content) or [
+            "import { describe, it } from 'node:test';",
+        ]
+        feedback += (
+            f"\nENGINE DIAGNOSIS: `{undefined_runner.group(1)}` is not defined at runtime. "
+            "describe, it, test and assert are not globals in an ES module run by "
+            "node --test; the file has to import every one it calls. This is a missing "
+            "import, not evidence about the bug. Add exactly: " + " ".join(needed)
+            + " Keep the same test cases and the same assertions. Return the complete "
+            "corrected file; resubmitting identical content fails again."
+        )
     if (classification == "test failed without accepted assertion evidence"
             and not_found is None
             and "ERR_TEST_FAILURE" in output and "ERR_ASSERTION" not in output):
@@ -1183,6 +1206,50 @@ def generate_candidate_with_retry(
     raise AssertionError("Unreachable candidate generation state")
 
 
+def source_check_feedback(output: str, patch: str) -> str:
+    """Correction request built from the TypeScript compiler's diagnostics (rc.24).
+
+    The check runs on the candidate alone, before the hidden regression is applied, so
+    these diagnostics are ordinary build output: nothing in them can reveal the test.
+    """
+    lines = [
+        line for line in output.splitlines()
+        if line.strip() and not line.startswith("PATCHPROOF_SOURCE_CHECK=")
+    ]
+    return candidate_retry_feedback(
+        "The previous proposal does not type-check. This is the repository's own "
+        "TypeScript compiler run on the files you changed; it ran before any hidden "
+        "test, so it says nothing about what the test expects. Fix every diagnostic "
+        "and keep the intended repair. await is only allowed inside an async function: "
+        "make the enclosing function async, or do not use await there. Use only members "
+        "that exist on the declared types; read the type instead of assuming a name, "
+        "and do not invent options or constants. Do not use any, ts-ignore, "
+        "ts-expect-error or casts to silence the compiler.\n"
+        "COMPILER OUTPUT:\n" + "\n".join(lines)[-4000:] + "\n"
+        "PREVIOUS PROPOSAL DIFF:\n" + patch[:6000]
+    )
+
+
+def run_candidate_source_check(
+    state: Any, adapter: RuntimeAdapter, changes: list[dict[str, str]],
+) -> tuple[bool, str] | None:
+    """Type-check a candidate's changed TypeScript files; None when no check applies.
+
+    Returns (passed, output). A check that cannot run (compiler missing, timed out,
+    invalid path) counts as a pass: this gate may only ever add a correction round, it
+    must never reject a candidate for a tooling reason.
+    """
+    command = adapter.source_check_command([change["path"] for change in changes])
+    if command is None:
+        return None
+    result = state.run(
+        shell=command, cwd="/workspace/repo", timeout=300, disposable=False,
+    ).wait()
+    output = text_output(result)
+    failed = result.exit_code == 1 and "PATCHPROOF_SOURCE_CHECK=failed" in output
+    return (not failed), (short_output(result) if failed else output[-1000:])
+
+
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -1236,7 +1303,7 @@ def sandbox_workspace(
     helpers = {f"/patchproof/{name}": helper_root / name for name in
                ("static_web_check.mjs", "web_streams.mjs",
                 "typescript_check.py", "typescript_test_lint.mjs",
-                "typescript_runtime.d.ts",
+                "typescript_source_check.py", "typescript_runtime.d.ts",
                 "junit_check.py", "java_check.py")}
     for helper in helpers.values():
         if not helper.is_file():
@@ -1415,7 +1482,7 @@ def render_report(proof: dict[str, Any]) -> str:
                     result="✅ Passed" if candidate.get("passed") else "❌ Rejected",
                     stage=candidate.get("stage", "generation"),
                     protected=("✅" if candidate.get("test_protected") else
-                               ("—" if candidate.get("stage") in {"generation", "baseline"} else "❌")),
+                               ("—" if candidate.get("stage") in {"generation", "baseline", "source-check"} else "❌")),
                     files=len(candidate.get("changed_files") or []),
                     duration=float(candidate.get("duration_seconds") or 0),
                 )
@@ -1659,6 +1726,36 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             tuple[tuple[int, int, float], dict[str, Any], list[dict[str, str]]]
         ] = []
         proof["stage"] = "candidate-evaluation"
+
+        # rc.24: a candidate that does not compile used to learn nothing. Seven of the nine
+        # heldout-1 repairs in the rc.23 run failed the repository's own type check: five put
+        # `await` inside a non-async function and four used `dns.ADDRCONFIG`, which
+        # dns/promises does not export (two did both). Each was rejected without a second
+        # chance. For TypeScript, type-check the project with the candidate applied, before
+        # the hidden regression is added, and allow the same single correction a failed
+        # baseline gets. The check is only enabled when the unmodified project passes it,
+        # so a failure can be blamed on the candidate and not on the repository.
+        source_check_enabled = False
+        project_command = adapter.project_check_command()
+        if project_command is not None:
+            proof["source_check"] = {"enabled": False, "command": project_command}
+            try:
+                project_result = baseline_suite.run(
+                    shell=project_command, cwd="/workspace/repo", timeout=300,
+                    disposable=False,
+                ).wait()
+                project_output = text_output(project_result)
+                source_check_enabled = (
+                    project_result.exit_code == 0
+                    and "PATCHPROOF_SOURCE_CHECK=passed" in project_output
+                )
+                proof["source_check"].update({
+                    "enabled": source_check_enabled,
+                    "baseline_exit_code": project_result.exit_code,
+                    "baseline_output": short_output(project_result, 1_000),
+                })
+            except Exception as check_error:  # noqa: BLE001 - tooling trouble only turns it off
+                proof["source_check"]["error"] = str(check_error)[:500]
         for index, (strategy, temperature) in enumerate(strategies, start=1):
             started = time.monotonic()
             candidate_record: dict[str, Any] = {
@@ -1717,7 +1814,31 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         "tests_passed": None,
                     })
                     if baseline_result.exit_code == 0:
-                        break
+                        source_check = (
+                            run_candidate_source_check(baseline_result, adapter, changes)
+                            if source_check_enabled else None
+                        )
+                        if source_check is None:
+                            break
+                        candidate_record.setdefault("source_check_attempts", []).append({
+                            "attempt": baseline_attempt, "passed": source_check[0],
+                            **({} if source_check[0] else {"output": source_check[1]}),
+                        })
+                        if source_check[0]:
+                            break
+                        candidate_record["stage"] = "source-check"
+                        if baseline_attempt == 2:
+                            raise PatchProofError(
+                                "Candidate still fails the TypeScript check after one correction."
+                            )
+                        baseline_feedback = source_check_feedback(
+                            source_check[1], unified_diff_text(root, changes),
+                        )
+                        print(
+                            f"Candidate {index} failed the TypeScript check; "
+                            "requesting one correction.", file=sys.stderr,
+                        )
+                        continue
                     if baseline_attempt == 2:
                         raise PatchProofError("Candidate still fails the existing baseline after one correction.")
                     patch = unified_diff_text(root, changes)

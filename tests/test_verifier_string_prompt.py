@@ -8,7 +8,7 @@ class VerifierStringPromptTests(unittest.TestCase):
     def generate(self, runtime, feedback=''):
         adapter = SimpleNamespace(id=runtime, application_languages=('TypeScript',),
             test_runtime='node-test', verifier_guidance='ADAPTER_GUIDANCE',
-            validate_generated_test=Mock())
+            validate_generated_test=Mock(), validate_generated_pins=Mock())
         source = "import test from 'node:test';\ntest('case', () => {});\n"
         raw = (f"{proof.TEST_BEGIN}\n{source}\n{proof.TEST_END}\n"
                f"{proof.RATIONALE_BEGIN}\nExercise the reported behavior.\n{proof.RATIONALE_END}\n")

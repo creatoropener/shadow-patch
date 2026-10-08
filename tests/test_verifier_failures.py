@@ -25,6 +25,12 @@ FIXTURES = Path(__file__).parent / "fixtures"
 LINTER = Path(__file__).resolve().parents[1] / "patchproof_runtime/typescript_test_lint.mjs"
 
 
+# rc.24: node-package and static-web tests now go through the same missing-import check as
+# node-typescript, so the stand-in body `test();` that these retry tests used for a
+# generation that must be ACCEPTED is replaced by a minimal file that really imports `test`.
+VALID_NODE_TEST = "import test from 'node:test';\ntest('x', () => {});"
+
+
 def marked(test: str, rationale: str = "Regression.") -> str:
     """A well-formed verifier response in the rc.20 marker format."""
     return (f"{TEST_BEGIN}\n{test}\n{TEST_END}\n"
@@ -135,13 +141,13 @@ class VerifierMarkerParserTests(unittest.TestCase):
             adapter = detect_runtime(root)
             with patch('proof.model_text', side_effect=[
                 json.dumps({"test_content": "test();", "rationale": "r"}),
-                marked("test();", "Expected behavior."),
+                marked(VALID_NODE_TEST, "Expected behavior."),
             ]) as model:
                 content, rationale = generate_regression_with_retry(
                     issue=Issue(3, "Round trip", "Preserve input"), context="",
                     api_key="unused", model="unused", adapter=adapter,
                     test_path="test_patchproof_issue_3.test.mjs")
-                self.assertEqual(content, "test();\n")
+                self.assertEqual(content, VALID_NODE_TEST + "\n")
                 self.assertEqual(rationale, "Expected behavior.")
                 retry_user = model.call_args.kwargs["user"]
                 self.assertIn("exactly once", retry_user)
@@ -362,7 +368,7 @@ class RepeatedFailureEscalationTests(unittest.TestCase):
             adapter = detect_runtime(root)
             with patch('proof.model_text', side_effect=[
                 f"{TEST_BEGIN}\ntest();\n{TEST_END}\n",
-                marked("test();", "Expected behavior."),
+                marked(VALID_NODE_TEST, "Expected behavior."),
             ]) as model:
                 generate_regression_with_retry(
                     issue=Issue(3, "Round trip", "Preserve input"), context="",
