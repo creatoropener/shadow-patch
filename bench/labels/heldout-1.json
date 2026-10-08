@@ -10,5 +10,41 @@
   "b33bf4ec183ae12a": {
     "correct": false,
     "note": "Judgment call. It covers every listed range but never rejects: a blocked target resolves with a normal-looking report (grade F, CRITICAL finding) that describes the target as vulnerable, and a host that merely fails DNS now produces a CRITICAL SSRF finding, which changes unrelated behaviour. The issue asks to reject the target host."
+  },
+  "08e475cc0548ad31": {
+    "correct": true,
+    "note": "Resolves the host with dns.promises.lookup in runDastSiteScan before any request and throws for 127/8, ::1, 10/8, 172.16/12, 192.168/16 and 169.254/16. Probed on the pinned commit with http.request stubbed: 127.0.0.1, 127.0.0.2, 127.255.255.254, 10.1.2.3, 172.16.0.1, 172.31.255.1, 192.168.1.100, 169.254.169.254 and localhost all reject with no outbound request; 172.15.0.1, 172.32.0.1, 192.169.0.1, 11.0.0.1 and 8.8.8.8 still go through; bracketed [::1] rejects through a lookup failure. `tsc --noEmit` (the repo's lint script) passes. Also blocks fe80::, which the issue does not list but is harmless. Does not cover redirects, which the issue does not mention. Its message starts with a capital B ('Blocked request to internal IP address: ...'); the rc.23 t1 verifier test pinned /blocked/, so the engine rejected this correct repair."
+  },
+  "1230c4d67b97fa67": {
+    "correct": false,
+    "note": "Does not load: `await` sits inside the non-async inner function `execute`, so tsx/esbuild refuse to transform src/server/dastEngine.ts (TS1308 under tsc)."
+  },
+  "1eec87474e579a9f": {
+    "correct": false,
+    "note": "Does not load: `await` sits inside the non-async inner function `execute`, so tsx/esbuild refuse to transform src/server/dastEngine.ts (TS1308 under tsc)."
+  },
+  "2f95bfb87c92d852": {
+    "correct": false,
+    "note": "Does not load: `await` sits inside the non-async inner function `execute`, so tsx/esbuild refuse to transform src/server/dastEngine.ts (TS1308 under tsc)."
+  },
+  "59f16801e2958748": {
+    "correct": false,
+    "note": "Does not load: `await` sits inside the non-async inner function `execute`, so tsx/esbuild refuse to transform src/server/dastEngine.ts (TS1308 under tsc)."
+  },
+  "c26e87b87e053ca6": {
+    "correct": false,
+    "note": "Does not load: `await` sits inside the non-async inner function `execute`, so tsx/esbuild refuse to transform src/server/dastEngine.ts (TS1308 under tsc). It would also match only the single address 169.254.0.0 rather than 169.254.0.0/16."
+  },
+  "93e274cb3df4bf83": {
+    "correct": false,
+    "note": "Does not fix the bug: the checks throw inside a try block whose catch only logs a warning and carries on, so all 12 internal targets probed (127.0.0.1, 127.0.0.2, 10.1.2.3, 172.20.5.6, 192.168.1.100, 169.254.169.254, localhost and others) still reach the network."
+  },
+  "9f370250feb98887": {
+    "correct": false,
+    "note": "Judgment call. Behaviour is right: with http.request stubbed it rejected every listed range (127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, localhost) and let 172.15.0.1, 172.32.0.1, 192.169.0.1, 11.0.0.1 and 8.8.8.8 through. But it passes `hints: dns.ADDRCONFIG` to dns/promises, which has no such member, so `npm run lint` (tsc --noEmit) fails with TS2339 where the base commit passes. Labeled incorrect because it breaks the repo's own type check; flip `correct` to true if you judge that out of scope."
+  },
+  "c38fd1a7815e54a0": {
+    "correct": false,
+    "note": "Adds only an import of dns; nothing calls it, so the app still connects to 127.0.0.1 (ECONNREFUSED 127.0.0.1:80)."
   }
 }
