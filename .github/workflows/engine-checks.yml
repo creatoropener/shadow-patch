@@ -20,7 +20,7 @@ jobs:
           cache-dependency-path: requirements-patchproof.txt
 
       - name: Install PatchProof dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt pyyaml==6.0.3
+        run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt pyyaml==6.0.3 pytest==8.3.5
 
       - uses: actions/setup-node@v4
         with:
@@ -28,11 +28,11 @@ jobs:
 
       - name: Compile Python sources
         run: >-
-          python -m py_compile proof.py runtimes.py tools/export_target.py
+          python -m py_compile proof.py runtimes.py scope_policy.py tools/export_target.py tools/pr_files.py
           patchproof_runtime/typescript_check.py patchproof_runtime/typescript_source_check.py
 
       - name: Install pinned compiler for linter integration tests
-        run: npm install --prefix "$RUNNER_TEMP/patchproof-lint" --ignore-scripts --no-audit --no-fund typescript@5.6.3
+        run: npm install --prefix "$RUNNER_TEMP/patchproof-lint" --ignore-scripts --no-audit --no-fund typescript@5.6.3 @types/node@20.17.30 tsx@4.20.6
 
       - name: Run runtime contract tests
         run: TS_LINT_NODE_MODULES="$RUNNER_TEMP/patchproof-lint/node_modules" python -m unittest discover -s tests -v
@@ -41,5 +41,6 @@ jobs:
         run: |
           node --check patchproof_runtime/static_web_check.mjs
           node --check patchproof_runtime/typescript_test_lint.mjs
+          node --check patchproof_runtime/candidate_policy.mjs
           node --check patchproof_runtime/web_streams.mjs
           node --test tests/test_web_streams.mjs

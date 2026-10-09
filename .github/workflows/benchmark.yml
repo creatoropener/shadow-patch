@@ -9,20 +9,20 @@ on:
       engines:
         description: 'Engine tag(s) to benchmark, comma-separated, e.g. v0.6.0-rc.20 or v0.6.0-rc.19,v0.6.0-rc.20'
         required: true
-        default: v0.6.0-rc.20
+        default: v0.6.0-rc.25
       trials:
         description: 'Trials per case and engine (1 to 5)'
         required: true
-        default: '3'
+        default: '1'
       split:
         description: 'Which cases to run'
         type: choice
         options: [all, dev, heldout]
-        default: all
+        default: dev
       cases:
         description: 'Optional: only these case ids, comma-separated (blank = every case in the split)'
         required: false
-        default: ''
+        default: 'qrcrafts-1,file-sharing-app-1'
 
 permissions:
   contents: read
