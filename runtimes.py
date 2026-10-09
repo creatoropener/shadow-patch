@@ -6,7 +6,7 @@ import json
 import os
 import shlex
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import NamedTuple
 
@@ -590,7 +590,27 @@ def ungrounded_message_pins(content: str, issue_text: str) -> list[str]:
     """Error-message matchers in ``content`` whose wording the issue never contains."""
     issue = _normalize_words(issue_text)
     found: list[str] = []
-    for pin in _message_pins(content):
+    tokens = _js_tokens(content)
+    constants = {}
+    for i in range(len(tokens) - 4):
+        if (tokens[i].text == "const" and tokens[i + 1].kind == "word"
+                and tokens[i + 2].text == "=" and tokens[i + 3].kind in {"regex", "string", "template"}
+                and tokens[i + 4].text == ";"):
+            name = tokens[i + 1].text
+            # Do not guess shadowed or reassigned values. This covers simple
+            # immutable literal aliases; arbitrary data flow remains unsupported.
+            assignments = sum(1 for j, t in enumerate(tokens[:-1])
+                              if t.text == name and tokens[j + 1].text in {"=", ":"})
+            if assignments == 1:
+                constants[name] = tokens[i + 3].text
+    expanded = content
+    for i in range(len(tokens) - 1, -1, -1):
+        token = tokens[i]
+        if (token.kind == "word" and token.text in constants and i > 0
+                and tokens[i - 1].text not in {"const", "let", "var", "."}
+                and (i + 1 == len(tokens) or tokens[i + 1].text != ":")):
+            expanded = expanded[:token.start] + constants[token.text] + expanded[token.end:]
+    for pin in _message_pins(expanded):
         if all(fragment in issue for fragment in _pin_fragments(pin)):
             continue
         shown = f"/{pin.text}/" if pin.kind == "regex" else repr(pin.text)
@@ -784,14 +804,11 @@ class RuntimeAdapter:
                 existing_tests_dir.glob(f"*{self.test_suffix}")
             ):
                 prefix = "tests/"
-                # A leading dot keeps the file out of the project's own
-                # shell-expanded baseline glob (e.g. `tsx --test
-                # tests/*.test.ts`), which would otherwise sweep the hidden,
-                # still-failing pre-fix regression into the *baseline* run
-                # and corrupt "does the existing suite pass" -- while an
-                # explicit path (what regression_command always uses) still
-                # runs it directly regardless of the leading dot.
-                filename_prefix = "."
+                # Candidate baselines run before the hidden test is injected.
+                # The frozen filename must also be discoverable in the final PR.
+                filename_prefix = ""
+        if self.test_directory and self.id in {"node-typescript", "node-package", "python-pytest"}:
+            prefix = self.test_directory.rstrip("/") + "/"
         if self.test_suffix == ".py":
             return f"{prefix}{filename_prefix}test_patchproof_issue_{identifier}.py"
         return f"{prefix}{filename_prefix}test_patchproof_issue_{identifier}{self.test_suffix}"
@@ -820,11 +837,11 @@ class RuntimeAdapter:
                 if self.test_runtime == "pytest-playwright"
                 else ""
             )
-            return f"{prefix}python -m pytest -q {target}"
+            return f"{prefix}python /patchproof/pytest_check.py {target}"
         if self.id == "node-typescript":
             return (
                 f"python /patchproof/typescript_check.py {target} && "
-                "/opt/patchproof/node/node_modules/.bin/tsx "
+                "node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs "
                 f"--test --test-reporter=tap {target}"
             )
         return f"node --test --test-reporter=tap {target}"
@@ -848,6 +865,7 @@ class RuntimeAdapter:
         if self.id not in {"node-typescript", "node-package"}:
             return
         problems = unresolved_relative_imports(content, test_path, root)
+        problems = [p for p in problems if p["specifier"] != "./patchproof_helpers/web_streams.mjs"]
         if problems:
             raise ValueError(describe_unresolved_imports(problems, test_path))
 
@@ -892,15 +910,18 @@ class RuntimeAdapter:
             )
             if uses_web_streams:
                 required = (
-                    "file:///patchproof/web_streams.mjs",
                     "readableFromBytes(",
                     "collectBytes(",
                 )
                 missing = [marker for marker in required if marker not in content]
+                # Legacy fixtures remain readable; generation canonicalizes this
+                # import to the portable location before validation and freezing.
+                if not any(path in content for path in ("./patchproof_helpers/web_streams.mjs", "file:///patchproof/web_streams.mjs")):
+                    missing.append("./patchproof_helpers/web_streams.mjs")
                 if missing:
                     raise ValueError(
                         "Web Streams regressions must import and call readableFromBytes and "
-                        "collectBytes from file:///patchproof/web_streams.mjs; missing: "
+                        "collectBytes from ./patchproof_helpers/web_streams.mjs; missing: "
                         + ", ".join(missing)
                     )
                 if _missing_async_success_guard(content):
@@ -964,8 +985,8 @@ class RuntimeAdapter:
             return
         try:
             pinned = ungrounded_message_pins(content, issue_text)
-        except Exception:  # noqa: BLE001 - a heuristic must never abort a run; fail open
-            return
+        except Exception as error:  # noqa: BLE001 - unavailable evidence is not a pass
+            raise ValueError("Verifier wording check is unavailable; refusing to accept this test.") from error
         if pinned:
             raise ValueError(
                 "The regression test matches error wording the issue never states: "
@@ -1037,8 +1058,24 @@ class RuntimeAdapter:
                        for e in _go_events(output)) and "[build failed]" not in output
         if self.test_runtime == "node-test":
             return _node_assertion_failure(output)
-        return ("AssertionError" in output and bool(re.search(r"\d+ failed", output))
-                and not re.search(r"\d+ errors?", output))
+        evidence = pytest_evidence(output)
+        return bool(evidence and evidence.get("exit_code") == 1
+                    and evidence.get("assertions") and not evidence.get("errors"))
+
+
+def pytest_evidence(output: str) -> dict | None:
+    records = re.findall(r"^PATCHPROOF_PYTEST_EVIDENCE=(.+)$", output, re.MULTILINE)
+    if len(records) != 1:
+        return None
+    try:
+        data = json.loads(records[0])
+    except ValueError:
+        return None
+    if (not isinstance(data, dict) or data.get("schema") != 1
+            or not isinstance(data.get("assertions"), list)
+            or not isinstance(data.get("errors"), list)):
+        return None
+    return data
 
 
 # Message prefixes Node's assert module generates itself. Some assertion forms (for
@@ -1299,8 +1336,8 @@ def detect_runtime(root: Path) -> RuntimeAdapter:
         config = json.loads(config_path.read_text()) if config_path.is_file() else {}
     except (OSError, ValueError) as error:
         raise RuntimeDetectionError(f"Invalid patchproof.json: {error}") from error
-    if not isinstance(config, dict) or set(config) - {"runtime", "test_directory"}:
-        raise RuntimeDetectionError("patchproof.json accepts only runtime and test_directory.")
+    if not isinstance(config, dict) or set(config) - {"runtime", "test_directory", "scope"}:
+        raise RuntimeDetectionError("patchproof.json accepts only runtime, test_directory and scope.")
     requested = config.get("runtime")
     if requested is not None and not isinstance(requested, str):
         raise RuntimeDetectionError("runtime must be a string adapter ID.")
@@ -1326,7 +1363,7 @@ def detect_runtime(root: Path) -> RuntimeAdapter:
     adapter = _detect_script_runtime(root, requested)
     if requested is not None and requested != adapter.id:
         raise RuntimeDetectionError(f"Requested runtime {requested!r} does not match detected {adapter.id!r}.")
-    return adapter
+    return replace(adapter, test_directory=directory)
 
 
 def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeAdapter:
@@ -1400,7 +1437,7 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "modules the normal way, exactly as the application itself does. " +
                 _alias_guidance(root) +
                 "When the intended behavior is that an operation must be refused, assert it with "
-                "await assert.rejects(promise, /expected message/) or assert.throws(fn, /expected message/); "
+                "await assert.rejects(promise) or assert.throws(fn); only match wording stated in the issue; "
                 "never pass an object containing instanceOf. "
                 "Never invent a helper import or reimplement application logic; call the real "
                 "exported functions directly. Respect every declared TypeScript signature. If "
@@ -1421,7 +1458,7 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "fixture; escape it correctly instead. "
                 "For any Web Streams test, you MUST import "
                 "{ readableFromBytes, collectBytes } from "
-                "'file:///patchproof/web_streams.mjs' and use those helpers instead of "
+                "'./patchproof_helpers/web_streams.mjs' and use those portable helpers instead of "
                 "constructing or collecting streams yourself. Pipe application transforms "
                 "between them before collecting, for example: const output = await collectBytes("
                 "readableFromBytes(input, 512).pipeThrough(await makeFirstTransform())"

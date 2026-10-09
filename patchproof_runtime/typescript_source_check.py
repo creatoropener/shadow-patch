@@ -8,7 +8,7 @@ emit switched off. The engine calls it twice over a run:
 
   1. once on the unmodified repository, before any candidate is evaluated. Only when it
      passes can a later failure be blamed on a candidate rather than on the repository,
-     so a failing or unavailable result switches the candidate compile check off;
+     so a failing or unavailable result blocks this runtime profile;
   2. once per candidate after the candidate's repair is applied, before the hidden
      regression test is added. The hidden test is not in the working tree at that point,
      so nothing printed here can describe it.
@@ -30,46 +30,10 @@ import sys
 import tempfile
 
 
-def is_solution_style(tsconfig: Path) -> bool:
-    """A root tsconfig that only lists ``references`` checks nothing by itself.
-
-    Its compiler options live in the referenced configs, so extending it from a
-    temporary config would silently use compiler defaults. Declining to run is safer
-    than reporting diagnostics the project's own build would never produce.
-    """
-    try:
-        config = json.loads(tsconfig.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False
-    return (
-        isinstance(config, dict)
-        and bool(config.get("references"))
-        and not config.get("include")
-        and not config.get("files")
-    )
-
-
-def compiler_options(tsconfig: Path) -> dict[str, object]:
-    options: dict[str, object] = {
-        "composite": False,
-        "incremental": False,
-        "noEmit": True,
-        "noErrorTruncation": True,
-        "plugins": [],
-        "skipLibCheck": True,
-    }
-    # Same rule as typescript_check.py: a project that restricts "types" (a Vite project
-    # with ["vite/client"]) would otherwise lose @types/node, and with it `node:` modules
-    # such as dns, fs and http that application code imports.
-    try:
-        project_types = json.loads(tsconfig.read_text(encoding="utf-8")).get(
-            "compilerOptions", {}
-        ).get("types")
-    except (OSError, ValueError, AttributeError):
-        project_types = None
-    if isinstance(project_types, list):
-        options["types"] = list(dict.fromkeys([*project_types, "node"]))
-    return options
+try:
+    from .typescript_config import resolve_config, check_options
+except ImportError:
+    from typescript_config import resolve_config, check_options
 
 
 def main(argv: list[str]) -> int:
@@ -87,16 +51,10 @@ def main(argv: list[str]) -> int:
                 file=sys.stderr,
             )
             return 2
-    if is_solution_style(tsconfig):
-        print(
-            "PATCHPROOF_SOURCE_CHECK=unavailable: tsconfig.json only lists references",
-            file=sys.stderr,
-        )
-        return 2
-
-    config = {"extends": "./tsconfig.json", "compilerOptions": compiler_options(tsconfig)}
     config_path: Path | None = None
     try:
+        resolved = resolve_config(root)
+        config = {"extends": "./tsconfig.json", "compilerOptions": check_options(resolved)}
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", suffix=".json",
             prefix=".patchproof-source-tsconfig-", dir=root, delete=False,
@@ -117,6 +75,9 @@ def main(argv: list[str]) -> int:
         return 1
     except subprocess.TimeoutExpired:
         print("PATCHPROOF_SOURCE_CHECK=timed_out", file=sys.stderr)
+        return 2
+    except (ValueError, OSError) as error:
+        print(f"PATCHPROOF_SOURCE_CHECK=unavailable: {error}", file=sys.stderr)
         return 2
     finally:
         if config_path is not None:

@@ -135,7 +135,7 @@ class ResolutionTests(ProjectCase):
         root = self.legacy_project()
         self.assertEqual(
             unresolved_relative_imports(
-                LEGACY_TEST, "tests/.test_patchproof_issue_1.test.mjs", root
+                LEGACY_TEST, "tests/test_patchproof_issue_1.test.mjs", root
             ),
             [],
         )
@@ -144,7 +144,7 @@ class ResolutionTests(ProjectCase):
         root = self.legacy_project()
         problems = unresolved_relative_imports(
             "import a from './patchproof_runtime/typescript_module.mjs';\n",
-            "tests/.test_patchproof_issue_1.test.mjs", root,
+            "tests/test_patchproof_issue_1.test.mjs", root,
         )
         self.assertEqual(problems[0]["resolved"], "tests/patchproof_runtime/typescript_module.mjs")
         self.assertEqual(
@@ -177,7 +177,7 @@ class ResolutionTests(ProjectCase):
             "import f from '../src/esm/thing.mjs';\n"          # .mjs naming a .mts source
         )
         self.assertEqual(
-            unresolved_relative_imports(source, "tests/.test_patchproof_issue_1.test.ts", root), []
+            unresolved_relative_imports(source, "tests/test_patchproof_issue_1.test.ts", root), []
         )
 
     def test_missing_file_with_a_wrong_extension_is_reported(self) -> None:
@@ -209,7 +209,7 @@ class PlacementTests(ProjectCase):
         adapter = detect_runtime(root)
         self.assertEqual(adapter.id, "node-package")
         self.assertEqual(
-            adapter.test_path(1, root=root), "tests/.test_patchproof_issue_1.test.mjs"
+            adapter.test_path(1, root=root), "tests/test_patchproof_issue_1.test.mjs"
         )
 
     def test_node_package_keeps_root_placement_without_a_matching_tests_directory(self) -> None:
@@ -220,7 +220,7 @@ class PlacementTests(ProjectCase):
         self.assertEqual(adapter.test_path(1, root=root), "test_patchproof_issue_1.test.mjs")
         self.assertEqual(adapter.test_path(1), "test_patchproof_issue_1.test.mjs")
 
-    def test_dot_prefixed_file_is_outside_the_projects_own_glob(self) -> None:
+    def test_final_file_is_discovered_by_the_projects_own_glob(self) -> None:
         # The project's baseline is the shell glob `tests/*.test.mjs`; a leading dot
         # keeps the still-failing hidden regression out of it.
         import glob
@@ -228,7 +228,7 @@ class PlacementTests(ProjectCase):
         adapter = detect_runtime(root)
         write(root, adapter.test_path(1, root=root))
         matched = {Path(p).name for p in glob.glob(str(root / "tests" / "*.test.mjs"))}
-        self.assertEqual(matched, {"format-baseline.test.mjs"})
+        self.assertEqual(matched, {"format-baseline.test.mjs", "test_patchproof_issue_1.test.mjs"})
 
     def test_explicit_path_command_still_runs_the_dot_prefixed_file(self) -> None:
         root = self.legacy_project()
@@ -251,7 +251,7 @@ class AdapterValidationTests(ProjectCase):
                 LEGACY_TEST, "test_patchproof_issue_1.test.mjs", root
             )
         adapter.validate_generated_imports(
-            LEGACY_TEST, "tests/.test_patchproof_issue_1.test.mjs", root
+            LEGACY_TEST, "tests/test_patchproof_issue_1.test.mjs", root
         )
 
     def test_other_adapters_are_not_checked(self) -> None:

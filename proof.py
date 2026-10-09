@@ -18,6 +18,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
@@ -25,9 +26,10 @@ from typing import Any, Callable
 from runtimes import (
     RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports,
 )
+from scope_policy import load_scope, check_paths, node_payload
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.24"
+APP_VERSION = "0.6.0-rc.25"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -37,7 +39,9 @@ MAX_FILE_CHARS = 120_000
 PROTECTED_NAMES = {
     "proof.py",
     "runtimes.py",
+    "scope_policy.py",
     "apply_fix.py",
+    "pr_files.py",
     "test_proof.py",
     "test_runtimes.py",
     "test_integration.py",
@@ -118,6 +122,7 @@ def is_protected_path(path: Path) -> bool:
         path.name in PROTECTED_NAMES
         or is_test_path(path)
         or "patchproof_runtime" in path.parts
+        or "patchproof_helpers" in path.parts
         or ".github" in path.parts
         or ".git" in path.parts
         or path.name == "conftest.py"
@@ -151,11 +156,13 @@ def collect_repository_context(
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        if adapter.is_editable_source(relative) and not is_protected_path(relative):
+            allowed_source_paths.add(relative.as_posix())
         if len(content) > MAX_FILE_CHARS:
             continue
         block = f"\n### FILE: {relative.as_posix()}\n```\n{content}\n```\n"
         if total + len(block) > MAX_CONTEXT_CHARS:
-            break
+            continue
         sections.append(block)
         total += len(block)
         if adapter.is_editable_source(relative) and not is_protected_path(relative):
@@ -682,6 +689,8 @@ Do not use Markdown fences."""
             file=sys.stderr,
         )
         raise
+    # Canonicalize legacy helper imports before validation and before hashing.
+    test_content = test_content.replace("file:///patchproof/web_streams.mjs", "./patchproof_helpers/web_streams.mjs")
     try:
         adapter.validate_generated_test(test_content, test_path)
         # rc.24: reject a test that matches error wording the issue never states.
@@ -1094,6 +1103,10 @@ def validate_candidate(
             "Candidate contains no net source change. Return at least one edit "
             "whose old and new snippets differ; omit unchanged functions."
         )
+    try:
+        check_paths(root, changes, load_scope(root))
+    except ValueError as error:
+        raise PatchProofError(str(error)) from error
     return changes, summary.strip()
 
 
@@ -1232,12 +1245,11 @@ def source_check_feedback(output: str, patch: str) -> str:
 
 def run_candidate_source_check(
     state: Any, adapter: RuntimeAdapter, changes: list[dict[str, str]],
-) -> tuple[bool, str] | None:
+) -> tuple[bool | None, str] | None:
     """Type-check a candidate's changed TypeScript files; None when no check applies.
 
-    Returns (passed, output). A check that cannot run (compiler missing, timed out,
-    invalid path) counts as a pass: this gate may only ever add a correction round, it
-    must never reject a candidate for a tooling reason.
+    Returns (True/False/None, output) for passed/failed/unavailable. An unavailable
+    required check cannot make a candidate eligible.
     """
     command = adapter.source_check_command([change["path"] for change in changes])
     if command is None:
@@ -1246,8 +1258,36 @@ def run_candidate_source_check(
         shell=command, cwd="/workspace/repo", timeout=300, disposable=False,
     ).wait()
     output = text_output(result)
-    failed = result.exit_code == 1 and "PATCHPROOF_SOURCE_CHECK=failed" in output
-    return (not failed), (short_output(result) if failed else output[-1000:])
+    if result.exit_code == 0 and "PATCHPROOF_SOURCE_CHECK=passed" in output:
+        return True, output[-1000:]
+    if result.exit_code == 1 and "PATCHPROOF_SOURCE_CHECK=failed" in output:
+        return False, short_output(result)
+    return None, short_output(result)
+
+
+def support_files(test_path: str, content: str) -> list[dict[str, str]]:
+    if "/patchproof/" in content or "/opt/patchproof/" in content:
+        raise PatchProofError("Regression uses a sandbox-only dependency; use repository dependencies and portable relative imports.")
+    if "./patchproof_helpers/web_streams.mjs" not in content:
+        return []
+    helper_root = Path(__file__).resolve().parent / "patchproof_runtime"
+    return [{"path": (Path(test_path).parent / "patchproof_helpers" / name).as_posix(),
+             "content": (helper_root / name).read_text(encoding="utf-8")}
+            for name in ("web_streams.mjs", "web_streams.d.mts")]
+
+
+def candidate_policy_check(state: Any, root: Path, changes: list[dict], scope: dict) -> dict:
+    check_paths(root, changes, scope)
+    payload = node_payload(root, changes, scope)
+    if not payload["files"]:
+        return {"status": "passed", "scope": "explicit" if scope else "unrestricted"}
+    checked = state.apply_files(files={
+        "/patchproof/candidate-policy.json": json.dumps(payload).encode("utf-8"),
+    }).run(shell="node /patchproof/candidate_policy.mjs /patchproof/candidate-policy.json",
+           cwd="/workspace/repo", timeout=60, disposable=False).wait()
+    if checked.exit_code != 0 or "PATCHPROOF_CANDIDATE_POLICY=passed" not in text_output(checked):
+        raise PatchProofError("Candidate scope/interference check failed or unavailable: " + short_output(checked))
+    return {"status": "passed", "scope": "explicit" if scope else "unrestricted"}
 
 
 def sha256_text(value: str) -> str:
@@ -1304,6 +1344,7 @@ def sandbox_workspace(
                ("static_web_check.mjs", "web_streams.mjs",
                 "typescript_check.py", "typescript_test_lint.mjs",
                 "typescript_source_check.py", "typescript_runtime.d.ts",
+                "typescript_config.py", "candidate_policy.mjs", "pytest_check.py",
                 "junit_check.py", "java_check.py")}
     for helper in helpers.values():
         if not helper.is_file():
@@ -1381,13 +1422,20 @@ def unified_diff_text(root: Path, changes: list[dict[str, str]]) -> str:
     )
 
 
-def run_protected_tests(state: Any, test_path: str, command: str) -> Any:
+def run_protected_tests(state: Any, test_path: str, command: str,
+                        artifacts: list[dict[str, str]] | None = None) -> Any:
     protected_path = shlex.quote(test_path)
+    checks = " && ".join(
+        f"test \"$(sha256sum {shlex.quote(item['path'])} | cut -d' ' -f1)\" = {sha256_text(item['content'])}"
+        for item in (artifacts or [])
+    ) or "true"
     shell = f"""set +e
 before=$(sha256sum {protected_path} | cut -d' ' -f1)
 if [ -z "$before" ]; then exit 86; fi
+{checks} || exit 86
 {command}
 status=$?
+{checks} || exit 86
 after=$(sha256sum {protected_path} | cut -d' ' -f1)
 printf '\nPATCHPROOF_TEST_HASH_BEFORE=%s\nPATCHPROOF_TEST_HASH_AFTER=%s\n' "$before" "$after"
 if [ "$before" != "$after" ]; then exit 86; fi
@@ -1420,10 +1468,11 @@ def render_report(proof: dict[str, Any]) -> str:
         "",
         f"- {'✅' if regression.get('failed_before_fix') else '❌'} Bug reproduced by a verifier-created test before repair",
         f"- {'✅' if regression.get('protected') else '❌'} Regression test hash unchanged during reproduction",
-        f"- {'✅' if sandbox_branches >= 3 and all(c.get('test_protected') for c in candidates) else '❌'} Regression test hash unchanged in all candidate evaluations",
-        f"- {'✅' if sandbox_branches >= 3 else '❌'} Candidate sandbox branches evaluated: {sandbox_branches}",
+        f"- {'✅' if sandbox_branches > 0 and all(c.get('test_protected') for c in candidates if c.get('stage') == 'regression') else '❌'} Regression test hash unchanged in completed regression evaluations",
+        f"- {'✅' if sandbox_branches > 0 else '❌'} Candidate sandbox branches evaluated: {sandbox_branches}",
         f"- {'✅' if winner else '❌'} Winning candidate selected from passing branches",
         f"- {'✅' if replay.get('passed') else '❌'} Winner replayed from the clean base image",
+        f"- {'✅' if (regression.get('ordinary_ci') or {}).get('discovered') else '❌'} Frozen regression discovered by the ordinary target test command before repair",
         "",
         "## Run details",
         "",
@@ -1434,6 +1483,7 @@ def render_report(proof: dict[str, Any]) -> str:
         f"- Test runtime: `{proof.get('runtime', {}).get('test_runtime', '')}`",
         "- Passing-test counts for candidates/replay refer to the explicit regression run; the baseline suite must also pass.",
         f"- Regression test: `{regression.get('path', '')}`",
+        f"- Source scope: `{(proof.get('scope') or {}).get('status', 'not recorded')}`; protected symbols constrain edits, not all possible behavioral effects.",
     ]
     generations = regression.get("generation_attempts") or []
     if generations:
@@ -1547,6 +1597,21 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
     solver_context, allowed_paths = collect_repository_context(
         root, adapter, include_tests=True
     )
+    try:
+        scope = load_scope(root)
+    except ValueError as error:
+        raise PatchProofError(f"Invalid scope configuration: {error}") from error
+    proof["scope"] = {"policy": scope, "status": "explicit" if scope else "unrestricted",
+                      "limitation": "Declared source boundaries and existing tests; not a proof of all adjacent behavior."}
+    if scope:
+        scope_context = "\nREPAIR SCOPE (frozen before generation):\n" + json.dumps(scope, sort_keys=True)
+        solver_context += scope_context
+        verifier_context += scope_context + "\nInclude compatibility assertions for adjacent behavior described by the issue.\n"
+    if "allowed_paths" in scope:
+        missing = set(scope["allowed_paths"]) - allowed_paths
+        if missing:
+            raise PatchProofError("Scope lists non-editable or missing source files: " + ", ".join(sorted(missing)))
+        allowed_paths &= set(scope["allowed_paths"])
     # Both snapshots precede verifier generation. Existing tests are ordinary
     # repository context; the new hidden regression is never given to a solver.
     if not allowed_paths:
@@ -1605,6 +1670,25 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         }
         if baseline_suite.exit_code != 0:
             raise PatchProofError(f"Baseline command failed for runtime {adapter.id}.")
+
+        source_check_enabled = False
+        project_command = adapter.project_check_command()
+        if project_command is not None:
+            proof["stage"] = "baseline-source-check"
+            project_result = baseline_suite.run(
+                shell=project_command, cwd="/workspace/repo", timeout=300,
+                disposable=False,
+            ).wait()
+            project_output = text_output(project_result)
+            source_check_enabled = (project_result.exit_code == 0
+                                    and "PATCHPROOF_SOURCE_CHECK=passed" in project_output)
+            status = ("passed" if source_check_enabled else "failed" if project_result.exit_code == 1
+                      and "PATCHPROOF_SOURCE_CHECK=failed" in project_output else "unavailable")
+            proof["source_check"] = {"enabled": source_check_enabled, "status": status,
+                                     "command": project_command, "baseline_exit_code": project_result.exit_code,
+                                     "baseline_output": short_output(project_result)}
+            if not source_check_enabled:
+                raise PatchProofError(f"Required baseline TypeScript check is {status}.")
 
         # Do not spend an inference request until the selected image, dependency
         # bootstrap, runtime preflight, and existing baseline have all passed.
@@ -1665,11 +1749,17 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                 "pre_fix_exit_code": None, "pre_fix_image": None,
                 "pre_fix_output": "", "reproduction_classification": "test execution pending",
             })
-            verifier_state = apply_contents(
-                baseline_suite, [{"path": test_path, "content": test_content}],
-            )
+            helpers = support_files(test_path, test_content)
+            for helper in helpers:
+                target = root / helper["path"]
+                if not target.resolve().is_relative_to(root.resolve()) or (target.exists() and target.read_bytes() != helper["content"].encode("utf-8")):
+                    raise PatchProofError("Portable helper conflicts with the repository: " + helper["path"])
+            frozen_files = [{"path": test_path, "content": test_content}, *helpers]
+            proof["regression_test"]["support_files"] = [
+                {"path": item["path"], "sha256": sha256_text(item["content"])} for item in helpers]
+            verifier_state = apply_contents(baseline_suite, frozen_files)
             reproduction = run_protected_tests(
-                verifier_state, test_path, reproduction_command
+                verifier_state, test_path, reproduction_command, helpers
             )
             reproduction_output = text_output(reproduction)
             reproduced, protected, classification = classify_reproduction(
@@ -1707,6 +1797,21 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     "Verifier test integrity check failed; refusing to regenerate or continue."
                 )
             if reproduced:
+                # The ordinary target command must discover the exact frozen file.
+                # This check occurs before candidates, so a pass means delivery would
+                # silently omit the regression and must block export.
+                discovery = run_protected_tests(verifier_state, test_path, adapter.baseline_command, helpers)
+                discovered = discovery.exit_code == 1 and has_expected_test_hash(text_output(discovery), test_hash)
+                # For Python the ordinary command emits native pytest output; the
+                # explicit run above already supplies exception-type evidence.
+                if adapter.test_runtime not in {"pytest", "pytest-playwright"}:
+                    discovered = has_expected_test_hash(text_output(discovery), test_hash) and adapter.is_regression_failure(discovery.exit_code, text_output(discovery))
+                proof["regression_test"]["ordinary_ci"] = {
+                    "discovered": discovered, "command": adapter.baseline_command,
+                    "exit_code": discovery.exit_code, "output": short_output(discovery),
+                }
+                if not discovered:
+                    raise PatchProofError("Ordinary project CI did not reproduce the frozen regression. Configure test_directory/test discovery before PR delivery.")
                 break
             retry_feedback = reproduction_feedback(
                 test_content, classification, reproduction_output
@@ -1727,35 +1832,6 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         ] = []
         proof["stage"] = "candidate-evaluation"
 
-        # rc.24: a candidate that does not compile used to learn nothing. Seven of the nine
-        # heldout-1 repairs in the rc.23 run failed the repository's own type check: five put
-        # `await` inside a non-async function and four used `dns.ADDRCONFIG`, which
-        # dns/promises does not export (two did both). Each was rejected without a second
-        # chance. For TypeScript, type-check the project with the candidate applied, before
-        # the hidden regression is added, and allow the same single correction a failed
-        # baseline gets. The check is only enabled when the unmodified project passes it,
-        # so a failure can be blamed on the candidate and not on the repository.
-        source_check_enabled = False
-        project_command = adapter.project_check_command()
-        if project_command is not None:
-            proof["source_check"] = {"enabled": False, "command": project_command}
-            try:
-                project_result = baseline_suite.run(
-                    shell=project_command, cwd="/workspace/repo", timeout=300,
-                    disposable=False,
-                ).wait()
-                project_output = text_output(project_result)
-                source_check_enabled = (
-                    project_result.exit_code == 0
-                    and "PATCHPROOF_SOURCE_CHECK=passed" in project_output
-                )
-                proof["source_check"].update({
-                    "enabled": source_check_enabled,
-                    "baseline_exit_code": project_result.exit_code,
-                    "baseline_output": short_output(project_result, 1_000),
-                })
-            except Exception as check_error:  # noqa: BLE001 - tooling trouble only turns it off
-                proof["source_check"]["error"] = str(check_error)[:500]
         for index, (strategy, temperature) in enumerate(strategies, start=1):
             started = time.monotonic()
             candidate_record: dict[str, Any] = {
@@ -1788,6 +1864,8 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     # absent prevents broad baseline discovery (e.g. pytest) from
                     # exposing hidden assertions in the solver's retry feedback.
                     # Every attempt starts from the same original baseline state.
+                    candidate_record["stage"] = "scope-check"
+                    candidate_record["eligibility"] = candidate_policy_check(baseline_suite, root, changes, scope)
                     branch = apply_contents(baseline_suite, changes)
                     baseline_result = branch.run(
                         shell=adapter.baseline_command, cwd="/workspace/repo",
@@ -1822,8 +1900,12 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                             break
                         candidate_record.setdefault("source_check_attempts", []).append({
                             "attempt": baseline_attempt, "passed": source_check[0],
+                            "status": "unavailable" if source_check[0] is None else "passed" if source_check[0] else "failed",
                             **({} if source_check[0] else {"output": source_check[1]}),
                         })
+                        if source_check[0] is None:
+                            candidate_record["stage"] = "source-check-unavailable"
+                            raise PatchProofError("Required candidate TypeScript check is unavailable: " + source_check[1])
                         if source_check[0]:
                             break
                         candidate_record["stage"] = "source-check"
@@ -1854,10 +1936,10 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                 # The baseline passed. Evaluate the frozen regression exactly once
                 # for this candidate; no solver retry is allowed after this point.
                 candidate_with_test = apply_contents(
-                    baseline_result, [{"path": test_path, "content": test_content}]
+                    baseline_result, frozen_files
                 )
                 result = run_protected_tests(
-                    candidate_with_test, test_path, adapter.regression_command(test_path)
+                    candidate_with_test, test_path, adapter.regression_command(test_path), helpers + changes
                 )
                 output = text_output(result)
                 protected = has_expected_test_hash(output, test_hash)
@@ -1894,12 +1976,9 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         evaluated_branches = sum(
             1 for candidate in proof["candidates"] if "image" in candidate
         )
-        if evaluated_branches < len(strategies):
-            raise PatchProofError(
-                f"Only {evaluated_branches} of {len(strategies)} candidates "
-                f"completed isolated Sandbox evaluation; {len(passing)} passed both "
-                "the baseline and hidden regression. See individual candidate errors."
-            )
+        proof["race"] = {"planned": len(strategies), "attempted": len(proof["candidates"]),
+                         "evaluated": evaluated_branches, "passing": len(passing),
+                         "policy": "any eligible passing candidate may enter clean replay"}
         if not passing:
             raise PatchProofError("All candidate repairs were rejected.")
 
@@ -1915,11 +1994,11 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         proof["stage"] = "clean-replay"
         clean = sandbox_workspace(base_image, archive_path, adapter, root)
         clean_with_test = apply_contents(
-            clean, [{"path": test_path, "content": test_content}]
+            clean, frozen_files
         )
         clean_with_winner = apply_contents(clean_with_test, winner_changes)
         replay_command = adapter.full_command(test_path)
-        replay = run_protected_tests(clean_with_winner, test_path, replay_command)
+        replay = run_protected_tests(clean_with_winner, test_path, replay_command, helpers + winner_changes)
         replay_output = text_output(replay)
         replay_protected = has_expected_test_hash(replay_output, test_hash)
         replay_passed = replay.exit_code == 0 and replay_protected and (adapter.passed_count(replay_output) or 0) > 0
@@ -1936,10 +2015,11 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             raise PatchProofError("Winning repair failed clean-room replay.")
 
         # The GitHub workspace changes only after independent replay passes.
-        (root / test_path).parent.mkdir(parents=True, exist_ok=True)
-        (root / test_path).write_text(test_content, encoding="utf-8")
-        for change in winner_changes:
+        delivered = frozen_files + winner_changes
+        proof["pr_files"] = [{"path": item["path"], "sha256": sha256_text(item["content"])} for item in delivered]
+        for change in delivered:
             destination = root / change["path"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(change["content"], encoding="utf-8")
 
     proof["stage"] = "completed"
@@ -1965,6 +2045,7 @@ def main(argv: list[str] | None = None) -> int:
     proof: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "app_version": APP_VERSION,
+        "run_id": os.environ.get("PATCHPROOF_RUN_ID") or uuid.uuid4().hex,
         "verdict": "rejected",
         "candidates": [],
     }
@@ -1979,7 +2060,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as error:  # noqa: BLE001 - always persist rejection evidence
         blocked_stages = {
             "configuration", "runtime-detection", "repository-analysis",
-            "runtime-preflight", "baseline",
+            "runtime-preflight", "baseline", "baseline-source-check",
         }
         proof["verdict"] = (
             "blocked" if proof.get("stage") in blocked_stages else "rejected"

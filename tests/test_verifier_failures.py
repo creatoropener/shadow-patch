@@ -224,7 +224,7 @@ class GenerationDiagnosticLoggingTests(unittest.TestCase):
             logged = buffer.getvalue()
             self.assertIn("Verifier test_content rejected", logged)
             self.assertIn(bad_source[:50], logged)
-            self.assertEqual(raised.exception.rejected_content, bad_source)
+            self.assertEqual(raised.exception.rejected_content, bad_source.replace("file:///patchproof/web_streams.mjs", "./patchproof_helpers/web_streams.mjs"))
 
 
 class NemotronFamilyDetectionTests(unittest.TestCase):

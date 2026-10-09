@@ -140,11 +140,10 @@ class RetryLoopTests(unittest.TestCase):
         # aborts the race: all 3 strategies get an independent, isolated attempt instead
         # of the old first-InferenceError-wins short circuit. calls stays 2 (the duplicate
         # at reproduction_attempt=2 is still correctly skipped); candidates rises to 3.
-        self.assertEqual((calls, candidates), (2, 3))
+        self.assertEqual((calls, candidates), (3, 3))  # two unique tests plus ordinary CI discovery
         self.assertEqual(
             error,
-            "Only 0 of 3 candidates completed isolated Sandbox evaluation; 0 passed both "
-            "the baseline and hidden regression. See individual candidate errors.",
+            "All candidate repairs were rejected.",
         )
         regression = report['regression_test']
         self.assertEqual(len(regression['attempts']), 2)

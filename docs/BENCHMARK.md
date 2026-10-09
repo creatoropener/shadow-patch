@@ -77,7 +77,7 @@ checkout's `patchproof.json` just before each trial:
 "patchproof_config": { "runtime": "node-typescript" }
 ```
 
-- It accepts the same two keys the engine does, `runtime` and `test_directory`.
+- It accepts `runtime`, `test_directory`, and `scope`. The current file-sharing case protects `formatEta` and limits edits to `lib/utils/format.ts`. Older engines may not understand `scope`; compare using an explicitly versioned compatible protocol.
 - The file is **replaced, not merged**; `{}` removes the pin so the engine auto-detects.
 - Each trial's `meta.json` records the object and the hash of the file it replaced, and
   the report's "Read before quoting" section names every case that used one.
@@ -94,7 +94,7 @@ checkout's `patchproof.json` just before each trial:
   This is the only set that says anything about new issues.
 
 Rules that keep it honest: decide the case list and splits before the first run;
-never move a case between splits after seeing results; if a held-out case is used
+preserve historical split membership in the original protocol; if a held-out case is used
 to fix something, it becomes dev and needs a replacement; prefer at least one
 repository the engine has never run on.
 
@@ -102,13 +102,11 @@ repository the engine has never run on.
 
 Actions → **Benchmark** → *Run workflow*.
 
-1. **Smoke test first:** engines `v0.6.0-rc.20`, trials `1`, cases `file-sharing-app-1`.
-   Confirms secrets, checkout and reporting work before you spend a full run.
-2. **Full run:** engines `v0.6.0-rc.20`, trials `3`, split `all`.
-3. **Compare versions:** engines `v0.6.0-rc.19,v0.6.0-rc.20`. Both run on identical
-   cases, interleaved, in one report. Older tags must accept `--issue-title` and
-   `--issue-body` (rc.19 and later do).
-   For rc.21 use `v0.6.0-rc.20,v0.6.0-rc.21`. `file-sharing-app-1` is the case that motivated rc.21, so it can show the fix works there but not that rc.21 is better in general; `qrcrafts-1` shows whether anything that worked before still does.
+1. **After publishing the reviewed rc.25 tag:** engines `v0.6.0-rc.25`, trials `1`, split `dev`, cases `qrcrafts-1,file-sharing-app-1`.
+2. Inspect every proof and proposed diff before increasing the budget.
+3. The two new held-out placeholders are unselected. Do not select `all` or `heldout` until an independent set, reference repairs and oracles are validated, then freeze a separate protocol. Current rc.25 development cases do not measure generalization.
+
+The supplied rc.24 manifest is preserved byte-for-byte at `bench/protocols/rc24-as-supplied.json`; `development-v2.json` records the new development protocol. rc.20/rc.21 result tables below remain historical evidence. Each new trial stores its manifest, case, issue body, engine commit, run id, exit status and proof digest. Reports refuse to pool different protocol/manifest snapshots.
 
 A trial takes about as long as a normal `shadow-fix` run. Two run at a time.
 
@@ -118,7 +116,7 @@ The run page shows the summary table. The **report** artifact holds `results.md`
 `results.json` and `labels-needed.md`; each `trial-…` artifact holds that trial's
 `proof.json`, engine logs and metadata.
 
-Rates use only non-infra trials and come with a 95% interval. With a handful of
+Reports show operational success over all attempts, plus conditional non-infra rates with a 95% interval. With a handful of
 issues the interval is wide and trials of one issue are not independent evidence:
 treat the numbers as worked examples, not statistics.
 
@@ -129,16 +127,16 @@ distinct candidate diff once. Judge each against the issue text alone, then add 
 `bench/labels/<case>.json`:
 
 ```json
-{ "0123456789abcdef": { "correct": true, "note": "escapes all five characters" } }
+{ "<full 64-character exact UTF-8 patch SHA-256>": { "correct": true, "case_sha256": "<from trial meta.json>", "note": "escapes all five characters and respects scope" } }
 ```
 
-Re-running the report is not required to add labels; the next run picks them up.
+Re-run the report to apply new labels. Legacy 16-character normalized hashes are retained as historical records but are not used for new exact hashes. Do not pad or truncate hashes to migrate labels; review the original patch bytes and case snapshot, then label the exact new digest.
 
 **Oracle (automatic, optional).** Give a case an `oracle` in the manifest: a reference
 test file you commit under `bench/oracles/`, the path to copy it to, and the command
 that runs it. The workflow applies every distinct candidate diff to a clean checkout,
 runs the command, and records pass or fail. An oracle that already passes on the
-unfixed commit is reported as invalid and ignored. Oracles currently run on the
+unfixed commit is reported as invalid and ignored. The unfixed run must produce recognized assertion evidence, and a separately supplied known-correct reference patch must pass with a positive test count before any candidate can be judged. Runtime/import crashes do not validate an oracle. Oracles currently run on the
 standard Ubuntu runner with Node 20 and Python 3.12.
 
 ```json
@@ -146,7 +144,9 @@ standard Ubuntu runner with Node 20 and Python 3.12.
   "setup": "npm ci",
   "test_file": "bench/oracles/qrcrafts-1.test.ts",
   "dest": "tests/bench_oracle.test.ts",
-  "command": "npx tsx --test tests/bench_oracle.test.ts"
+  "command": "node --import tsx --test --test-reporter=tap tests/bench_oracle.test.ts",
+  "failure_evidence": "node-test",
+  "reference_patch": "bench/oracles/qrcrafts-1.reference.diff"
 }
 ```
 
@@ -162,7 +162,7 @@ When both exist, the oracle wins and the label fills any gap.
 
 ## Recorded results (October 2026)
 
-Engine versions: v0.6.0-rc.20 and v0.6.0-rc.21 (rc.21 is the frozen release).
+Engine versions: v0.6.0-rc.20 and v0.6.0-rc.21 (historical frozen evaluation, not the current engine).
 Model for every trial: `nvidia/nemotron-3-super-120b-a12b`. Three trials per case
 and engine. Trials of one case are not independent. Intervals are 95% Wilson.
 Labels are hand-judged against the issue text and stored in `bench/labels/`; they are

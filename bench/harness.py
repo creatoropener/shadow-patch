@@ -24,10 +24,14 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scope_policy import validate_scope
+from runtimes import _node_assertion_failure, pytest_evidence
 MANIFEST_PATH = ROOT / "bench" / "manifest.json"
 LABELS_DIR = ROOT / "bench" / "labels"
 SPLITS = ("dev", "heldout")
@@ -40,7 +44,7 @@ ENGINE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$")
 PLACEHOLDER = re.compile(r"TODO|<<|>>")
 RUNTIME_ID = re.compile(r"^[a-z][a-z0-9-]*$")
 # Keys the engine itself accepts in patchproof.json (runtimes.detect_runtime).
-CONFIG_KEYS = frozenset({"runtime", "test_directory"})
+CONFIG_KEYS = frozenset({"runtime", "test_directory", "scope"})
 
 # Trial outcomes. Only `infra` is excluded from rates, and it is always shown.
 INFRA = "infra"
@@ -94,7 +98,11 @@ def config_problems(config: Any) -> list[str]:
     out: list[str] = []
     extra = sorted(str(key) for key in set(config) - CONFIG_KEYS)
     if extra:
-        out.append("patchproof_config accepts only runtime and test_directory, not " + ", ".join(extra))
+        out.append("patchproof_config accepts only runtime, test_directory and scope, not " + ", ".join(extra))
+    try:
+        validate_scope(config.get("scope"))
+    except ValueError as error:
+        out.append(str(error))
     if "runtime" in config and not (isinstance(config["runtime"], str) and RUNTIME_ID.match(config["runtime"])):
         out.append("patchproof_config.runtime must be an adapter id such as node-typescript")
     if "test_directory" in config:
@@ -158,15 +166,20 @@ def case_problems(case: Any, root: Path = ROOT, *, ready: bool) -> list[str]:
         if not isinstance(oracle, dict):
             bad("oracle must be an object or null")
         else:
-            for key in ("test_file", "dest", "command"):
+            for key in ("test_file", "dest", "command", "reference_patch"):
                 if not isinstance(oracle.get(key), str) or not oracle[key].strip():
                     bad(f"oracle.{key} is missing")
-            for key in ("test_file", "dest"):
+            for key in ("test_file", "dest", "reference_patch"):
                 if isinstance(oracle.get(key), str) and not _safe_relative(oracle[key]):
                     bad(f"oracle.{key} must be a relative path without ..")
             test_file = oracle.get("test_file")
             if _safe_relative(test_file) and not (root / test_file).is_file():
                 bad(f"oracle test file {test_file} does not exist")
+            reference = oracle.get("reference_patch")
+            if _safe_relative(reference) and not (root / reference).is_file():
+                bad(f"oracle reference_patch {reference} does not exist")
+            if oracle.get("failure_evidence") not in {"node-test", "pytest"}:
+                bad("oracle.failure_evidence must be node-test or pytest (structured runner evidence)")
     return out
 
 
@@ -226,6 +239,8 @@ def build_plan(manifest: dict[str, Any], *, engines: list[str], trials: int, spl
     if not 1 <= trials <= MAX_TRIALS:
         raise BenchError(f"trials must be between 1 and {MAX_TRIALS}.")
     chosen = select_cases(manifest, split, ids)
+    if any(c["split"] == "heldout" for c in chosen) and manifest.get("protocol_status", "frozen") != "frozen":
+        raise BenchError("Unseen protocol is not frozen; select dev cases until independent cases and oracles are validated.")
     problems = validate_manifest(manifest, root, ready_ids={case["id"] for case in chosen})
     if problems:
         raise BenchError("Manifest is not ready to run:\n- " + "\n- ".join(problems))
@@ -280,11 +295,23 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
               root: Path = ROOT, environ: dict[str, str] | None = None) -> dict[str, Any]:
     """Run one engine once on one case. Engine failure is data, not an error."""
     out.mkdir(parents=True, exist_ok=True)
+    if (out / "meta.json").exists():
+        raise BenchError("Trial output already contains a run; choose a new output directory.")
+    run_id = uuid.uuid4().hex
+    # A failed process cannot inherit evidence from a previous invocation.
+    for name in ("proof.json", "verification-report.md"):
+        prior = subject / name
+        if prior.exists():
+            (out / "previous").mkdir(exist_ok=True)
+            shutil.copyfile(prior, out / "previous" / name)
+            prior.unlink()
+        (out / name).unlink(missing_ok=True)
     issue = case["issue"]
     body = read_body(case, root)
     override = apply_patchproof_config(subject, case)
     env = dict(os.environ if environ is None else environ)
     env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    env["PATCHPROOF_RUN_ID"] = run_id
     command = [sys.executable, str(engine_dir / "proof.py"), "--repo", str(subject),
                f"--issue-number={issue['number']}", f"--issue-title={issue['title']}",
                f"--issue-body={body}"]   # `=` form: a body starting with "-" is still a value
@@ -305,6 +332,7 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
         if (subject / name).is_file():
             shutil.copyfile(subject / name, out / name)
     meta = {
+        "evidence_version": 2, "run_id": run_id, "diff_identity": "sha256-utf8-exact-v1",
         "case": case["id"], "split": case["split"], "trial": trial,
         "engine_ref": engine_ref, "repo": case["repo"], "base_commit": case["base_commit"],
         "issue_number": issue["number"], "issue_title": issue["title"],
@@ -313,7 +341,16 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
         "model": env.get("NEBIUS_MODEL", ""), "max_tokens": env.get("NEBIUS_MAX_TOKENS", ""),
         "exit_code": exit_code, "timed_out": timed_out, "elapsed_seconds": elapsed,
         "has_proof": (out / "proof.json").is_file(),
+        "proof_sha256": hashlib.sha256((out / "proof.json").read_bytes()).hexdigest() if (out / "proof.json").is_file() else None,
+        "protocol_id": load_manifest(root / "bench/manifest.json").get("protocol_id", "legacy"),
+        "case_sha256": case_identity(case, root),
     }
+    (out / "case.json").write_text(json.dumps(case, indent=2) + "\n", encoding="utf-8")
+    shutil.copyfile(root / "bench/manifest.json", out / "manifest.json")
+    (out / "issue.md").write_bytes(body.encode("utf-8"))
+    resolved = subprocess.run(["git", "-C", str(engine_dir), "rev-parse", "HEAD"],
+                              capture_output=True, text=True, check=False)
+    meta["engine_commit"] = resolved.stdout.strip() if resolved.returncode == 0 else None
     if override:
         meta.update(override)
     (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
@@ -325,22 +362,30 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
 # --------------------------------------------------------------------------- #
 
 def diff_hash(diff: str) -> str:
-    """Stable id for a candidate diff; ignores line endings and trailing spaces."""
-    lines = diff.replace("\r\n", "\n").split("\n")
-    normalized = "\n".join(line.rstrip() for line in lines).strip()
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+    """Full SHA-256 of exact UTF-8 patch bytes, including whitespace and endings."""
+    return hashlib.sha256(diff.encode("utf-8")).hexdigest()
+
+
+def case_identity(case: dict, root: Path) -> str:
+    snapshot = {key: case.get(key) for key in ("id", "repo", "base_commit", "issue", "patchproof_config", "oracle")}
+    snapshot["issue_body_sha256"] = hashlib.sha256(read_body(case, root).encode("utf-8")).hexdigest()
+    oracle = case.get("oracle") or {}
+    for key in ("test_file", "reference_patch"):
+        if oracle.get(key) and (root / oracle[key]).is_file():
+            snapshot[key + "_sha256"] = hashlib.sha256((root / oracle[key]).read_bytes()).hexdigest()
+    return diff_hash(json.dumps(snapshot, sort_keys=True))
 
 
 def split_diff(diff: str) -> list[tuple[str, str]]:
     """Split the engine's combined difflib output into (path, patch) sections."""
     sections: list[tuple[str, list[str]]] = []
-    lines = diff.replace("\r\n", "\n").split("\n")
+    lines = diff.splitlines(keepends=True)
     for index, line in enumerate(lines):
         if line.startswith("--- ") and index + 1 < len(lines) and lines[index + 1].startswith("+++ "):
             sections.append((line[4:].split("\t")[0].strip(), []))
         if sections:
             sections[-1][1].append(line)
-    return [(path, "\n".join(body).rstrip("\n") + "\n") for path, body in sections]
+    return [(path, "".join(body)) for path, body in sections]
 
 
 def apply_diff(checkout: Path, diff: str) -> tuple[bool, str]:
@@ -386,7 +431,7 @@ def evaluate_diff(checkout: Path, oracle: dict[str, Any], diff: str, *,
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / oracle["test_file"], destination)
         code, output = _shell(oracle["command"], checkout, timeout)
-        return {"passed": code == 0, "detail": output.strip()[-400:]}
+        return {"passed": oracle_passed(oracle, code, output), "exit_code": code, "detail": output.strip()[-2000:]}
     finally:
         reset_checkout(checkout)
 
@@ -397,7 +442,20 @@ def collect_results(results_dir: Path) -> list[dict[str, Any]]:
     for meta_path in sorted(results_dir.rglob("meta.json")):
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         proof_path = meta_path.parent / "proof.json"
-        proof = json.loads(proof_path.read_text(encoding="utf-8")) if proof_path.is_file() else None
+        try:
+            proof = json.loads(proof_path.read_text(encoding="utf-8")) if proof_path.is_file() else None
+        except (ValueError, OSError):
+            proof = None
+            meta["evidence_error"] = "proof.json is unreadable"
+        if proof is not None and not isinstance(proof, dict):
+            proof = None
+            meta["evidence_error"] = "proof.json is not an object"
+        if meta.get("evidence_version") == 2 and proof is not None:
+            actual = hashlib.sha256(proof_path.read_bytes()).hexdigest()
+            if actual != meta.get("proof_sha256"):
+                meta["evidence_error"] = "proof digest does not match this trial"
+            if proof.get("run_id") is not None and proof["run_id"] != meta.get("run_id"):
+                meta["evidence_error"] = "proof run_id does not match this trial"
         trials.append({"meta": meta, "proof": proof, "dir": str(meta_path.parent)})
     return trials
 
@@ -418,6 +476,11 @@ def run_oracle(case: dict[str, Any], results_dir: Path, checkout: Path, *,
             for _, diff in candidate_diffs(trial["proof"]):
                 diffs.setdefault(diff_hash(diff), diff)
     result: dict[str, Any] = {"case": case["id"], "valid": True, "diffs": {}}
+    result["case_sha256"] = case_identity(case, root)
+    reference = oracle.get("reference_patch")
+    if (not _safe_relative(reference) or not (root / reference).is_file()
+            or oracle.get("failure_evidence") not in {"node-test", "pytest"}):
+        return {**result, "valid": False, "reason": "oracle needs a reference_patch and structured failure_evidence"}
     timeout = int(oracle.get("timeout_seconds", 300))
     if oracle.get("setup"):
         code, output = _shell(oracle["setup"], checkout, int(oracle.get("setup_timeout_seconds", 900)))
@@ -433,10 +496,37 @@ def run_oracle(case: dict[str, Any], results_dir: Path, checkout: Path, *,
     if code == 0:
         return {**result, "valid": False,
                 "reason": "the reference test passes on the unfixed base commit, so it cannot tell fixes apart"}
+    if not oracle_assertion(oracle, code, output):
+        return {**result, "valid": False, "reason": "unfixed base did not produce a recognized assertion failure",
+                "base_output": output[-2000:]}
     result["base_output"] = output.strip()[-300:]
+    reference_result = evaluate_diff(checkout, oracle, (root / reference).read_bytes().decode("utf-8"), root=root)
+    result["reference"] = reference_result
+    if reference_result["passed"] is not True:
+        return {**result, "valid": False, "reason": "known-correct reference repair did not pass the oracle"}
     for digest, diff in sorted(diffs.items()):
         result["diffs"][digest] = evaluate_diff(checkout, oracle, diff, root=root)
     return result
+
+
+def oracle_assertion(oracle: dict, code: int, output: str) -> bool:
+    if code != 1:
+        return False
+    if oracle.get("failure_evidence") == "node-test":
+        return _node_assertion_failure(output)
+    data = pytest_evidence(output)
+    return bool(data and data["assertions"] and not data["errors"] and data.get("exit_code") == 1)
+
+
+def oracle_passed(oracle: dict, code: int, output: str) -> bool:
+    if code != 0:
+        return False
+    if oracle.get("failure_evidence") == "node-test":
+        counts = re.findall(r"^# pass\s+(\d+)\s*$", output, re.MULTILINE)
+        return bool(counts and int(counts[-1]) > 0)
+    data = pytest_evidence(output)
+    return bool(data and data.get("exit_code") == 0 and data.get("passed", 0) > 0
+                and not data["assertions"] and not data["errors"])
 
 
 def load_labels(case_id: str, labels_dir: Path = LABELS_DIR) -> dict[str, dict[str, Any]]:
@@ -467,6 +557,17 @@ def make_judge(case_id: str, oracle_result: dict[str, Any] | None,
     return judge
 
 
+def trial_judge(meta: dict, oracle_results: dict, labels_dir: Path):
+    oracle = oracle_results.get(meta["case"])
+    if meta.get("evidence_version") == 2 and oracle and oracle.get("case_sha256") != meta.get("case_sha256"):
+        oracle = None
+    labels = load_labels(meta["case"], labels_dir)
+    if meta.get("evidence_version") == 2:
+        labels = {digest: item for digest, item in labels.items()
+                  if item.get("case_sha256") == meta.get("case_sha256")}
+    return make_judge(meta["case"], oracle, labels)
+
+
 # --------------------------------------------------------------------------- #
 # Classification and statistics
 # --------------------------------------------------------------------------- #
@@ -476,6 +577,8 @@ def classify_trial(meta: dict[str, Any], proof: dict[str, Any] | None,
     """(outcome, reason) for one trial. Never guesses: unknown stays unlabeled."""
     if meta.get("timed_out"):
         return INFRA, "engine hit the time limit"
+    if meta.get("evidence_error"):
+        return INFRA, meta["evidence_error"]
     if proof is None:
         return INFRA, "no proof.json was produced"
     verdict = proof.get("verdict")
@@ -487,6 +590,8 @@ def classify_trial(meta: dict[str, Any], proof: dict[str, Any] | None,
         return INFRA, f"inference failure: {error[:140]}"
     candidates = proof.get("candidates") or []
     if verdict == "verified":
+        if meta.get("exit_code", None if meta.get("evidence_version") == 2 else 0) != 0:
+            return INFRA, "verified proof conflicts with unsuccessful engine exit"
         winner = (proof.get("winner") or {}).get("candidate")
         chosen = next((c for c in candidates if c.get("candidate") == winner), None)
         if not chosen or not chosen.get("diff"):
@@ -533,6 +638,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     success = counts[TRUE_ACCEPT]
     return {
         "trials": total, "infra": counts[INFRA], "effective": effective, "counts": counts,
+        "operational_success_rate": success / total if total else None,
+        "distinct_cases": len({r.get("case") for r in rows if r.get("case")}),
         "end_to_end_success": success,
         "end_to_end_upper": success + counts[VERIFIED_UNLABELED],
         "end_to_end_ci": wilson(success, effective),
@@ -542,18 +649,15 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_rows(trials: list[dict[str, Any]], manifest: dict[str, Any],
                oracle_results: dict[str, dict[str, Any]], labels_dir: Path) -> list[dict[str, Any]]:
-    cases = {case["id"]: case for case in manifest["cases"]}
-    judges: dict[str, Callable[[str], tuple[bool | None, str]]] = {}
     rows = []
     for trial in trials:
         meta, proof = trial["meta"], trial["proof"]
         case_id = meta["case"]
-        if case_id not in judges:
-            judges[case_id] = make_judge(case_id, oracle_results.get(case_id), load_labels(case_id, labels_dir))
-        outcome, reason = classify_trial(meta, proof, judges[case_id])
+        outcome, reason = classify_trial(meta, proof, trial_judge(meta, oracle_results, labels_dir))
         rows.append({
             "engine": meta["engine_ref"], "app_version": (proof or {}).get("app_version", ""),
-            "case": case_id, "split": cases.get(case_id, {}).get("split", meta.get("split", "?")),
+            "case": case_id, "split": meta.get("split", "unknown"),
+            "protocol_id": meta.get("protocol_id", "legacy:" + meta.get("manifest_sha256", "unknown")),
             "trial": meta["trial"], "outcome": outcome, "reason": reason,
             "stage": (proof or {}).get("stage", ""), "verdict": (proof or {}).get("verdict", ""),
             "elapsed_seconds": meta.get("elapsed_seconds"),
@@ -571,12 +675,13 @@ def labels_needed(trials: list[dict[str, Any]], manifest: dict[str, Any],
     pending: dict[tuple[str, str], dict[str, Any]] = {}
     for trial in trials:
         meta = trial["meta"]
-        judge = make_judge(meta["case"], oracle_results.get(meta["case"]), load_labels(meta["case"], labels_dir))
+        judge = trial_judge(meta, oracle_results, labels_dir)
         for number, diff in candidate_diffs(trial["proof"]):
             digest = diff_hash(diff)
             if judge(digest)[0] is None:
                 entry = pending.setdefault((meta["case"], digest), {
-                    "case": meta["case"], "hash": digest, "diff": diff, "seen": []})
+                    "case": meta["case"], "case_sha256": meta.get("case_sha256"),
+                    "hash": digest, "diff": diff, "seen": []})
                 entry["seen"].append(f"{meta['engine_ref']} t{meta['trial']} c{number}")
     return sorted(pending.values(), key=lambda e: (e["case"], e["hash"]))
 
@@ -591,6 +696,9 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
     out.append(f"- Manifest sha256: `{meta_summary['manifest_sha256'][:16]}`; "
                f"models seen: {', '.join(meta_summary['models']) or 'unknown'}")
     out.append(f"- Engines: {', '.join(meta_summary['engines'])}; trials recorded: {len(rows)}")
+    out.append(f"- Protocol: `{meta_summary.get('protocol_id', 'legacy')}`. Split membership comes from each trial snapshot.")
+    operational = summarize(rows)
+    out.append(f"- Operational success (all attempts, including infrastructure failures): {operational['end_to_end_success']}/{operational['trials']}.")
     out.append("")
     out.append("## Summary")
     out.append("")
@@ -661,9 +769,10 @@ def render_labels_needed(needed: list[dict[str, Any]]) -> str:
     out = ["# Labels needed", "",
            "Each block is a distinct candidate diff. Judge it against the issue text only: does it make the "
            "reported behavior correct without breaking anything else? Then add its hash to "
-           "`bench/labels/<case>.json` as `{\"correct\": true|false, \"note\": \"...\"}`.", ""]
+           "`bench/labels/<case>.json` as `{\"correct\": true|false, \"case_sha256\": \"<case digest below>\", \"note\": \"...\"}`. "
+           "Use the full exact patch hash; legacy normalized labels are not reused.", ""]
     for item in needed:
-        out += [f"## {item['case']} — `{item['hash']}`", "", f"Seen in: {', '.join(item['seen'])}", "",
+        out += [f"## {item['case']} — `{item['hash']}`", "", f"Case SHA-256: `{item.get('case_sha256') or 'legacy / not recorded'}`", "", f"Seen in: {', '.join(item['seen'])}", "",
                 "```diff", item["diff"].rstrip("\n"), "```", ""]
     return "\n".join(out)
 
@@ -681,10 +790,14 @@ def write_report(results_dir: Path, oracle_dir: Path, out_dir: Path, *,
     trials = collect_results(results_dir)
     if not trials:
         raise BenchError(f"No trial results found under {results_dir}.")
+    protocols = {(t["meta"].get("protocol_id", "legacy"), t["meta"].get("manifest_sha256", "unknown")) for t in trials}
+    if len(protocols) != 1:
+        raise BenchError("Trials use different protocol/manifest snapshots. Report each separately; do not pool historical and retuned cases.")
     oracle_results = load_oracle_results(oracle_dir)
     rows = build_rows(trials, manifest, oracle_results, labels_dir)
     needed = labels_needed(trials, manifest, oracle_results, labels_dir)
     meta_summary = {
+        "protocol_id": next(iter(protocols))[0],
         "manifest_sha256": sorted({t["meta"].get("manifest_sha256", "") for t in trials})[-1],
         "models": sorted({t["meta"].get("model", "") for t in trials} - {""}),
         "engines": sorted({t["meta"]["engine_ref"] for t in trials}),

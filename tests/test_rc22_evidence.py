@@ -91,7 +91,8 @@ class AliasGuidanceTests(unittest.TestCase):
             (root / "tsconfig.json").write_text('{"compilerOptions": {}}')
             guidance = runtimes.detect_runtime(root).verifier_guidance
         self.assertNotIn("crypto/aes", guidance)
-        self.assertIn("assert.rejects(promise, /expected message/)", guidance)
+        self.assertIn("assert.rejects(promise)", guidance)
+        self.assertNotIn("/expected message/", guidance)
 
 
 if __name__ == "__main__":

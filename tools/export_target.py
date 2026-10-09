@@ -7,9 +7,13 @@ from pathlib import Path
 import zipfile
 
 FILES = (
-    "proof.py", "runtimes.py", "requirements-patchproof.txt",
+    "proof.py", "runtimes.py", "scope_policy.py", "tools/pr_files.py", "requirements-patchproof.txt",
     "patchproof_runtime/static_web_check.mjs",
     "patchproof_runtime/web_streams.mjs",
+    "patchproof_runtime/web_streams.d.mts",
+    "patchproof_runtime/typescript_config.py",
+    "patchproof_runtime/pytest_check.py",
+    "patchproof_runtime/candidate_policy.mjs",
     "patchproof_runtime/typescript_check.py",
     "patchproof_runtime/typescript_source_check.py",
     "patchproof_runtime/typescript_test_lint.mjs",
@@ -48,6 +52,10 @@ def main() -> None:
             "CONTREE_IMAGE (or runtime-specific image secret) in GitHub Actions.\n"
             "For node-typescript, pin tsx and TypeScript in the target baseline and configure "
             "CONTREE_IMAGE_NODE_TYPESCRIPT with a v0.7 web-image UUID.\n"
+            "Copy every file, including scope_policy.py and tools/pr_files.py; they are required in rc.25.\n"
+            "Generated tests must be discoverable by the target's ordinary test command. For a Node test "
+            "suite, use TAP output (for example node --import tsx --test --test-reporter=tap tests/*.test.ts).\n"
+            "Scope rules in patchproof.json apply to every issue; configure them for the intended repair.\n"
             "Commit the workflows to the default branch before applying shadow-fix to an issue.\n\n"
             "Full setup and the optional file-sharing example:\n"
             "https://github.com/creatoropener/shadow-patch/blob/main/docs/SETUP.md\n"

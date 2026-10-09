@@ -35,6 +35,8 @@ class TypeScriptCheckTests(unittest.TestCase):
         def fake_run(command, **kwargs):
             commands.append(command)
             self.assertEqual(kwargs["cwd"], root)
+            if "--showConfig" in command:
+                return type("Result", (), {"returncode": 0, "stdout": (root / "tsconfig.json").read_text()})()
             if command[0] == "node":
                 self.assertTrue(command[1].endswith("typescript_test_lint.mjs"))
                 return type("Result", (), {"returncode": 0})()
@@ -55,7 +57,7 @@ class TypeScriptCheckTests(unittest.TestCase):
 
         self.assertEqual(captured["extends"], "./tsconfig.json")
         self.assertEqual(captured["files"][0], "sample.test.ts")
-        self.assertEqual(len(commands), 2)
+        self.assertEqual(len(commands), 3)
         self.assertEqual(list(root.glob(".patchproof-tsconfig-*.json")), [])
         self.assertEqual(list(root.glob(".patchproof-runtime-*.d.ts")), [])
 
@@ -70,6 +72,8 @@ class TypeScriptCheckTests(unittest.TestCase):
         captured: dict = {}
 
         def fake_run(command, **kwargs):
+            if "--showConfig" in command:
+                return type("Result", (), {"returncode": 0, "stdout": (root / "tsconfig.json").read_text()})()
             if command[0] == "node":
                 return type("Result", (), {"returncode": 0})()
             config_path = Path(command[command.index("--project") + 1])
@@ -111,13 +115,13 @@ class TypeScriptCheckTests(unittest.TestCase):
             os.chdir(root)
             with patch(
                 "patchproof_runtime.typescript_check.subprocess.run",
-                return_value=type("Result", (), {"returncode": 2})(),
+                side_effect=lambda command, **k: type("Result", (), {"returncode": 0, "stdout": "{}"})() if "--showConfig" in command else type("Result", (), {"returncode": 2})(),
             ) as run:
                 self.assertEqual(main(["typescript_check.py", "sample.test.ts"]), 2)
         finally:
             os.chdir(previous)
 
-        run.assert_called_once()
+        self.assertEqual(run.call_count, 2)
         self.assertEqual(list(root.glob(".patchproof-tsconfig-*.json")), [])
 
 

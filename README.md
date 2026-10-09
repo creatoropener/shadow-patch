@@ -7,7 +7,7 @@ regression before asking a solver for a patch, evaluates three repair candidates
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.21 (frozen for evaluation) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.25 (audit fixes; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -65,7 +65,7 @@ results are never fed back to a solver. Details: [architecture](docs/ARCHITECTUR
 
 ## Benchmark: what it does and does not show
 
-The engine is frozen at v0.6.0-rc.21 and was measured on a small benchmark with
+The historical v0.6.0-rc.21 engine was measured on a small benchmark with
 three trials per case. Each winning repair was judged against the issue text, not
 just by the engine's own verdict. Full tables and caveats are in
 [docs/BENCHMARK.md](docs/BENCHMARK.md).
@@ -86,8 +86,8 @@ because its issue text names a helper that does not exist at its base commit.
 ## Use as a GitHub Action (beta)
 
 The lightest way to try it: add one workflow file that calls
-`creatoropener/shadow-patch@v0.6.0-rc.24` and pass your Nebius secrets and sandbox
-image. No engine files are copied into your repository. See
+`creatoropener/shadow-patch@v0.6.0-rc.25` and pass your Nebius secrets and sandbox
+image. Publish the reviewed rc.25 tag before using that pin. No engine files are copied into your repository. See
 [docs/ACTION.md](docs/ACTION.md) and
 [examples/action-usage/shadow-fix.yml](examples/action-usage/shadow-fix.yml). The
 copy-install route below remains supported.
@@ -97,7 +97,7 @@ copy-install route below remains supported.
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.24.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.25.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
@@ -158,8 +158,10 @@ that all orchestration or patch assembly executes inside Nebius.
 
 ## Verification status and license
 
+The rc.25 fixes and rollout instructions are in [RELEASE.md](RELEASE.md). They do not establish a new live success rate. Former held-out cases used for tuning are now development cases; fresh placeholders are intentionally not runnable.
+
 All three recorded repairs ran on Nebius and are listed in
-[docs/EVIDENCE.md](docs/EVIDENCE.md). Engine v0.6.0-rc.21 is frozen: the
+[docs/EVIDENCE.md](docs/EVIDENCE.md). The historical v0.6.0-rc.21 tag remains unchanged: the
 benchmark in [docs/BENCHMARK.md](docs/BENCHMARK.md) was measured on this exact tag.
 Engine contract tests and static checks do not replace sandbox runs.
 
@@ -167,8 +169,9 @@ Engine contract tests and static checks do not replace sandbox runs.
 
 - **No generalization is shown.** Held-out is 0/6 on two unseen repositories; development is 6/6.
 - **The verifier is the weak point.** On unseen repositories every trial stopped before any repair was evaluated.
-- **Nested tests are rejected.** A regression wrapped in `describe(...)` is refused even when it reproduces the real defect, because the engine's assertion-evidence check expects one failure block per failure.
-- **Alias guidance is repository-specific.** The `node-typescript` verifier guidance mentions an `@/` import alias. On a repository without that alias the model can use it, the test is rejected, and a verifier attempt is wasted (seen once in the rc.21 benchmark).
+- **Scope must be configured.** `scope.allowed_paths` and `scope.protected_symbols` constrain edits; without them scope is reported as unrestricted. Existing tests and explicit compatibility assertions remain necessary.
+- **Single TypeScript project.** JSONC, inherited options and ambient declarations are resolved with the repository compiler. Project-reference graphs are explicitly blocked in this profile.
+- **Portable delivery is required.** The frozen test must fail under the ordinary target test command before repair. Sandbox-only imports or undiscoverable tests block delivery. Static-web projects without a normal test command need a project-owned harness first.
 - **API type-check.** Tests that call functions that do not exist or are not exported fail the type-check. This ended 4 of the 6 trials on the unseen TypeScript repository.
 - **No layout testing.** `static-web` uses jsdom, which cannot evaluate CSS media queries or real layout.
 - **Small, hand-judged benchmark.** Five cases on four repositories, one model, labels recorded by the project team rather than an independent oracle.

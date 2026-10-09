@@ -57,7 +57,7 @@ class ManifestTests(unittest.TestCase):
     def test_shipped_manifest_is_structurally_valid_and_ready(self):
         manifest = h.load_manifest()
         self.assertEqual(h.validate_manifest(manifest), [])
-        ready = h.validate_manifest(manifest, ready_ids={c["id"] for c in manifest["cases"]})
+        ready = h.validate_manifest(manifest, ready_ids={c["id"] for c in manifest["cases"] if c["split"] == "dev"})
         self.assertEqual(ready, [], "every shipped case must be filled in: " + "; ".join(ready))
         splits = {c["split"] for c in manifest["cases"]}
         self.assertEqual(splits, {"dev", "heldout"})
@@ -122,7 +122,8 @@ class PlanTests(unittest.TestCase):
             if oracle and index == 0:
                 (root / "bench/oracles").mkdir(parents=True, exist_ok=True)
                 (root / "bench/oracles/t.js").write_text("// t\n")
-                case["oracle"] = {"test_file": "bench/oracles/t.js", "dest": "t.js", "command": "node t.js"}
+                (root / "bench/oracles/ref.diff").write_text("placeholder for plan validation\n")
+                case["oracle"] = {"test_file": "bench/oracles/t.js", "dest": "t.js", "command": "node t.js", "reference_patch": "bench/oracles/ref.diff", "failure_evidence": "node-test"}
             cases.append(case)
         return {"schema": 1, "cases": cases}
 
@@ -249,10 +250,11 @@ class JudgeAndStatsTests(unittest.TestCase):
         invalid = h.make_judge("c", {"valid": False, "diffs": {"aaa": {"passed": True}}}, labels)
         self.assertEqual(invalid("aaa"), (False, "label"))
 
-    def test_diff_hash_ignores_line_endings_and_trailing_space(self):
+    def test_diff_hash_preserves_line_endings_and_trailing_space(self):
         base = "--- a\n+++ a\n@@ -1 +1 @@\n-x\n+y\n"
-        self.assertEqual(h.diff_hash(base), h.diff_hash(base.replace("\n", "\r\n")))
-        self.assertEqual(h.diff_hash(base), h.diff_hash(base.replace("+y", "+y   ")))
+        self.assertNotEqual(h.diff_hash(base), h.diff_hash(base.replace("\n", "\r\n")))
+        self.assertNotEqual(h.diff_hash(base), h.diff_hash(base.replace("+y", "+y   ")))
+        self.assertEqual(len(h.diff_hash(base)), 64)
         self.assertNotEqual(h.diff_hash(base), h.diff_hash(base.replace("+y", "+z")))
 
     def test_labels_file_is_validated(self):
@@ -308,8 +310,8 @@ class ReportTests(unittest.TestCase):
             self.write_trial(results, "v1", "c1", 2, make_proof(candidates=[cand(1, good), cand(2, bad)]))
             self.write_trial(results, "v1", "c1", 3, make_proof("rejected", "verifier-reproduction", "no"))
             self.write_trial(results, "v1", "c2", 1, make_proof("verified", "completed", winner=1,
-                                                                candidates=[cand(1, other)]))
-            self.write_trial(results, "v1", "c2", 2, None)
+                                                                candidates=[cand(1, other)]), split="heldout")
+            self.write_trial(results, "v1", "c2", 2, None, split="heldout")
             oracle.mkdir()
             (oracle / "oracle-c2.json").write_text(json.dumps(
                 {"case": "c2", "valid": True, "diffs": {h.diff_hash(other): {"passed": False}}}))
@@ -561,7 +563,8 @@ class PatchproofConfigTests(unittest.TestCase):
 
     def test_shipped_file_sharing_case_overrides_the_stale_pin(self):
         case = next(c for c in h.load_manifest()["cases"] if c["id"] == "file-sharing-app-1")
-        self.assertEqual(case["patchproof_config"], {"runtime": "node-typescript"})
+        self.assertEqual(case["patchproof_config"]["runtime"], "node-typescript")
+        self.assertEqual(case["patchproof_config"]["scope"]["protected_symbols"], {"lib/utils/format.ts": ["formatEta"]})
         qr = next(c for c in h.load_manifest()["cases"] if c["id"] == "qrcrafts-1")
         self.assertNotIn("patchproof_config", qr)
         self.assertEqual(h.validate_manifest(h.load_manifest(), ready_ids={"file-sharing-app-1", "qrcrafts-1"}), [])
@@ -610,11 +613,14 @@ class OracleTests(unittest.TestCase):
             subprocess.run(command, cwd=repo, check=True)
         return repo
 
-    def make_case(self, root: Path, command="node --test tests/bench_oracle.test.js", oracle_source=None):
+    def make_case(self, root: Path, command="node --test --test-reporter=tap tests/bench_oracle.test.js", oracle_source=None):
         (root / "bench/oracles").mkdir(parents=True)
         (root / "bench/oracles/o.test.js").write_text(oracle_source or self.ORACLE)
-        return {"id": "c", "oracle": {"test_file": "bench/oracles/o.test.js",
-                                       "dest": "tests/bench_oracle.test.js", "command": command}}
+        case = write_case_files(root)
+        (root / "bench/oracles/ref.diff").write_text(diff_of(self.ORIGINAL, self.FIXED))
+        return {**case, "id": "c", "oracle": {"test_file": "bench/oracles/o.test.js",
+                "dest": "tests/bench_oracle.test.js", "command": command,
+                "reference_patch": "bench/oracles/ref.diff", "failure_evidence": "node-test"}}
 
     def test_apply_and_reset_use_the_engines_diff_format(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -692,6 +698,27 @@ class OracleTests(unittest.TestCase):
             self.assertFalse(result["valid"])
             self.assertIn("setup failed", result["reason"])
 
+    def test_runtime_crash_is_not_a_valid_oracle_reproduction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            case = self.make_case(root, oracle_source='require("node:test")("case", () => { throw new Error("boom"); });\n')
+            result = h.run_oracle(case, root / "results", repo, root=root)
+            self.assertFalse(result["valid"])
+            self.assertIn("recognized assertion", result["reason"])
+
+    def test_a_reference_repair_must_pass_before_candidates_are_judged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = self.make_repo(root)
+            case = self.make_case(root)
+            (root / case["oracle"]["reference_patch"]).write_text(
+                diff_of(self.ORIGINAL, "exports.add = (a, b) => a * b;\n"))
+            result = h.run_oracle(case, root / "results", repo, root=root)
+            self.assertFalse(result["valid"])
+            self.assertIn("reference repair", result["reason"])
+            self.assertEqual(result["diffs"], {})
+
 
 class CliTests(unittest.TestCase):
     def run_main(self, *argv):
@@ -702,7 +729,7 @@ class CliTests(unittest.TestCase):
 
     def test_validate_and_unready_plan_exit_codes(self):
         self.assertEqual(self.run_main("validate")[0], 0)
-        self.assertEqual(self.run_main("validate", "--ready")[0], 0)
+        self.assertEqual(self.run_main("validate", "--ready")[0], 1)  # unseen placeholders remain unselected
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = {"schema": 1, "cases": [write_case_files(root, ready=False)]}

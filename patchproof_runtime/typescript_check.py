@@ -8,6 +8,11 @@ import subprocess
 import sys
 import tempfile
 
+try:
+    from .typescript_config import resolve_config, check_options, regression_files
+except ImportError:  # standalone sandbox entry point
+    from typescript_config import resolve_config, check_options, regression_files
+
 
 def checked_target(value: str, root: Path) -> Path:
     relative = PurePosixPath(value)
@@ -33,9 +38,8 @@ def main(argv: list[str]) -> int:
 
     tsconfig = root / "tsconfig.json"
     compiler = root / "node_modules" / ".bin" / "tsc"
-    declaration_source = Path(__file__).with_name("typescript_runtime.d.ts")
     semantic_linter = Path(__file__).with_name("typescript_test_lint.mjs")
-    for required in (tsconfig, compiler, declaration_source, semantic_linter):
+    for required in (tsconfig, compiler, semantic_linter):
         if not required.is_file():
             print(
                 f"PATCHPROOF_TYPESCRIPT_CHECK=unavailable: missing {required}",
@@ -44,8 +48,8 @@ def main(argv: list[str]) -> int:
             return 2
 
     config_path: Path | None = None
-    declaration_path: Path | None = None
     try:
+        resolved = resolve_config(root)
         lint = subprocess.run(
             ["node", str(semantic_linter), target.relative_to(root).as_posix()],
             cwd=root,
@@ -55,48 +59,10 @@ def main(argv: list[str]) -> int:
         if lint.returncode != 0:
             return lint.returncode
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", suffix=".d.ts",
-            prefix=".patchproof-runtime-", dir=root, delete=False,
-        ) as declaration:
-            declaration.write(declaration_source.read_text(encoding="utf-8"))
-            declaration_path = Path(declaration.name)
-
-        compiler_options: dict[str, object] = {
-            "composite": False,
-            "incremental": False,
-            "noEmit": True,
-            "noErrorTruncation": True,
-            "plugins": [],
-            "rootDir": ".",
-            "skipLibCheck": True,
-        }
-        # If the project's own tsconfig restricts "types" (common in Vite
-        # projects, e.g. `"types": ["vite/client"]`), that restriction is
-        # inherited via `extends` and silently drops @types/node's ambient
-        # `node:test` / `node:assert` declarations for this check-only pass
-        # -- even though @types/node is installed and tsx itself doesn't
-        # care. Every generated regression imports 'node:test', so keep
-        # whatever the project already restricted "types" to and just make
-        # sure "node" is also present, rather than leaving it unreachable.
-        try:
-            project_types = json.loads(tsconfig.read_text(encoding="utf-8")).get(
-                "compilerOptions", {}
-            ).get("types")
-        except (json.JSONDecodeError, OSError):
-            project_types = None
-        if isinstance(project_types, list):
-            compiler_options["types"] = list(
-                dict.fromkeys([*project_types, "node"])
-            )
-
         config = {
             "extends": "./tsconfig.json",
-            "compilerOptions": compiler_options,
-            "files": [
-                target.relative_to(root).as_posix(),
-                declaration_path.relative_to(root).as_posix(),
-            ],
+            "compilerOptions": check_options(resolved, regression=True),
+            "files": regression_files(resolved, target.relative_to(root).as_posix()),
             "include": [],
             "exclude": ["node_modules"],
         }
@@ -122,10 +88,12 @@ def main(argv: list[str]) -> int:
     except subprocess.TimeoutExpired:
         print("PATCHPROOF_TYPESCRIPT_CHECK=timed_out", file=sys.stderr)
         return 2
+    except (ValueError, OSError) as error:
+        print(f"PATCHPROOF_TYPESCRIPT_CHECK=unavailable: {error}", file=sys.stderr)
+        return 2
     finally:
-        for temporary in (config_path, declaration_path):
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
+        if config_path is not None:
+            config_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

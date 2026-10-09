@@ -190,6 +190,12 @@ runs:
         verdict=$(python -c "import json,sys; print(json.load(open('proof.json')).get('verdict','rejected'))" 2>/dev/null || echo rejected)
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
 
+    - name: Validate verified PR files
+      id: delivery
+      if: steps.patchproof.outcome == 'success'
+      shell: bash
+      run: python "${{ github.action_path }}/tools/pr_files.py" --repo "$GITHUB_WORKSPACE"
+
     - name: Open pull request with verified fix
       if: steps.patchproof.outcome == 'success'
       id: create-pr
@@ -199,6 +205,7 @@ runs:
         commit-message: "PatchProof: verified repair for issue #${{ github.event.issue.number }}"
         title: "Shadow Patch: verified repair for #${{ github.event.issue.number }}"
         body-path: verification-report.md
+        add-paths: ${{ steps.delivery.outputs.paths }}
         branch: shadow-fix/issue-${{ github.event.issue.number }}
         delete-branch: true
 

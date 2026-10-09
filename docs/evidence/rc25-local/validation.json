@@ -1,0 +1,34 @@
+{
+  "release": "0.6.0-rc.25",
+  "validated_utc_date": "2026-10-09",
+  "source_archive": "shadow-patch-main (1).zip",
+  "source_archive_sha256": "303f1ad8133c7424ffb174abc2209c4ad9743b6bfe1bf2d110bd5396a1e0e614",
+  "python": "3.12.14",
+  "node": "v24.19.0",
+  "typescript": "5.6.3",
+  "tsx": "4.20.6",
+  "node_types": "20.17.30",
+  "python_tests": {
+    "count": 244,
+    "passed": 244,
+    "skipped": 0,
+    "log": "python-tests.txt"
+  },
+  "node_tests": {
+    "count": 2,
+    "passed": 2,
+    "log": "node-tests.txt"
+  },
+  "native_pipeline": "TypeScript compiler, AST policy, Node loader, protected regression, clean replay and normal npm test execute locally; model and ConTree APIs are replaced with local fixtures.",
+  "checks": [
+    "Python compilation",
+    "JavaScript helper syntax",
+    "git diff --check",
+    "two selected development cases plan successfully"
+  ],
+  "remote_inference_runs": 0,
+  "nebius_runs": 0,
+  "published_tags": [],
+  "created_prs": [],
+  "unseen_evaluation": "not selected, not frozen, not run"
+}

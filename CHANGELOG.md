@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.0-rc.25 — Audit fixes for verification, delivery and benchmark evidence
+
+- Resolve TypeScript JSONC/extends and retain ambient declarations; required checks fail closed when unavailable.
+- Freeze visible test paths and portable support files, verify ordinary test discovery before repair, replay the final tree, and stage only hash-verified PR files.
+- Add explicit file/symbol scope and Node assertion/runtime interference checks. Allow a passing eligible branch to replay despite another branch's generation failure.
+- Replace Python substring reproduction evidence with runner exception types; check simple matcher constants; keep the source-file inventory independent of context truncation.
+- Use exact full patch hashes, fresh trial outputs, protocol snapshots, digest checks, and baseline/reference-valid oracle evidence. Preserve historical results and keep new held-out placeholders unselected.
+- Local validation only. No new Nebius success rate, published tag or generalization result. See RELEASE.md for installation, supported boundaries and the next controlled check.
+
 ## v0.6.0-rc.24 — Refuse unsound verifier tests before they run; give a repair that does not compile one correction
 
 - **Why.** The rc.23 benchmark run (heldout-1 and heldout-2, three trials each; both are

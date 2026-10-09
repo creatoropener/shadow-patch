@@ -153,10 +153,11 @@ class PinGateTable(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(self.found(line), [], line)
 
-    def test_a_broken_heuristic_fails_open(self):
+    def test_an_unavailable_wording_check_cannot_accept_a_test(self):
         adapter = typescript_adapter()
         with patch.object(runtimes, "ungrounded_message_pins", side_effect=RuntimeError("boom")):
-            adapter.validate_generated_pins("await assert.rejects(p, /x y z/);", "issue")
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                adapter.validate_generated_pins("await assert.rejects(p, /x y z/);", "issue")
 
     def test_python_tests_are_not_gated(self):
         adapter = adapter_for("python-pytest", {
@@ -346,6 +347,8 @@ class SourceCheckHelperTests(unittest.TestCase):
 
         def fake(command, **kwargs):
             self.assertEqual(kwargs["cwd"], root)
+            if "--showConfig" in command:
+                return type("Result", (), {"returncode": 0, "stdout": (root / "tsconfig.json").read_text()})()
             config = Path(command[command.index("--project") + 1])
             seen.update(json.loads(config.read_text(encoding="utf-8")))
             return type("Result", (), {"returncode": 0})()
@@ -355,18 +358,18 @@ class SourceCheckHelperTests(unittest.TestCase):
         # Whole project: the config adds neither files nor include, so the project's own apply.
         self.assertNotIn("files", seen)
         self.assertNotIn("include", seen)
-        self.assertEqual(seen["compilerOptions"]["types"], ["vite/client", "node"])
+        self.assertNotIn("types", seen["compilerOptions"])  # source checks retain the project contract
         self.assertTrue(seen["compilerOptions"]["noEmit"])
         self.assertFalse(seen["compilerOptions"]["composite"])
         self.assertEqual(list(root.glob(".patchproof-source-tsconfig-*.json")), [])
 
     def test_a_project_without_a_types_list_keeps_its_default(self):
         root = self.project("{}\n")
-        self.assertNotIn("types", source_check.compiler_options(root / "tsconfig.json"))
+        self.assertNotIn("types", source_check.check_options({}))
 
     def test_a_compiler_failure_is_exit_one_and_everything_else_is_exit_two(self):
         root = self.project()
-        failing = lambda command, **kwargs: type("Result", (), {"returncode": 2})()
+        failing = lambda command, **kwargs: type("Result", (), {"returncode": 0, "stdout": "{}"})() if "--showConfig" in command else type("Result", (), {"returncode": 2})()
         self.assertEqual(self.run_main(root, ["--project"], failing), 1)
         for bad in ([], ["src/a.ts"], ["--", "src/a.ts"], ["--project", "src/a.ts"]):
             with self.subTest(bad):
@@ -387,9 +390,8 @@ class SourceCheckHelperTests(unittest.TestCase):
 
     def test_a_references_only_root_config_declines_to_run(self):
         root = self.project('{"files": [], "references": [{"path": "./tsconfig.app.json"}]}\n')
-        self.assertTrue(source_check.is_solution_style(root / "tsconfig.json"))
-        self.assertEqual(self.run_main(root, ["--project"], lambda *a, **k: None), 2)
-        self.assertFalse(source_check.is_solution_style(self.project("{}\n") / "tsconfig.json"))
+        result = type("Result", (), {"returncode": 0, "stdout": (root / "tsconfig.json").read_text()})()
+        self.assertEqual(self.run_main(root, ["--project"], lambda *a, **k: result), 2)
 
 
 @unittest.skipUnless(os.environ.get("TS_LINT_NODE_MODULES"),

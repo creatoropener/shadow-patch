@@ -33,7 +33,8 @@ class NodeTypeScriptContractTests(unittest.TestCase):
         self.assertEqual(adapter.test_path(3), "test_patchproof_issue_3.test.ts")
         command = adapter.regression_command("x.test.ts")
         self.assertIn("python /patchproof/typescript_check.py", command)
-        self.assertLess(command.index("typescript_check.py"), command.index("/tsx "))
+        self.assertLess(command.index("typescript_check.py"), command.index("node --import"))
+        self.assertIn("/tsx/dist/loader.mjs", command)
         self.assertIn("./node_modules/.bin/tsc --version", adapter.preflight_command)
 
     def test_matches_existing_tests_directory_for_relative_imports(self) -> None:
@@ -49,7 +50,7 @@ class NodeTypeScriptContractTests(unittest.TestCase):
         (root / "tests" / "existing.test.ts").write_text("test('x', () => {});", encoding="utf-8")
         adapter = detect_runtime(root)
         self.assertEqual(
-            adapter.test_path(1, root=root), "tests/.test_patchproof_issue_1.test.ts"
+            adapter.test_path(1, root=root), "tests/test_patchproof_issue_1.test.ts"
         )
 
     def test_keeps_root_placement_when_no_tests_directory_exists(self) -> None:

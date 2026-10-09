@@ -25,17 +25,7 @@
         "body_file": "bench/issues/file-sharing-app-1.md"
       },
       "patchproof_config": {
-        "runtime": "node-typescript",
-        "scope": {
-          "allowed_paths": [
-            "lib/utils/format.ts"
-          ],
-          "protected_symbols": {
-            "lib/utils/format.ts": [
-              "formatEta"
-            ]
-          }
-        }
+        "runtime": "node-typescript"
       },
       "oracle": null,
       "note": "Base commit is the head of the recorded run in docs/evidence/github-run-35464615209.json. The commit's own patchproof.json pins node-package, which cannot edit lib/utils/format.ts (TypeScript), so no repair can be evaluated under it; the harness replaces that file with patchproof_config before each trial. Trials recorded before this override (rc.20 t1-t3, rc.21 smoke) used the old pin and are not comparable."
@@ -55,7 +45,7 @@
     },
     {
       "id": "heldout-1",
-      "split": "dev",
+      "split": "heldout",
       "repo": "creatoropener/Aegisscan-Bug-Auditor",
       "base_commit": "4c6b549c1b2442667e40085441ff71839976cea6",
       "issue": {
@@ -64,11 +54,11 @@
         "body_file": "bench/issues/heldout-1.md"
       },
       "oracle": null,
-      "note": "Former held-out case, exposed and used for engine tuning in rc.22\u2013rc.24. Development-only under this protocol. Historical artifacts keep their original split."
+      "note": "Held-out validation case evaluating the frozen engine's capacity to patch architectural SSRF network boundaries and block internal address space exposure without training bias."
     },
     {
       "id": "heldout-2",
-      "split": "dev",
+      "split": "heldout",
       "repo": "creatoropener/Tabloop",
       "base_commit": "54e635e69f049baac079aee9a0250f85796b0f94",
       "issue": {
@@ -77,35 +67,7 @@
         "body_file": "bench/issues/heldout-2.md"
       },
       "oracle": null,
-      "note": "Former held-out case, exposed and used for engine tuning in rc.22\u2013rc.24. Development-only under this protocol. Historical artifacts keep their original split."
-    },
-    {
-      "id": "heldout-3",
-      "split": "heldout",
-      "repo": "TODO/TODO",
-      "base_commit": "TODO",
-      "issue": {
-        "number": 1,
-        "title": "TODO: unseen pilot case",
-        "body_file": "bench/issues/heldout-3.md"
-      },
-      "oracle": null,
-      "note": "Unselected placeholder. Keep it; it does not block selected development cases."
-    },
-    {
-      "id": "heldout-4",
-      "split": "heldout",
-      "repo": "TODO/TODO",
-      "base_commit": "TODO",
-      "issue": {
-        "number": 1,
-        "title": "TODO: unseen pilot case",
-        "body_file": "bench/issues/heldout-4.md"
-      },
-      "oracle": null,
-      "note": "Unselected placeholder. Keep it; it does not block selected development cases."
+      "note": "Criteria fixed before any run: correct if the contact form's action resolves relative to the page's own folder (for example thank-you.html) and nothing else changes."
     }
-  ],
-  "protocol_id": "2026-10-08-dev-v2",
-  "protocol_status": "development"
+  ]
 }

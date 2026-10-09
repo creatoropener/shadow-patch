@@ -19,7 +19,7 @@ import proof
 from runtimes import RuntimeAdapter, detect_runtime
 
 HIDDEN = "HIDDEN_REGRESSION_ASSERTION_7f3a"
-TEST_PATH = "tests/.test_patchproof_issue_7.test.ts"
+TEST_PATH = "tests/test_patchproof_issue_7.test.ts"
 SOURCE = "src/a.ts"
 PROJECT_OK = "PATCHPROOF_SOURCE_CHECK=passed"
 DIAGNOSTIC = "src/a.ts(3,5): error TS1308: 'await' expressions are only allowed within async functions"
@@ -96,6 +96,8 @@ class World:
                 code, out, err = 1, DIAGNOSTIC, "PATCHPROOF_SOURCE_CHECK=failed"
             else:
                 code, out = 0, PROJECT_OK
+        elif "candidate_policy.mjs" in shell:
+            kind, out = "policy", "PATCHPROOF_CANDIDATE_POLICY=passed"
         elif "sha256sum" in shell:
             kind = "regression"
             body = state.files[f"/workspace/repo/{TEST_PATH}"]
@@ -140,6 +142,8 @@ class CandidateSourceCheckFlowTests(unittest.TestCase):
             feedback_seen.append((strategy, kwargs.get("retry_feedback", "")))
             key = next(k for k in queues if strategy.startswith(k))
             content = queues[key].pop(0)
+            if isinstance(content, Exception):
+                raise content
             return [{"path": SOURCE, "content": content}], f"proposal {strategy}"
 
         sdk = SimpleNamespace(images=SimpleNamespace(use=lambda uuid, strict: object()))
@@ -159,7 +163,7 @@ class CandidateSourceCheckFlowTests(unittest.TestCase):
                 result = proof.execute(root, proof.Issue(7, "value is wrong", "value() must be 2"),
                                        record)
             except proof.PatchProofError as error:
-                result = {**record, "error": str(error)}
+                result = {**record, "verdict": "rejected", "error": str(error)}
         return result, world, feedback_seen
 
     def test_failing_candidate_gets_one_correction_and_can_win(self):
@@ -210,7 +214,7 @@ class CandidateSourceCheckFlowTests(unittest.TestCase):
         self.assertTrue(checks)
         self.assertFalse(any(checks))
 
-    def test_a_project_that_does_not_pass_its_own_check_switches_the_gate_off(self):
+    def test_a_project_that_does_not_pass_its_own_check_blocks_before_generation(self):
         broken = "export const value = async () => { BROKEN };\n"
         result, world, _ = self.run_flow(
             {"minimal": [broken], "defensive": [broken], "maintainable": [broken]},
@@ -223,16 +227,18 @@ class CandidateSourceCheckFlowTests(unittest.TestCase):
             self.assertNotIn("source_check_attempts", candidate)
             self.assertEqual(candidate["stage"], "regression")  # judged by the hidden test only
 
-    def test_a_check_that_cannot_run_never_rejects_a_candidate(self):
+    def test_a_check_that_cannot_run_makes_the_candidate_ineligible(self):
         fixed = "export const value = () => 2; // FIXED\n"
         result, world, _ = self.run_flow(
             {"minimal": [fixed], "defensive": [fixed], "maintainable": [fixed]},
             candidate_exit=2,
         )
-        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(result["verdict"], "rejected")
+        self.assertNotIn("clean_replay", result)
         for candidate in result["candidates"]:
             self.assertEqual(len(candidate["baseline_attempts"]), 1)
-            self.assertTrue(candidate["source_check_attempts"][0]["passed"])
+            self.assertIsNone(candidate["source_check_attempts"][0]["passed"])
+            self.assertEqual(candidate["stage"], "source-check-unavailable")
 
     def test_a_correct_candidate_costs_no_extra_generation(self):
         fixed = "export const value = () => 2; // FIXED\n"
@@ -240,6 +246,19 @@ class CandidateSourceCheckFlowTests(unittest.TestCase):
             {"minimal": [fixed], "defensive": [fixed], "maintainable": [fixed]})
         self.assertEqual(len(feedback), 3)
         self.assertTrue(all(text == "" for _, text in feedback))
+
+    def test_two_passing_candidates_replay_when_third_inference_fails(self):
+        fixed = "export const value = () => 2; // FIXED\n"
+        result, _, _ = self.run_flow({
+            "minimal": [fixed], "defensive": [fixed],
+            "maintainable": [proof.InferenceError("backend refused")],
+        })
+        self.assertEqual(result["verdict"], "verified")
+        self.assertTrue(result["clean_replay"]["passed"])
+        self.assertEqual(result["race"]["passing"], 2)
+        self.assertFalse(result["candidates"][2]["passed"])
+        self.assertIn("backend refused", result["candidates"][2]["error"])
+        self.assertTrue(result["pr_files"])
 
 
 class CommandSelectionTests(unittest.TestCase):
