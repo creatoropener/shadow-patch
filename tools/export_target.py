@@ -7,7 +7,8 @@ from pathlib import Path
 import zipfile
 
 FILES = (
-    "proof.py", "runtimes.py", "scope_policy.py", "tools/pr_files.py", "requirements-patchproof.txt",
+    "proof.py", "runtimes.py", "scope_policy.py", "agent_budget.py", "context_tools.py", "agent_loop.py",
+    "tools/pr_files.py", "requirements-patchproof.txt",
     "patchproof_runtime/static_web_check.mjs",
     "patchproof_runtime/web_streams.mjs",
     "patchproof_runtime/web_streams.d.mts",
@@ -52,7 +53,9 @@ def main() -> None:
             "CONTREE_IMAGE (or runtime-specific image secret) in GitHub Actions.\n"
             "For node-typescript, pin tsx and TypeScript in the target baseline and configure "
             "CONTREE_IMAGE_NODE_TYPESCRIPT with a v0.7 web-image UUID.\n"
-            "Copy every file, including scope_policy.py and tools/pr_files.py; they are required in rc.25.\n"
+            "Copy every file, including agent_budget.py, context_tools.py, agent_loop.py, scope_policy.py and tools/pr_files.py.\n"
+            "rc.26 adds an opt-in Node/TypeScript loop: set the repository variable PATCHPROOF_AGENT_MODE=bounded. "
+            "The default legacy mode preserves the rc.25 flow. Read docs/BATCH2.md in the engine repository for budgets and limits.\n"
             "Generated tests must be discoverable by the target's ordinary test command. For a Node test "
             "suite, use TAP output (for example node --import tsx --test --test-reporter=tap tests/*.test.ts).\n"
             "Scope rules in patchproof.json apply to every issue; configure them for the intended repair.\n"

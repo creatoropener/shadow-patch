@@ -24,11 +24,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: creatoropener/shadow-patch@v0.6.0-rc.25   # pin an exact tag
+      - uses: creatoropener/shadow-patch@v0.6.0-rc.26   # publish the reviewed tag first
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           nebius-project-id: ${{ secrets.NEBIUS_PROJECT_ID }}
           nebius-model: ${{ vars.NEBIUS_MODEL || secrets.NEBIUS_MODEL }}
+          # Enable only for the Node/TypeScript Batch 2 profile:
+          agent-mode: bounded
           # Pass only the image(s) your repository's adapter needs:
           image-node-typescript: ${{ secrets.CONTREE_IMAGE_NODE_TYPESCRIPT }}
           # sandbox-image: ${{ secrets.CONTREE_IMAGE }}

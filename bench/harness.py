@@ -55,9 +55,14 @@ VERIFIED_UNLABELED = "verified_unlabeled"
 FALSE_REJECT = "false_reject"
 TRUE_REJECT = "true_reject"
 REJECTED_UNLABELED = "rejected_unlabeled"
+BUDGET_STOP = "budget_exhausted"
+NEEDS_SPECIFICATION = "needs_specification"
 OUTCOMES = (TRUE_ACCEPT, FALSE_ACCEPT, VERIFIED_UNLABELED, FALSE_REJECT,
-            TRUE_REJECT, REJECTED_UNLABELED, VERIFIER_FAILED, INFRA)
-VERIFIER_STAGES = {"verifier-generation", "verifier-reproduction"}
+            TRUE_REJECT, REJECTED_UNLABELED, VERIFIER_FAILED, BUDGET_STOP, NEEDS_SPECIFICATION, INFRA)
+VERIFIER_STAGES = {"verifier-investigation", "verifier-generation", "verifier-reproduction"}
+AGENT_SETTINGS = ("PATCHPROOF_AGENT_CANDIDATES", "PATCHPROOF_MAX_AGENT_STEPS", "PATCHPROOF_MAX_MODEL_REQUESTS",
+                  "PATCHPROOF_MAX_TOTAL_TOKENS", "PATCHPROOF_MAX_SANDBOX_COMMANDS", "PATCHPROOF_MAX_RUN_SECONDS",
+                  "PATCHPROOF_MAX_COST_USD", "PATCHPROOF_INPUT_USD_PER_MILLION", "PATCHPROOF_OUTPUT_USD_PER_MILLION")
 
 
 class BenchError(RuntimeError):
@@ -339,6 +344,8 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
         "issue_body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
         "manifest_sha256": manifest_sha256(root / "bench" / "manifest.json"),
         "model": env.get("NEBIUS_MODEL", ""), "max_tokens": env.get("NEBIUS_MAX_TOKENS", ""),
+        "agent_mode": env.get("PATCHPROOF_AGENT_MODE", "legacy"),
+        "agent_settings": {key: env[key] for key in AGENT_SETTINGS if env.get(key)},
         "exit_code": exit_code, "timed_out": timed_out, "elapsed_seconds": elapsed,
         "has_proof": (out / "proof.json").is_file(),
         "proof_sha256": hashlib.sha256((out / "proof.json").read_bytes()).hexdigest() if (out / "proof.json").is_file() else None,
@@ -456,6 +463,8 @@ def collect_results(results_dir: Path) -> list[dict[str, Any]]:
                 meta["evidence_error"] = "proof digest does not match this trial"
             if proof.get("run_id") is not None and proof["run_id"] != meta.get("run_id"):
                 meta["evidence_error"] = "proof run_id does not match this trial"
+            if meta.get("agent_mode", "legacy") != proof.get("agent_mode", "legacy"):
+                meta["evidence_error"] = "engine did not run the requested execution profile"
         trials.append({"meta": meta, "proof": proof, "dir": str(meta_path.parent)})
     return trials
 
@@ -584,6 +593,8 @@ def classify_trial(meta: dict[str, Any], proof: dict[str, Any] | None,
     verdict = proof.get("verdict")
     stage = str(proof.get("stage") or "")
     error = str(proof.get("error") or "")
+    if verdict != "verified" and proof.get("stop_reason") in {BUDGET_STOP, NEEDS_SPECIFICATION}:
+        return proof["stop_reason"], f"{proof['stop_reason']} at {stage}: {error[:140]}"
     if verdict == "blocked":
         return INFRA, f"blocked at {stage}: {error[:140]}"
     if verdict == "rejected" and error.startswith("Inference "):
@@ -664,6 +675,9 @@ def build_rows(trials: list[dict[str, Any]], manifest: dict[str, Any],
             "verifier_generations": len(((proof or {}).get("regression_test") or {}).get("generation_attempts") or []),
             "winner": ((proof or {}).get("winner") or {}).get("candidate"),
             "runtime_override": meta.get("patchproof_config"),
+            "agent_mode": (proof or {}).get("agent_mode", "legacy"),
+            "stop_reason": (proof or {}).get("stop_reason"),
+            "budget": (proof or {}).get("budget"),
         })
     rows.sort(key=lambda r: (r["engine"], r["split"], r["case"], r["trial"]))
     return rows
@@ -697,14 +711,15 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
                f"models seen: {', '.join(meta_summary['models']) or 'unknown'}")
     out.append(f"- Engines: {', '.join(meta_summary['engines'])}; trials recorded: {len(rows)}")
     out.append(f"- Protocol: `{meta_summary.get('protocol_id', 'legacy')}`. Split membership comes from each trial snapshot.")
+    out.append("- Execution profiles: " + ", ".join(sorted({f"{row['engine']}={row.get('agent_mode', 'legacy')}" for row in rows})) + ".")
     operational = summarize(rows)
     out.append(f"- Operational success (all attempts, including infrastructure failures): {operational['end_to_end_success']}/{operational['trials']}.")
     out.append("")
     out.append("## Summary")
     out.append("")
-    out.append("| Engine | Split | Trials | Infra (excluded) | Verifier failed | Rejected, no repair | "
+    out.append("| Engine | Split | Trials | Infra (excluded) | Budget stops | Needs spec | Verifier failed | Rejected, no repair | "
                "False reject | False accept | Verified, unjudged | Correct and accepted | 95% interval |")
-    out.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    out.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault((row["engine"], row["split"]), []).append(row)
@@ -715,12 +730,13 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
         interval = s["end_to_end_ci"]
         span = f"{pct(interval[0])}–{pct(interval[1])}" if interval else "n/a"
         upper = f" (up to {s['end_to_end_upper']})" if c[VERIFIED_UNLABELED] else ""
-        out.append(f"| {engine} | {split} | {s['trials']} | {s['infra']} | {c[VERIFIER_FAILED]} | "
+        out.append(f"| {engine} | {split} | {s['trials']} | {s['infra']} | {c[BUDGET_STOP]} | {c[NEEDS_SPECIFICATION]} | {c[VERIFIER_FAILED]} | "
                    f"{c[TRUE_REJECT]} | {c[FALSE_REJECT]} | {c[FALSE_ACCEPT]} | {c[VERIFIED_UNLABELED]} | "
                    f"{c[TRUE_ACCEPT]}/{s['effective']}{upper} | {span} |")
     out += ["", "*Correct and accepted* = the engine said VERIFIED and the winning repair was judged correct "
                 "by something the engine never saw. *False reject* = rejected although a candidate was correct. "
                 "*Verifier failed* = no repair was ever evaluated because the generated test was never accepted. "
+                "Budget and specification stops remain in the denominator. "
                 "Rows for `all` combine dev and heldout; report heldout on its own.", ""]
     out.append("## Every trial")
     out.append("")
@@ -793,6 +809,14 @@ def write_report(results_dir: Path, oracle_dir: Path, out_dir: Path, *,
     protocols = {(t["meta"].get("protocol_id", "legacy"), t["meta"].get("manifest_sha256", "unknown")) for t in trials}
     if len(protocols) != 1:
         raise BenchError("Trials use different protocol/manifest snapshots. Report each separately; do not pool historical and retuned cases.")
+    profiles: dict[str, set[str]] = {}
+    for trial in trials:
+        meta = trial["meta"]
+        profile = json.dumps({"mode": meta.get("agent_mode", "legacy"), "settings": meta.get("agent_settings", {}),
+                              "model": meta.get("model", ""), "max_tokens": meta.get("max_tokens", "")}, sort_keys=True)
+        profiles.setdefault(meta["engine_ref"], set()).add(profile)
+    if any(len(values) > 1 for values in profiles.values()):
+        raise BenchError("One engine has mixed execution profiles or budgets. Report those runs separately.")
     oracle_results = load_oracle_results(oracle_dir)
     rows = build_rows(trials, manifest, oracle_results, labels_dir)
     needed = labels_needed(trials, manifest, oracle_results, labels_dir)

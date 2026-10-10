@@ -1,0 +1,61 @@
+{
+  "release": "0.6.0-rc.26",
+  "prepared_environment_date": "2026-10-10",
+  "baseline": {
+    "kind": "local reviewed rc.25 snapshot; not a published GitHub commit",
+    "commit": "4eae63abbb70cc79322d6805de3f9753204ee834"
+  },
+  "python": "3.12.14",
+  "node": "v24.19.0",
+  "typescript": "5.6.3",
+  "tsx": "4.20.6",
+  "node_types": "20.17.30",
+  "python_tests": {
+    "count": 259,
+    "passed": 259,
+    "skipped": 0,
+    "log": "python-tests.txt"
+  },
+  "node_tests": {
+    "count": 2,
+    "passed": 2,
+    "skipped": 0,
+    "log": "node-tests.txt"
+  },
+  "native_pipeline": "Real TypeScript/tsx/Node checks, source policy, frozen regression, clean replay and delivered npm test; scripted model responses and local ConTree transport substitute.",
+  "acceptance_fixtures": [
+    "source beyond initial repository map",
+    "unfamiliar API resolved by reading its declared type",
+    "actual compiler failure corrected within solver session",
+    "no verifier history or hidden regression output in solver prompts",
+    "hidden failure causes no solver retry or source delivery",
+    "HTTP retry accounting, budget/specification stops and malformed action correction",
+    "execution-mode mismatch rejected as invalid infrastructure evidence; mixed engine profiles refused"
+  ],
+  "checks": [
+    "Python compilation",
+    "JavaScript helper syntax",
+    "Action/workflow YAML parsing",
+    "git diff --check",
+    "one-trial qrcrafts-1 dev plan",
+    "target archive byte integrity and imports"
+  ],
+  "target_archive": {
+    "file": "patchproof-target-v0.6.0-rc.26.zip",
+    "engine_files": 22,
+    "sha256": "040c884f830d8a7cc881aa3f0dd11eea5c87986442dea5c57ad6906493e80c2f"
+  },
+  "remote_inference_runs": 0,
+  "nebius_runs": 0,
+  "published_tags": [],
+  "created_prs": [],
+  "github_engine_checks": "not run here; workflow targets Node 20",
+  "unseen_evaluation": "not selected, not frozen, not run",
+  "next_live_trial": {
+    "case": "qrcrafts-1",
+    "split": "dev",
+    "trials": 1,
+    "mode": "bounded"
+  },
+  "file_sharing_status": "target ordinary-CI TypeScript discovery setup and new unfixed base pin still required"
+}

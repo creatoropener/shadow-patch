@@ -1,0 +1,33 @@
+COMMAND: python -m py_compile proof.py runtimes.py scope_policy.py agent_budget.py context_tools.py agent_loop.py tools/export_target.py tools/pr_files.py bench/harness.py
+EXIT: 0
+
+
+COMMAND: node --check /workspace/scratch/5700f42edcbd/implementation-batch2/shadow-patch/patchproof_runtime/candidate_policy.mjs
+EXIT: 0
+
+
+COMMAND: node --check /workspace/scratch/5700f42edcbd/implementation-batch2/shadow-patch/patchproof_runtime/static_web_check.mjs
+EXIT: 0
+
+
+COMMAND: node --check /workspace/scratch/5700f42edcbd/implementation-batch2/shadow-patch/patchproof_runtime/typescript_test_lint.mjs
+EXIT: 0
+
+
+COMMAND: node --check /workspace/scratch/5700f42edcbd/implementation-batch2/shadow-patch/patchproof_runtime/web_streams.mjs
+EXIT: 0
+
+
+COMMAND: python -c import yaml; from pathlib import Path; paths=[Path('action.yml'),*Path('.github/workflows').glob('*.yml'),Path('examples/action-usage/shadow-fix.yml')]; [yaml.safe_load(p.read_text()) for p in paths]; print(f'Parsed {len(paths)} YAML files')
+EXIT: 0
+Parsed 6 YAML files
+
+
+COMMAND: git diff --check
+EXIT: 0
+
+
+COMMAND: python bench/harness.py plan --engines v0.6.0-rc.26 --trials 1 --split dev --cases qrcrafts-1 --github-output ../rc26-plan-output.txt
+EXIT: 0
+Planned 1 trial job(s).
+

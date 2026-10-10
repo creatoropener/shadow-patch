@@ -1,7 +1,7 @@
 name: Shadow Patch
 description: >-
   Turns a labelled GitHub issue into a pull request whose fix was proven in
-  Nebius Sandboxes first (hidden regression test, three candidate repairs,
+  Nebius Sandboxes first (hidden regression test, isolated candidate repairs,
   clean-image replay). A human always approves the merge. Beta.
 author: creatoropener
 branding:
@@ -22,6 +22,46 @@ inputs:
     description: Completion token budget per model call.
     required: false
     default: '12000'
+  agent-mode:
+    description: 'legacy or bounded (bounded currently supports node-typescript).'
+    required: false
+    default: 'legacy'
+  agent-candidates:
+    description: 'Bounded solver sessions, 1 to 3; all share the same run limits.'
+    required: false
+    default: '1'
+  max-agent-steps:
+    description: 'Shared tool-action limit for bounded mode.'
+    required: false
+    default: '40'
+  max-model-requests:
+    description: 'Shared HTTP inference request limit, including retries.'
+    required: false
+    default: '32'
+  max-total-tokens:
+    description: 'Shared token limit with conservative reservations when usage is unknown.'
+    required: false
+    default: '250000'
+  max-sandbox-commands:
+    description: 'Shared command limit, including preparation and clean replay.'
+    required: false
+    default: '64'
+  max-run-seconds:
+    description: 'Bounded run deadline; enforced at call boundaries and through request/command timeouts.'
+    required: false
+    default: '1800'
+  max-inference-cost-usd:
+    description: 'Optional inference-only dollar cap; requires both per-million token prices.'
+    required: false
+    default: ''
+  input-usd-per-million:
+    description: 'Operator-supplied input token price; no price is inferred by the engine.'
+    required: false
+    default: ''
+  output-usd-per-million:
+    description: 'Operator-supplied output token price; sandbox billing is separate.'
+    required: false
+    default: ''
   sandbox-image:
     description: Shared sandbox image UUID (used when no runtime-specific image is given).
     required: false
@@ -155,6 +195,16 @@ runs:
         NEBIUS_API_KEY: ${{ inputs.nebius-api-key }}
         NEBIUS_MODEL: ${{ inputs.nebius-model }}
         NEBIUS_MAX_TOKENS: ${{ inputs.nebius-max-tokens }}
+        PATCHPROOF_AGENT_MODE: ${{ inputs.agent-mode }}
+        PATCHPROOF_AGENT_CANDIDATES: ${{ inputs.agent-candidates }}
+        PATCHPROOF_MAX_AGENT_STEPS: ${{ inputs.max-agent-steps }}
+        PATCHPROOF_MAX_MODEL_REQUESTS: ${{ inputs.max-model-requests }}
+        PATCHPROOF_MAX_TOTAL_TOKENS: ${{ inputs.max-total-tokens }}
+        PATCHPROOF_MAX_SANDBOX_COMMANDS: ${{ inputs.max-sandbox-commands }}
+        PATCHPROOF_MAX_RUN_SECONDS: ${{ inputs.max-run-seconds }}
+        PATCHPROOF_MAX_COST_USD: ${{ inputs.max-inference-cost-usd }}
+        PATCHPROOF_INPUT_USD_PER_MILLION: ${{ inputs.input-usd-per-million }}
+        PATCHPROOF_OUTPUT_USD_PER_MILLION: ${{ inputs.output-usd-per-million }}
         CONTREE_IMAGE: ${{ inputs.sandbox-image }}
         CONTREE_IMAGE_PYTHON_PYTEST: ${{ inputs.image-python-pytest }}
         CONTREE_IMAGE_NODE_PACKAGE: ${{ inputs.image-node-package }}

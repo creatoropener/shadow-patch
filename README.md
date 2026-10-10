@@ -3,11 +3,11 @@
 **Label a bug. Review a repair backed by independent test evidence.**
 
 Shadow Engineer is a GitHub Actions MVP. Its PatchProof engine generates a
-regression before asking a solver for a patch, evaluates three repair candidates
+regression before asking a solver for a patch, evaluates repairs
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.25 (audit fixes; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.26 (bounded investigation; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -86,8 +86,8 @@ because its issue text names a helper that does not exist at its base commit.
 ## Use as a GitHub Action (beta)
 
 The lightest way to try it: add one workflow file that calls
-`creatoropener/shadow-patch@v0.6.0-rc.25` and pass your Nebius secrets and sandbox
-image. Publish the reviewed rc.25 tag before using that pin. No engine files are copied into your repository. See
+`creatoropener/shadow-patch@v0.6.0-rc.26` and pass your Nebius secrets and sandbox
+image. Publish the reviewed rc.26 tag before using that pin. No engine files are copied into your repository. See
 [docs/ACTION.md](docs/ACTION.md) and
 [examples/action-usage/shadow-fix.yml](examples/action-usage/shadow-fix.yml). The
 copy-install route below remains supported.
@@ -97,7 +97,7 @@ copy-install route below remains supported.
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.25.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.26.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
@@ -158,7 +158,7 @@ that all orchestration or patch assembly executes inside Nebius.
 
 ## Verification status and license
 
-The rc.25 fixes and rollout instructions are in [RELEASE.md](RELEASE.md). They do not establish a new live success rate. Former held-out cases used for tuning are now development cases; fresh placeholders are intentionally not runnable.
+The rc.26 bounded Node/TypeScript profile is described in [docs/BATCH2.md](docs/BATCH2.md); rollout instructions are in [RELEASE.md](RELEASE.md). They do not establish a new live success rate. Former held-out cases used for tuning are now development cases; fresh placeholders are intentionally not runnable.
 
 All three recorded repairs ran on Nebius and are listed in
 [docs/EVIDENCE.md](docs/EVIDENCE.md). The historical v0.6.0-rc.21 tag remains unchanged: the

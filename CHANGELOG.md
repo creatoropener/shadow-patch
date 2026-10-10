@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.0-rc.26 — Bounded Node/TypeScript investigation and debugging
+
+- Add opt-in repository list/read/search/symbol tools and independent verifier/solver histories.
+- Allow cumulative validated source edits and ordinary baseline/typecheck/build feedback before the hidden gate. Default to one bounded solver session; retain legacy mode.
+- Share step, HTTP request, token, command and deadline limits across the run; add optional operator-priced inference cost caps and atomic evidence checkpoints.
+- Record source provenance, pending actions, usage and stop reasons. Deduplicate final patches and refuse delivery over source changed during the run.
+- Record benchmark execution profiles; keep budget/specification stops in the denominator and reject mixed profiles for one engine.
+- Offline fixtures use native compiler/tests and substituted inference/transport. Live model quality and Nebius behavior require the controlled follow-up run. See docs/BATCH2.md.
+
 ## v0.6.0-rc.25 — Audit fixes for verification, delivery and benchmark evidence
 
 - Resolve TypeScript JSONC/extends and retain ambient declarations; required checks fail closed when unavailable.

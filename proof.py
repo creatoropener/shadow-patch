@@ -27,9 +27,12 @@ from runtimes import (
     RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports,
 )
 from scope_policy import load_scope, check_paths, node_payload
+from agent_budget import ACTIVE_BUDGET, COMPLETION_CAP, AgentStop, BudgetExhausted, BudgetedState, Limits, RunBudget, integer
+from context_tools import RepositorySnapshot
+from agent_loop import AgentSession
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.25"
+APP_VERSION = "0.6.0-rc.26"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -40,6 +43,9 @@ PROTECTED_NAMES = {
     "proof.py",
     "runtimes.py",
     "scope_policy.py",
+    "agent_budget.py",
+    "context_tools.py",
+    "agent_loop.py",
     "apply_fix.py",
     "pr_files.py",
     "test_proof.py",
@@ -445,6 +451,9 @@ def _infer(
         raise InferenceError("NEBIUS_MAX_TOKENS must be an integer.") from error
     if not 1_000 <= max_tokens <= 32_000:
         raise InferenceError("NEBIUS_MAX_TOKENS must be between 1000 and 32000.")
+    if COMPLETION_CAP.get() is not None:
+        max_tokens = min(max_tokens, COMPLETION_CAP.get())
+    budget = ACTIVE_BUDGET.get()
     from openai import APIConnectionError, APIStatusError, OpenAI
     request = build_model_request(
         model=model, system=system, user=user, temperature=temperature,
@@ -458,6 +467,9 @@ def _infer(
                 timeout=300.0, max_retries=0) as client:
         for attempt in range(3):
             options = {"response_format": {"type": "json_object"}} if structured else {}
+            reservation = budget.reserve_request(request) if budget else None
+            if budget:
+                options["timeout"] = max(0.1, min(300.0, budget.remaining()))
             try:
                 response = client.chat.completions.create(**request, **options)
             except APIStatusError as error:
@@ -482,6 +494,8 @@ def _infer(
             except APIConnectionError:
                 last_failure = "Inference connection or timeout failure."
             else:
+                if budget:
+                    budget.record_usage(reservation, getattr(response, "usage", None))
                 choices = getattr(response, "choices", None)
                 choice = choices[0] if choices else None
                 message = getattr(choice, "message", None)
@@ -1486,6 +1500,15 @@ def render_report(proof: dict[str, Any]) -> str:
         f"- Source scope: `{(proof.get('scope') or {}).get('status', 'not recorded')}`; protected symbols constrain edits, not all possible behavioral effects.",
     ]
     generations = regression.get("generation_attempts") or []
+    if proof.get("agent_mode") == "bounded":
+        budget = proof.get("budget", {})
+        lines.extend(["", "## Bounded investigation", "",
+            "- Profile: Node/TypeScript; verifier and solver have separate repository views and histories.",
+            f"- Steps: {budget.get('steps', 0)}; HTTP requests: {budget.get('http_requests', 0)}; charged/reserved tokens: {budget.get('charged_tokens', 0)}; sandbox commands: {budget.get('sandbox_commands', 0)}.",
+            f"- Inference cost: {budget.get('inference_cost_usd') if budget.get('inference_cost_usd') is not None else 'not configured'}; provider prices are supplied by the operator. Sandbox billing is excluded.",
+            "- Role-local tool histories, request accounting and source hashes are saved in proof.json checkpoints."])
+        if proof.get("stop_reason"):
+            lines.append(f"- Stop reason: `{proof['stop_reason']}`.")
     if generations:
         lines.extend(["", "## Verifier generation attempts", "",
                       "| Generation | Status | Sandbox execution |", "| ---: | --- | --- |"])
@@ -1570,13 +1593,104 @@ def render_report(proof: dict[str, Any]) -> str:
 
 
 def write_evidence(root: Path, proof: dict[str, Any]) -> None:
-    (root / REPORT_JSON).write_text(
-        json.dumps(proof, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    (root / REPORT_MARKDOWN).write_text(render_report(proof), encoding="utf-8")
+    for name, content in ((REPORT_JSON, json.dumps(proof, indent=2, sort_keys=True) + "\n"),
+                          (REPORT_MARKDOWN, render_report(proof))):
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=root,
+                                         prefix=".patchproof-evidence-", delete=False) as stream:
+            stream.write(content)
+            temporary = Path(stream.name)
+        temporary.replace(root / name)
 
 
 def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
+    """Own the run-level budget and persist progress for the opt-in profile."""
+    mode = os.environ.get("PATCHPROOF_AGENT_MODE", "legacy").strip()
+    proof["stage"] = "configuration"
+    proof["agent_mode"] = mode
+    if mode not in {"legacy", "bounded"}:
+        raise PatchProofError("PATCHPROOF_AGENT_MODE must be legacy or bounded.")
+    if mode == "legacy" and os.environ.get("PATCHPROOF_MAX_COST_USD", "").strip():
+        raise PatchProofError("The inference cost cap requires PATCHPROOF_AGENT_MODE=bounded.")
+    budget = None
+    token = None
+    try:
+        if mode == "bounded":
+            budget = RunBudget(Limits.from_env())
+            token = ACTIVE_BUDGET.set(budget)
+            engine_root = Path(__file__).resolve().parent
+            engine_files = [engine_root / name for name in ("proof.py", "runtimes.py", "scope_policy.py",
+                            "agent_budget.py", "context_tools.py", "agent_loop.py", "requirements-patchproof.txt")]
+            engine_files.extend(path for path in (engine_root / "patchproof_runtime").iterdir() if path.is_file())
+            proof["engine_provenance"] = {path.relative_to(engine_root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                                          for path in sorted(engine_files)}
+            def checkpoint():
+                proof["budget"] = budget.snapshot()
+                write_evidence(root, proof)
+            budget.on_change = checkpoint
+            checkpoint()
+        return _execute(root, issue, proof)
+    except AgentStop as error:
+        proof["stop_reason"] = error.reason
+        proof["error"] = str(error)
+        raise PatchProofError(f"{error.reason}: {error}") from error
+    except PatchProofError:
+        if budget is not None:
+            stage = proof.get("stage", "configuration")
+            proof.setdefault("stop_reason", "blocked_setup" if stage in {
+                "configuration", "runtime-detection", "repository-analysis", "runtime-preflight",
+                "baseline", "baseline-source-check"} else "candidate_invalid" if stage == "candidate-evaluation"
+                else "verification_failed")
+        raise
+    finally:
+        try:
+            if budget is not None:
+                proof["budget"] = budget.snapshot()
+                write_evidence(root, proof)
+        finally:
+            if token is not None:
+                ACTIVE_BUDGET.reset(token)
+
+
+def bounded_session(*, role, root, issue, adapter, snapshot, allowed_paths, scope,
+                    base_state, api_key, model, record, strategy="", temperature=0.1):
+    budget = ACTIVE_BUDGET.get()
+    package = json.loads(snapshot.files["package.json"])
+    commands = {"baseline": adapter.baseline_command, "typecheck": adapter.project_check_command()}
+    if isinstance(package.get("scripts", {}).get("build"), str):
+        commands["build"] = "CI=1 npm run build"
+
+    def check(name, changes):
+        command = commands.get(name)
+        if not command:
+            return {"check": name, "passed": False, "status": "unavailable", "output": "No declared command for this check."}
+        # Every ordinary check branches from the pre-verifier baseline. Its
+        # writes are discarded; only validated source edits survive between steps.
+        result = apply_contents(base_state, changes).run(shell=command, cwd="/workspace/repo",
+                                                       timeout=300, disposable=False).wait()
+        output = text_output(result)
+        passed = result.exit_code == 0
+        if name == "typecheck":
+            passed = passed and "PATCHPROOF_SOURCE_CHECK=passed" in output
+        return {"check": name, "command": command, "passed": passed, "exit_code": result.exit_code,
+                "output": candidate_retry_feedback(output[-8000:]), "regression_test_present": False,
+                "source_hashes": {item["path"]: sha256_text(item["content"]) for item in changes}}
+
+    def validate(changes):
+        try:
+            candidate_policy_check(base_state, root, changes, scope)
+        except PatchProofError as error:
+            raise ValueError(candidate_retry_feedback(str(error))) from error
+
+    return AgentSession(role=role, snapshot=snapshot, allowed_paths=allowed_paths, adapter=adapter,
+        issue_text=f"#{issue.number}: {issue.title}\n{issue.body}", scope=scope,
+        model_call=lambda system, user: model_json(api_key=api_key, model=model, system=system,
+                                                  user=user, temperature=temperature),
+        run_check=check, validate_changes=validate, budget=budget, record=record,
+        checkpoint=budget.on_change, redact=candidate_retry_feedback,
+        max_steps=8 if role == "verifier" else 24, strategy=strategy)
+
+
+def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
     proof["stage"] = "configuration"
     api_key = require_env("NEBIUS_API_KEY")
     project_id = require_env("NEBIUS_PROJECT_ID")
@@ -1586,6 +1700,9 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         adapter = detect_runtime(root)
     except RuntimeDetectionError as error:
         raise PatchProofError(str(error)) from error
+    bounded = proof["agent_mode"] == "bounded"
+    if bounded and adapter.id != "node-typescript":
+        raise AgentStop("blocked_setup", "The bounded profile currently requires node-typescript; choose legacy for another runtime.")
     runtime_image_env = f"CONTREE_IMAGE_{adapter.id.replace('-', '_').upper()}"
     proof["stage"] = "configuration"
     image_uuid = os.environ.get(runtime_image_env, "").strip() or require_env(
@@ -1593,10 +1710,16 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
     )
 
     proof["stage"] = "repository-analysis"
-    verifier_context, _ = collect_repository_context(root, adapter, include_tests=True)
-    solver_context, allowed_paths = collect_repository_context(
-        root, adapter, include_tests=True
-    )
+    snapshot = None
+    if bounded:
+        snapshot = RepositorySnapshot(root, adapter, EXCLUDED_DIRS, PROTECTED_NAMES, is_protected_path)
+        proof["repository_profile"] = snapshot.provenance()
+        allowed_paths = set(snapshot.editable)
+        verifier_context = solver_context = ""
+        proof["agent_sessions"] = {"verifier": {}, "solvers": []}
+    else:
+        verifier_context, _ = collect_repository_context(root, adapter, include_tests=True)
+        solver_context, allowed_paths = collect_repository_context(root, adapter, include_tests=True)
     try:
         scope = load_scope(root)
     except ValueError as error:
@@ -1648,12 +1771,20 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
 
     sdk = create_sandbox_client(api_key, project_id)
     base_image = sdk.images.use(image_uuid, strict=True)
+    if bounded:
+        base_image = BudgetedState(base_image, ACTIVE_BUDGET.get())
 
     with tempfile.TemporaryDirectory(prefix="patchproof-") as temporary:
         archive_path = Path(temporary) / "repository.tar.gz"
         make_repository_archive(root, archive_path)
+        if bounded:
+            proof["repository_profile"]["archive_sha256"] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
 
         baseline = sandbox_workspace(base_image, archive_path, adapter, root)
+        if bounded and not isinstance(baseline, BudgetedState):
+            baseline = BudgetedState(baseline, ACTIVE_BUDGET.get())
+        if bounded:
+            proof["runtime"]["preflight_output"] = candidate_retry_feedback(short_output(baseline))
         proof["stage"] = "baseline"
         baseline_suite = baseline.run(
             shell=adapter.baseline_command,
@@ -1693,6 +1824,13 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         # Do not spend an inference request until the selected image, dependency
         # bootstrap, runtime preflight, and existing baseline have all passed.
         # The regression is still generated before any solver call or candidate.
+        verifier_agent = None
+        if bounded:
+            proof["stage"] = "verifier-investigation"
+            verifier_agent = bounded_session(role="verifier", root=root, issue=issue, adapter=adapter,
+                snapshot=snapshot, allowed_paths=allowed_paths, scope=scope, base_state=baseline_suite,
+                api_key=api_key, model=model, record=proof["agent_sessions"]["verifier"])
+            verifier_context = verifier_agent.run()
         proof["stage"] = "verifier-generation"
         generation_attempts: list[dict[str, Any]] = []
         proof["regression_test"] = {"generation_attempts": generation_attempts}
@@ -1720,6 +1858,10 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         attempted: dict[str, dict[str, Any]] = {}
         for reproduction_attempt in range(1, 4):
             if reproduction_attempt > 1:
+                if verifier_agent is not None:
+                    proof["stage"] = "verifier-investigation"
+                    verifier_context = verifier_agent.run(feedback=retry_feedback)
+                    proof["stage"] = "verifier-reproduction"
                 test_content, rationale = generate_regression_with_retry(
                     issue=issue, context=verifier_context, api_key=api_key,
                     model=model, adapter=adapter, test_path=test_path,
@@ -1811,7 +1953,11 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     "exit_code": discovery.exit_code, "output": short_output(discovery),
                 }
                 if not discovered:
+                    if bounded:
+                        proof["stop_reason"] = "blocked_setup"
                     raise PatchProofError("Ordinary project CI did not reproduce the frozen regression. Configure test_directory/test discovery before PR delivery.")
+                if bounded:
+                    ACTIVE_BUDGET.get().on_change()
                 break
             retry_feedback = reproduction_feedback(
                 test_content, classification, reproduction_output
@@ -1827,6 +1973,9 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             ("defensive edge-case correction", 0.35),
             ("maintainable behavior-preserving correction", 0.55),
         ]
+        if bounded:
+            strategies = strategies[:integer("PATCHPROOF_AGENT_CANDIDATES", 1, 1, 3)]
+        seen_candidates = {}
         passing: list[
             tuple[tuple[int, int, float], dict[str, Any], list[dict[str, str]]]
         ] = []
@@ -1846,20 +1995,37 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                 candidate_record["baseline_attempts"] = []
                 # A candidate gets one correction using ONLY the ordinary
                 # baseline output. Hidden-regression failures never go to a solver.
-                for baseline_attempt in range(1, 3):
+                baseline_limit = 1 if bounded else 2
+                for baseline_attempt in range(1, baseline_limit + 1):
                     candidate_record["stage"] = "generation"
-                    changes, summary = generate_candidate_with_retry(
-                        candidate_record=candidate_record,
-                        retry_feedback=baseline_feedback,
-                        issue=issue, context=solver_context,
-                        allowed_source_paths=allowed_paths, api_key=api_key,
-                        model=model, root=root, adapter=adapter,
-                        strategy=strategy, temperature=temperature,
-                    )
+                    if bounded:
+                        session_record = {"candidate": index}
+                        proof["agent_sessions"]["solvers"].append(session_record)
+                        session = bounded_session(role="solver", root=root, issue=issue, adapter=adapter,
+                            snapshot=snapshot, allowed_paths=allowed_paths, scope=scope, base_state=baseline_suite,
+                            api_key=api_key, model=model, record=session_record, strategy=strategy, temperature=temperature)
+                        changes, summary = session.run()
+                        candidate_record["generation_attempts"] = session.used_steps
+                    else:
+                        changes, summary = generate_candidate_with_retry(
+                            candidate_record=candidate_record,
+                            retry_feedback=baseline_feedback,
+                            issue=issue, context=solver_context,
+                            allowed_source_paths=allowed_paths, api_key=api_key,
+                            model=model, root=root, adapter=adapter,
+                            strategy=strategy, temperature=temperature,
+                        )
                     candidate_record["summary"] = summary
                     candidate_record["changed_files"] = [item["path"] for item in changes]
                     candidate_record["changed_lines"] = changed_lines(root, changes)
                     candidate_record["diff"] = unified_diff_text(root, changes)
+                    if bounded:
+                        identity = sha256_text(json.dumps(changes, sort_keys=True))
+                        candidate_record["source_identity"] = identity
+                        if identity in seen_candidates:
+                            candidate_record.update(stage="duplicate", duplicate_of=seen_candidates[identity])
+                            raise PatchProofError("Duplicate final patch; independent evaluation was already recorded.")
+                        seen_candidates[identity] = index
                     # This snapshot predates the hidden test. Keeping that file
                     # absent prevents broad baseline discovery (e.g. pytest) from
                     # exposing hidden assertions in the solver's retry feedback.
@@ -1909,7 +2075,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         if source_check[0]:
                             break
                         candidate_record["stage"] = "source-check"
-                        if baseline_attempt == 2:
+                        if baseline_attempt == baseline_limit:
                             raise PatchProofError(
                                 "Candidate still fails the TypeScript check after one correction."
                             )
@@ -1921,7 +2087,7 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                             "requesting one correction.", file=sys.stderr,
                         )
                         continue
-                    if baseline_attempt == 2:
+                    if baseline_attempt == baseline_limit:
                         raise PatchProofError("Candidate still fails the existing baseline after one correction.")
                     patch = unified_diff_text(root, changes)
                     baseline_feedback = candidate_retry_feedback(
@@ -1964,6 +2130,15 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         time.monotonic() - started,
                     )
                     passing.append((score, candidate_record, changes))
+            except AgentStop as candidate_error:
+                candidate_record.update(error=str(candidate_error), stop_reason=candidate_error.reason)
+                if isinstance(candidate_error, BudgetExhausted):
+                    if passing:
+                        proof["search_stopped"] = str(candidate_error)
+                        break  # replay still needs its own available command/time budget
+                    if candidate_error.scope == "session":
+                        continue
+                raise
             except Exception as candidate_error:  # noqa: BLE001 - isolate a failed candidate,
                                                     # InferenceError included: a JSON-formatting
                                                     # or refusal hiccup on THIS strategy's prompt
@@ -1972,6 +2147,8 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             finally:
                 candidate_record["duration_seconds"] = round(time.monotonic() - started, 3)
                 proof["candidates"].append(candidate_record)
+                if bounded:
+                    ACTIVE_BUDGET.get().on_change()
 
         evaluated_branches = sum(
             1 for candidate in proof["candidates"] if "image" in candidate
@@ -1980,6 +2157,10 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                          "evaluated": evaluated_branches, "passing": len(passing),
                          "policy": "any eligible passing candidate may enter clean replay"}
         if not passing:
+            if bounded:
+                proof["stop_reason"] = ("budget_exhausted" if any(c.get("stop_reason") == "budget_exhausted" for c in proof["candidates"])
+                                        else "verification_failed" if any(c.get("stage") == "regression" for c in proof["candidates"])
+                                        else "candidate_invalid")
             raise PatchProofError("All candidate repairs were rejected.")
 
         passing.sort(key=lambda item: item[0])
@@ -2016,6 +2197,16 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
 
         # The GitHub workspace changes only after independent replay passes.
         delivered = frozen_files + winner_changes
+        if bounded:
+            for item in delivered:
+                path = root / item["path"]
+                if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+                    raise AgentStop("blocked_setup", "Delivery path changed during the run.")
+                expected = snapshot.hashes.get(item["path"])
+                if expected and (not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected):
+                    raise AgentStop("blocked_setup", "Local source changed after the snapshot; refusing to overwrite it.")
+                if not expected and path.exists() and path.read_bytes() != item["content"].encode("utf-8"):
+                    raise AgentStop("blocked_setup", "A local delivery file appeared during the run; refusing to overwrite it.")
         proof["pr_files"] = [{"path": item["path"], "sha256": sha256_text(item["content"])} for item in delivered]
         for change in delivered:
             destination = root / change["path"]
@@ -2063,7 +2254,8 @@ def main(argv: list[str] | None = None) -> int:
             "runtime-preflight", "baseline", "baseline-source-check",
         }
         proof["verdict"] = (
-            "blocked" if proof.get("stage") in blocked_stages else "rejected"
+            "blocked" if proof.get("stage") in blocked_stages or proof.get("stop_reason") in {
+                "blocked_setup", "needs_specification", "budget_exhausted"} else "rejected"
         )
         proof["error"] = str(error)
         if issue:

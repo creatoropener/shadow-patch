@@ -210,3 +210,11 @@ replaced by the Aegisscan SSRF case before any run and was never run.
   cases were re-run. The re-run is the one reported above.
 
 The engine was not changed after the held-out cases were written.
+
+## rc.26 bounded profile
+
+Use the workflow's `agent_mode` input (`bounded` or `legacy`). Bounded mode requires rc.26 and the Node/TypeScript adapter. The first smoke defaults to `qrcrafts-1`, one trial and one solver session; file-sharing needs the separate CI setup/base pin documented in its rc.25 review. Preserve the active manifest and historical protocol snapshots.
+
+Meta records the requested mode and configured limits; proof records actual mode, shared usage, role histories and stop reasons. Reports reject mixed modes/model budgets for the same engine. Budget exhaustion and missing-specification stops are counted as unsuccessful attempts, not excluded infrastructure failures. Compare the same model, cases and explicitly recorded budgets; legacy three-proposal runs and bounded one-session runs are different execution policies.
+
+The current local fixtures demonstrate control flow, not new model accuracy. After a live run, inspect the entire trajectory, frozen test, winning diff and normal target CI before judging correctness or moving to fresh evaluation cases. See [BATCH2.md](BATCH2.md).

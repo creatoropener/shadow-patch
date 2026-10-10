@@ -1,64 +1,56 @@
-# PatchProof v0.6.0-rc.25 — audit fixes
+# PatchProof v0.6.0-rc.26 — Batch 2
 
-Prepared from the supplied rc.24 repository. This is a local engineering update, not a published tag or a new Nebius benchmark result.
+This release implements the first bounded investigation/repair profile for a single Node/TypeScript package. It builds on the reviewed rc.25 code. The implementation is locally validated; a live Nebius benchmark is the next gate.
 
 ## What changed
 
-- TypeScript configuration is resolved by the target compiler with `--showConfig`, preserving JSONC, inherited options and project ambient declarations. Required source checks report passed, failed or unavailable; unavailable checks cannot authorize a repair.
-- Regression tests use discoverable filenames. Byte-stream helpers and declarations are copied into the PR beside the test. Legacy helper imports are normalized before the test is frozen and hashed. The ordinary target test command must reproduce the frozen test before candidates are generated.
-- `scope.allowed_paths` and `scope.protected_symbols` make declared boundaries eligibility requirements. The Node AST guard rejects introduced assertion/runtime mutations, including common aliases. Unconfigured scope is explicitly reported as unrestricted.
-- A passing eligible candidate can reach clean replay even if another strategy cannot generate a patch. All three attempts and their individual failures remain in the race record.
-- Pytest evidence records actual exception types and test phases. Runtime errors containing the text `AssertionError` no longer count as reproduction. Simple constant aliases in message matchers are checked, contradictory wording guidance is removed, and checker exceptions do not silently pass.
-- The context budget no longer stops discovery at the first oversized block, and file eligibility is separate from the rendered context.
-- Benchmark patches use exact UTF-8 bytes and full SHA-256. New trials quarantine old proof files, record fresh identities and proof digests, preserve protocol snapshots, and reject inconsistent success/exit evidence. Oracles require a recognized assertion on the base and a passing reference repair with positive test counts.
-- Reports preserve recorded split membership and refuse to pool different protocols. Former held-out issues are development cases. Historical artifacts remain untouched; two fresh held-out placeholders remain unselected.
-- PR workflows stage only the verified file manifest, after checking every delivered file hash.
+- Repository inventory, paginated file listing, literal search, lexical symbol lookup and line-ranged reads let the model inspect files beyond its initial context.
+- An independent read-only verifier investigates APIs before generating the frozen regression. Each solver starts with its own history and source overlay; hidden-test output never becomes solver feedback.
+- Solvers can edit previously read, allowed source files and request ordinary baseline, TypeScript and declared build checks. They can correct compiler/test failures within the same session. Existing file/symbol scope and interference checks validate edits before execution.
+- Shared budgets cover tool actions, actual HTTP requests including retries, tokens, sandbox commands and elapsed time. An optional inference dollar cap uses explicit operator-supplied prices. Sandbox charges are separate.
+- Atomic progress files record separate histories, pending actions, native diagnostics, source and engine hashes, and request accounting. Stop reasons distinguish setup, specification, budget and verification failures. Checkpoints are diagnostic; automatic resume is not implemented.
+- Benchmark evidence records execution mode and budgets. Reports reject mixed profiles for the same engine and requested/actual mode mismatches. Budget and specification stops stay in the failure denominator.
 
-## Install into shadow-patch
+The ordinary-CI discovery gate, frozen verifier, candidate eligibility checks, clean replay and verified-file delivery manifest from rc.25 remain required. The default execution mode remains **legacy**; enable **bounded** explicitly.
 
-1. Extract `shadow-patch-rc25-changed-files.zip` into the **shadow-patch repository root**, preserving paths. It contains changed and new files only. No source files need deleting. Keep your target projects' dependencies and secrets separate.
-2. Commit on a review branch and run **Engine Checks**. The workflow installs its compiler/test dependencies; it makes no model or sandbox calls.
-3. Review the diff, then publish/tag `v0.6.0-rc.25` when ready. The example reusable Action references that tag; it will not resolve until you publish it. A commit SHA can be used instead for an unpublished trial.
-4. For a copy-installed target, use the separate `patchproof-target-v0.6.0-rc.25.zip`, or regenerate it with:
+## Install the engine update
 
-   ```bash
-   python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.25.zip
-   ```
+1. Extract **shadow-patch-rc26-changed-files.zip** into the root of your rc.25 **shadow-patch engine repository**, preserving paths. Review existing local changes before overwriting a changed file. No files require deletion. The archive includes a file/hash manifest; its baseline commit identifies the local reviewed snapshot, not a published GitHub commit.
+2. Commit the update on a review branch and run **Engine Checks**. It installs pinned test dependencies and makes no model or sandbox calls. The included evidence was run locally on Node 24; this GitHub gate also checks Node 20.
+3. After checks pass, use the reviewed commit SHA for the benchmark, or publish **v0.6.0-rc.26** when ready. The example Action reference requires that tag to exist; no tag has been published by this work.
 
-   The new `scope_policy.py`, `tools/pr_files.py`, and runtime helpers are required. Copy the whole installer, not just `proof.py` and `runtimes.py`.
-5. Existing v0.7 web/all images already contain the classic TypeScript API and tsx. No image recipe change is required by this update; runtime helpers are uploaded by the engine on each run. Older images without those tools must be refreshed. The target still needs its own working compiler, Node type definitions and ordinary test dependencies.
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.26.zip** into the target root. It contains 22 engine/workflow files plus installation instructions. Copy every file, including the new **agent_budget.py**, **context_tools.py** and **agent_loop.py**; copying only proof.py leaves an incomplete installation. Review target workflow customizations when merging the copied workflows. To regenerate the installer:
 
-## Scope configuration
+~~~bash
+python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.26.zip
+~~~
 
-The benchmark now applies this policy to **file-sharing formatting issue #1 only**:
+Enable the copied workflow with repository variable **PATCHPROOF_AGENT_MODE=bounded**. For the composite Action, pass **agent-mode: bounded**. For CLI runs, export the same environment variable. Other runtimes still use legacy.
 
-```json
-{
-  "runtime": "node-typescript",
-  "scope": {
-    "allowed_paths": ["lib/utils/format.ts"],
-    "protected_symbols": {"lib/utils/format.ts": ["formatEta"]}
-  }
-}
-```
+## Next live run
 
-Paths are exact repository-relative files. Protected symbols are named top-level JS/TS declarations or Python functions/classes. They are checked against the original source; Python decorators are included. `test_directory` can select a nonstandard generated-test directory.
+Start **Benchmark** from the branch containing this harness/workflow with:
 
-A repository's policy applies to every issue it runs. Do not leave the formatting-only policy in place when running crypto issue #3; supply an appropriate policy for that task. These declarations constrain source edits. They do not prove every indirect behavioral effect: retain adjacent compatibility tests and human review. The fixture checks ETA behavior as well as the changed function.
+| Input | Value |
+| --- | --- |
+| engines | Your reviewed rc.26 commit SHA, or v0.6.0-rc.26 after publishing it |
+| trials | 1 |
+| split | dev |
+| cases | qrcrafts-1 |
+| agent_mode | bounded |
 
-## Validation and remaining work
+Keep the previous model and per-call token setting. Use one solver session and the default shared limits initially: 40 actions, 32 HTTP requests, 250000 accounted tokens, 64 sandbox commands and 1800 seconds. A tool reply has a 4000-token completion cap. See [docs/BATCH2.md](docs/BATCH2.md) for configuration and accounting details.
 
-Validation passed: **244 Python tests, zero skips, and 2 Node helper tests**. Python compilation, JavaScript syntax checks, diff whitespace checks, and the two-case development plan also passed. The release evidence contains the complete local test log. The tests include a real TypeScript compiler/Node pipeline with JSONC inheritance, restricted ambient types, a global declaration file, a protected adjacent function, an isolated generation failure, clean replay, and an exported tree that passes ordinary `npm test` without sandbox mounts. Model and ConTree calls in that fixture are substituted locally.
+Download the trial artifact and report. Review proof.json, verification-report.md, the exact candidate diff, mode/budget metadata and the independent verdict. A new diff needs its own full SHA-256 label tied to the recorded case identity. Previous labels apply only to the identical bytes and case snapshot. Confirm the delivered patch/test passes ordinary target CI before expanding the run.
 
-The local toolchain is Python 3.12.14, Node 24.19.0, TypeScript 5.6.3 and tsx 4.20.6. GitHub Engine Checks remains on Node 20. No remote inference, Nebius execution, PR creation, tag publication or deployment was performed during this update.
+**File-sharing is still a target setup prerequisite:** complete the rc.25 review's mixed .mjs/.ts ordinary-test discovery fix, commit only that CI/dependency/config setup while preserving the unfixed application source, and pin the new base/protocol before adding file-sharing-app-1. The rc.26 engine cannot make an undiscovered generated test count as CI evidence. The supplied manifest, base commits, labels and unselected held-out placeholders are not overwritten by this changed-files package.
 
-Known boundaries:
+## Validation and boundaries
 
-- TypeScript project-reference graphs are explicitly unavailable in this profile; an owning-project adapter is still needed. The native TypeScript 7 CLI has not been exercised locally.
-- Discovery verifies the adapter's ordinary target test command, not every job in an arbitrary CI workflow. The Node assertion classifier expects TAP. Configure a Node-test-compatible command such as `node --import tsx --test --test-reporter=tap tests/*.test.ts` where appropriate.
-- A static-web regression that depends on engine-only jsdom cannot be exported as a verified PR until the target has a portable dependency/test harness. This now blocks visibly.
-- The interference check detects common AST forms; it is not a security boundary against arbitrary hostile JavaScript or Python. Message-pin checking is also bounded, not general semantic analysis.
-- New exact-hash reports do not reuse short normalized legacy labels. Review the raw diff and record a full hash plus the trial's `case_sha256`.
-- No fresh unseen set has been selected, independently judged or frozen. The current manifest is development-only; the placeholders deliberately block held-out execution. Generalization remains unproven.
+Final local validation: **259 Python tests, zero skips, and 2 Node helper tests**. Python compilation, JavaScript helper syntax, workflow/Action YAML parsing, whitespace checks and the one-case development plan passed. See docs/evidence/rc26-local/ for logs and toolchain details. Package verification checks the exported installation and the changed-file overlay against the prepared tree.
 
-After Engine Checks passes in GitHub, the next controlled live check is one trial each on `qrcrafts-1` and `file-sharing-app-1`, split `dev`, using the reviewed rc.25 revision. Keep the proof artifacts and review both the proposed patch and final target CI. Increase the budget only after diagnosing those results. Bounded repository investigation and the independent unseen pilot remain subsequent audit batches.
+The native fixtures use real TypeScript, tsx and Node checks. They find a repair file outside the initial map, observe a real wrong-API compiler error, read the missing type, correct the source, pass frozen-test and clean-replay gates, and run the delivered ordinary npm test. A separate failing fixture confirms that hidden-test failure causes no solver retry or local source delivery. Model responses and ConTree transport are substituted locally. No live inference or Nebius benchmark was run for rc.26.
+
+This profile supports existing dependencies and at most ten existing source files per repair. It does not yet support monorepo orchestration, TypeScript project references, browser interaction, automatic dependency/config migration, new-file repairs or checkpoint resume. The deadline is checked at operation boundaries with capped call timeouts; provider transport/queue latency may return late. Static interference checks remain bounded checks, not a security proof.
+
+The live trial will test whether the model selects useful actions and the current provider executes the flow successfully. Generalization still requires Batch 3: independently selected fresh cases, reference repairs/oracles, a frozen protocol and held-out evaluation.

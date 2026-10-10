@@ -1,0 +1,118 @@
+{
+  "release": "0.6.0-rc.26",
+  "baseline_commit": "4eae63abbb70cc79322d6805de3f9753204ee834",
+  "baseline_kind": "local reviewed rc.25 snapshot; not a published GitHub commit",
+  "deleted_files": [],
+  "files": [
+    {
+      "path": ".github/workflows/benchmark.yml",
+      "sha256": "0709b7513736ebea980edc532c1947de64900f4d5f900103bfe2f742c0fa351c",
+      "baseline_sha256": "3687785deb390f58b97d6464f9804ec54563cd3158537c1907d71a2f20fc9a2d"
+    },
+    {
+      "path": ".github/workflows/engine-checks.yml",
+      "sha256": "fdc6e74cbb09db7b82172ac93222a8719bbf2d1386cc9d4459d2edd6ed6bd39e",
+      "baseline_sha256": "7582e0f7b60fe8123ede3af711f6d6aa66fbf5056fe9ff85fb771f36f789291a"
+    },
+    {
+      "path": ".github/workflows/shadow-fix.yml",
+      "sha256": "cdaeb8aed616ff500eec6ccf68dad8b35dd403fb35a029354b1d6e137eaf79e5",
+      "baseline_sha256": "d571d45bb2da014367d61aa5b92ffdefd1e66a74cb1c21834322aad23cc24fce"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "5b0af776aec6df6e828f337ae246dc4137e075b5ecd020a3e75be87d48fbbc0d",
+      "baseline_sha256": "f07e3cc682e991bf495131bb8a9d1177f1f9730a31439fc67e18dc1ea8395d9a"
+    },
+    {
+      "path": "README.md",
+      "sha256": "72c17a46fce1296a0b6362aa30b91d19182b47763beb6baa2d948cef5a473cde",
+      "baseline_sha256": "947fb79a913db1b77a766e310376032fc80496beb0789527626a7eb337e47a00"
+    },
+    {
+      "path": "RELEASE.md",
+      "sha256": "cc0fbc0c2e12fc24be0cfe886401e8ed139313a7ea7a17fe9a24ed992a4ec4ed",
+      "baseline_sha256": "fd7efeb7946aa5178a575f0115d3cf4dddd1c99ab767dc92d08e259e8ab53897"
+    },
+    {
+      "path": "RELEASE_FILES.sha256",
+      "sha256": "7a9f90c745b665adbd791c1076b50d42362e5dd2f918140a4b65d18cde3fd81e",
+      "baseline_sha256": "d66506b95866a9708d95f496655cf54bb98665889782149f5035e7de681db5e7"
+    },
+    {
+      "path": "action.yml",
+      "sha256": "ef396336f72b9e47b095afad25528d5e7d6a246355ccb054fe8eae8998572257",
+      "baseline_sha256": "f4232e7ff797a18f97a9046c946359eff998a9fa5d0efb570e76585fe5a1d3b7"
+    },
+    {
+      "path": "agent_budget.py",
+      "sha256": "e3eec4cae85ccb366e388fd90c23bae55ef028c4096fdb5a1d7df91f3d3c0672",
+      "baseline_sha256": null
+    },
+    {
+      "path": "agent_loop.py",
+      "sha256": "4092bc7854982b8d1c6d93aedcbf2a7fbd5538b822f6591f775f56f751ff872a",
+      "baseline_sha256": null
+    },
+    {
+      "path": "bench/harness.py",
+      "sha256": "379e59781e4f959f927fbfb9e46950d24841ae03ddd70381034cc1ea594987ea",
+      "baseline_sha256": "d83d6cc55d3b4dd33000f9b1f3c019ef592f6adb2a8a39dcc237d9023e7ffb22"
+    },
+    {
+      "path": "context_tools.py",
+      "sha256": "6d24963c9149fc716cd7d1ce9f1c965b4e7ad48564353f05235cfd5100c2b7a0",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/BATCH2.md",
+      "sha256": "0d4c66c0ea2102f8274047318c51e88c74f669d78443c7fd28d54d6648e77efd",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/BENCHMARK.md",
+      "sha256": "22793a274faffcabd687479479f73c040f83b9d15bdec9481c211fa247a6475c",
+      "baseline_sha256": "871d1111371e9c79c1cfaf5078e6649522ca135b5a9b918ffbebb6f4a40f6f1f"
+    },
+    {
+      "path": "docs/evidence/rc26-local/node-tests.txt",
+      "sha256": "86ad3f4547dff0bbb6814d8f2584d024ba52b1f171b30246532fb4f1a5e606b4",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/evidence/rc26-local/python-tests.txt",
+      "sha256": "53d5516c83fdf60c27e4e28d332a54c91977750291b60d89cb24a61251297bcc",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/evidence/rc26-local/release-checks.txt",
+      "sha256": "3c0e2f7cd79285213fcc567819371d9e972e9b11ac56c19bb7c899f1be6709fe",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/evidence/rc26-local/validation.json",
+      "sha256": "21d742857fc14700e7a98ab17c0ed1f490b149965dab05b7d19dd70c897c1f1a",
+      "baseline_sha256": null
+    },
+    {
+      "path": "examples/action-usage/shadow-fix.yml",
+      "sha256": "239872d491467e733c36447c50868b3d0a1c9ceedf7bf7636e809beb2da99bbb",
+      "baseline_sha256": "426cd8e7b8533260d982d2495ce560cf39201895d1fe4591f716faa9937381e8"
+    },
+    {
+      "path": "proof.py",
+      "sha256": "7c869bffa65392ac37fd6687c289029a92b0e68b119b1bbe255bf6373ea210b2",
+      "baseline_sha256": "aab4b94d0ecc64ae332719411be2fc0fa2e2169226bd4ff136a6532c0d1d3a08"
+    },
+    {
+      "path": "tests/test_agent_loop.py",
+      "sha256": "5749d10b8341a27f767c0ee7a3c959fe9853de1894249cbf573e47043b85855f",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tools/export_target.py",
+      "sha256": "72dc78febf11f34ecaf15822907757ac6400cff8cd8cdc1cc92ce30a2f5977b1",
+      "baseline_sha256": "bf71357e680e1018ce2c6aa0e4a6776c09649b6fa6fcfe27f27b8939aee82108"
+    }
+  ]
+}
