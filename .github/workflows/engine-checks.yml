@@ -28,7 +28,7 @@ jobs:
 
       - name: Compile Python sources
         run: >-
-          python -m py_compile proof.py runtimes.py scope_policy.py tools/export_target.py tools/pr_files.py
+          python -m py_compile proof.py runtimes.py scope_policy.py agent_budget.py context_tools.py agent_loop.py tools/export_target.py tools/pr_files.py
           patchproof_runtime/typescript_check.py patchproof_runtime/typescript_source_check.py
 
       - name: Install pinned compiler for linter integration tests
