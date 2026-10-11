@@ -9,7 +9,7 @@ on:
       engines:
         description: 'Engine tag(s) to benchmark, comma-separated, e.g. v0.6.0-rc.20 or v0.6.0-rc.19,v0.6.0-rc.20'
         required: true
-        default: v0.6.0-rc.26
+        default: v0.6.0-rc.27
       trials:
         description: 'Trials per case and engine (1 to 5)'
         required: true
@@ -24,7 +24,7 @@ on:
         required: false
         default: 'qrcrafts-1'
       agent_mode:
-        description: 'Execution profile (bounded requires rc.26 and node-typescript)'
+        description: 'Execution profile (bounded requires rc.26 or later and node-typescript)'
         type: choice
         options: [legacy, bounded]
         default: bounded
