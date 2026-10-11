@@ -85,7 +85,8 @@ Runtime detection reads root manifests. Select explicitly when ambiguous:
 {"runtime": "node-typescript"}
 ```
 
-Save that as `patchproof.json`. Only `runtime` and `test_directory` are accepted.
+Save that as `patchproof.json`. It accepts `runtime`, `test_directory`, `scope`, `root` and `known_failures`;
+see [GENERALIZATION.md](GENERALIZATION.md) for the last two and for package managers.
 For Go, `test_directory` names the existing package containing source. Consult
 `runtimes.py` for conventional Maven, Gradle and Rust layouts.
 

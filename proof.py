@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -24,15 +25,15 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from runtimes import (
-    RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports,
+    RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports, resolve_project_root,
 )
-from scope_policy import load_scope, check_paths, node_payload
+from scope_policy import CONFIG_ROOT, load_scope, check_paths, node_payload
 from agent_budget import ACTIVE_BUDGET, COMPLETION_CAP, AgentStop, BudgetExhausted, BudgetedState, Limits, RunBudget, integer
 from context_tools import RepositorySnapshot
 from agent_loop import AgentSession
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.26"
+APP_VERSION = "0.6.0-rc.27"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1359,7 +1360,7 @@ def sandbox_workspace(
                 "typescript_check.py", "typescript_test_lint.mjs",
                 "typescript_source_check.py", "typescript_runtime.d.ts",
                 "typescript_config.py", "candidate_policy.mjs", "pytest_check.py",
-                "junit_check.py", "java_check.py")}
+                "junit_check.py", "java_check.py", "known_failures.py")}
     for helper in helpers.values():
         if not helper.is_file():
             raise PatchProofError(f"Incomplete PatchProof installation: missing {helper.name}")
@@ -1408,10 +1409,16 @@ def apply_contents(state: Any, changes: list[dict[str, str]]) -> Any:
     return state.apply_files(files=files)
 
 
+def original_text(root: Path, name: str) -> str:
+    """Pre-fix content of a file; empty for a file the repair creates."""
+    path = root / name
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
 def changed_lines(root: Path, changes: list[dict[str, str]]) -> int:
     total = 0
     for change in changes:
-        original = (root / change["path"]).read_text(encoding="utf-8").splitlines()
+        original = original_text(root, change["path"]).splitlines()
         replacement = change["content"].splitlines()
         for line in difflib.ndiff(original, replacement):
             if line.startswith(("+ ", "- ")):
@@ -1429,9 +1436,9 @@ def unified_diff_text(root: Path, changes: list[dict[str, str]]) -> str:
     """
     return "\n".join(
         "".join(difflib.unified_diff(
-            (root / item["path"]).read_text(encoding="utf-8").splitlines(True),
+            original_text(root, item["path"]).splitlines(True),
             item["content"].splitlines(True),
-            fromfile=item["path"], tofile=item["path"],
+            fromfile=item["path"] if (root / item["path"]).is_file() else "/dev/null", tofile=item["path"],
         )) for item in changes
     )
 
@@ -1602,6 +1609,76 @@ def write_evidence(root: Path, proof: dict[str, Any]) -> None:
         temporary.replace(root / name)
 
 
+ENGINE_MODULES = ("proof.py", "runtimes.py", "scope_policy.py", "agent_budget.py", "context_tools.py",
+                  "agent_loop.py", "requirements-patchproof.txt")
+PROJECT_INPUTS = ("package.json", "tsconfig.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml",
+                  "yarn.lock", ".yarnrc.yml", "bun.lock", "bun.lockb", "requirements.txt", "pyproject.toml",
+                  "pom.xml", "build.gradle", "build.gradle.kts", "go.mod", "go.sum", "Cargo.toml", "Cargo.lock")
+
+
+def engine_file_hashes() -> dict[str, str]:
+    """SHA-256 of every engine file that executed, so an APP_VERSION string is not the only identity."""
+    engine_root = Path(__file__).resolve().parent
+    files = [engine_root / name for name in ENGINE_MODULES if (engine_root / name).is_file()]
+    runtime = engine_root / "patchproof_runtime"
+    if runtime.is_dir():
+        files.extend(path for path in runtime.iterdir() if path.is_file())
+    return {path.relative_to(engine_root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(files)}
+
+
+def engine_identity() -> dict[str, Any]:
+    """Commit or ref of the engine checkout, whichever the environment can tell us."""
+    commit = os.environ.get("PATCHPROOF_ENGINE_COMMIT", "").strip() or None
+    if commit is None:
+        try:
+            resolved = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "HEAD"],
+                                      capture_output=True, text=True, timeout=10, check=False)
+            commit = resolved.stdout.strip() if resolved.returncode == 0 and resolved.stdout.strip() else None
+        except (OSError, subprocess.SubprocessError):
+            commit = None
+    ref = os.environ.get("PATCHPROOF_ENGINE_REF", "").strip() or os.environ.get("GITHUB_ACTION_REF", "").strip() or None
+    return {"app_version": APP_VERSION, "commit": commit, "ref": ref, "files": engine_file_hashes()}
+
+
+def project_input_hashes(repo_root: Path, project: Path) -> dict[str, str]:
+    """Manifests, lockfiles and the effective patchproof.json the run was built from."""
+    found: dict[str, str] = {}
+    for name in PROJECT_INPUTS:
+        path = project / name
+        if path.is_file() and not path.is_symlink():
+            found[path.relative_to(repo_root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    config = repo_root / "patchproof.json"
+    if config.is_file() and not config.is_symlink():
+        found["patchproof.json"] = hashlib.sha256(config.read_bytes()).hexdigest()
+    return found
+
+
+def toolchain_versions(adapter: RuntimeAdapter, output: str) -> dict[str, Any]:
+    """Name the versions the sandbox preflight printed; always keep the raw lines."""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    names: list[str] = []
+    if adapter.id in {"node-typescript", "node-package"}:
+        names = ["node", "npm"] + ([adapter.package_manager] if adapter.package_manager != "npm" else [])
+        if adapter.id == "node-typescript":
+            names += ["tsx", "tsc"]
+    named = {}
+    if names and len(lines) >= len(names):
+        for name, line in zip(names, lines[-len(names):]):
+            named[name] = line.removeprefix("Version ").removeprefix("v")
+    return {"versions": named, "raw": lines[-12:]}
+
+
+def ordinary_status(output: str) -> dict[str, Any]:
+    """Last PATCHPROOF_BASELINE verdict printed by patchproof_runtime/known_failures.py."""
+    records = re.findall(r"^PATCHPROOF_BASELINE=(.+)$", output, re.MULTILINE)
+    try:
+        data = json.loads(records[-1]) if records else {}
+    except ValueError:
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
 def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
     """Own the run-level budget and persist progress for the opt-in profile."""
     mode = os.environ.get("PATCHPROOF_AGENT_MODE", "legacy").strip()
@@ -1613,22 +1690,27 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         raise PatchProofError("The inference cost cap requires PATCHPROOF_AGENT_MODE=bounded.")
     budget = None
     token = None
+    config_token = None
     try:
+        try:
+            project = resolve_project_root(root)
+        except RuntimeDetectionError as error:
+            raise PatchProofError(str(error)) from error
+        config_token = CONFIG_ROOT.set(root.resolve())
+        proof["project_root"] = project.relative_to(root.resolve()).as_posix()
+        identity = engine_identity()
+        proof["engine"] = {key: identity[key] for key in ("app_version", "commit", "ref")}
+        proof["engine_provenance"] = identity["files"]
+        proof["project_inputs"] = project_input_hashes(root.resolve(), project)
         if mode == "bounded":
             budget = RunBudget(Limits.from_env())
             token = ACTIVE_BUDGET.set(budget)
-            engine_root = Path(__file__).resolve().parent
-            engine_files = [engine_root / name for name in ("proof.py", "runtimes.py", "scope_policy.py",
-                            "agent_budget.py", "context_tools.py", "agent_loop.py", "requirements-patchproof.txt")]
-            engine_files.extend(path for path in (engine_root / "patchproof_runtime").iterdir() if path.is_file())
-            proof["engine_provenance"] = {path.relative_to(engine_root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                                          for path in sorted(engine_files)}
             def checkpoint():
                 proof["budget"] = budget.snapshot()
                 write_evidence(root, proof)
             budget.on_change = checkpoint
             checkpoint()
-        return _execute(root, issue, proof)
+        return _execute(project, issue, proof, repo_root=root)
     except AgentStop as error:
         proof["stop_reason"] = error.reason
         proof["error"] = str(error)
@@ -1649,6 +1731,8 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         finally:
             if token is not None:
                 ACTIVE_BUDGET.reset(token)
+            if config_token is not None:
+                CONFIG_ROOT.reset(config_token)
 
 
 def bounded_session(*, role, root, issue, adapter, snapshot, allowed_paths, scope,
@@ -1657,7 +1741,7 @@ def bounded_session(*, role, root, issue, adapter, snapshot, allowed_paths, scop
     package = json.loads(snapshot.files["package.json"])
     commands = {"baseline": adapter.baseline_command, "typecheck": adapter.project_check_command()}
     if isinstance(package.get("scripts", {}).get("build"), str):
-        commands["build"] = "CI=1 npm run build"
+        commands["build"] = adapter.script_command("build")
 
     def check(name, changes):
         command = commands.get(name)
@@ -1690,7 +1774,11 @@ def bounded_session(*, role, root, issue, adapter, snapshot, allowed_paths, scop
         max_steps=8 if role == "verifier" else 24, strategy=strategy)
 
 
-def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
+def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | None = None) -> dict[str, Any]:
+    repo_root = (repo_root or root).resolve()
+    # Paths the PR stages are relative to the checkout, not to a subfolder project.
+    delivery_prefix = root.resolve().relative_to(repo_root).as_posix()
+    delivery_prefix = "" if delivery_prefix == "." else delivery_prefix + "/"
     proof["stage"] = "configuration"
     api_key = require_env("NEBIUS_API_KEY")
     project_id = require_env("NEBIUS_PROJECT_ID")
@@ -1730,6 +1818,13 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
         scope_context = "\nREPAIR SCOPE (frozen before generation):\n" + json.dumps(scope, sort_keys=True)
         solver_context += scope_context
         verifier_context += scope_context + "\nInclude compatibility assertions for adjacent behavior described by the issue.\n"
+    if scope.get("new_file_dirs"):
+        if not bounded:
+            raise PatchProofError("scope.new_file_dirs needs PATCHPROOF_AGENT_MODE=bounded; the legacy profile edits existing files only.")
+        for folder in scope["new_file_dirs"]:
+            location = root / folder
+            if location.is_symlink() or not location.is_dir() or not location.resolve().is_relative_to(root.resolve()):
+                raise PatchProofError(f"scope.new_file_dirs entry {folder!r} is not an existing folder in the project.")
     if "allowed_paths" in scope:
         missing = set(scope["allowed_paths"]) - allowed_paths
         if missing:
@@ -1749,6 +1844,8 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             "runtime": {
                 "id": adapter.id,
                 "display_name": adapter.display_name,
+                "package_manager": {"name": adapter.package_manager, "version": adapter.package_manager_version or None,
+                                    "bootstrap_command": adapter.bootstrap_command},
                 "application_languages": list(adapter.application_languages),
                 "test_runtime": adapter.test_runtime,
                 "image_env": runtime_image_env
@@ -1777,14 +1874,16 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="patchproof-") as temporary:
         archive_path = Path(temporary) / "repository.tar.gz"
         make_repository_archive(root, archive_path)
+        if archive_path.is_file():
+            proof["archive_sha256"] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
         if bounded:
-            proof["repository_profile"]["archive_sha256"] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+            proof["repository_profile"]["archive_sha256"] = proof.get("archive_sha256")
 
         baseline = sandbox_workspace(base_image, archive_path, adapter, root)
         if bounded and not isinstance(baseline, BudgetedState):
             baseline = BudgetedState(baseline, ACTIVE_BUDGET.get())
-        if bounded:
-            proof["runtime"]["preflight_output"] = candidate_retry_feedback(short_output(baseline))
+        proof["runtime"]["preflight_output"] = candidate_retry_feedback(short_output(baseline))
+        proof["runtime"]["toolchain"] = toolchain_versions(adapter, text_output(baseline))
         proof["stage"] = "baseline"
         baseline_suite = baseline.run(
             shell=adapter.baseline_command,
@@ -1799,6 +1898,9 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
             "image": str(baseline_suite.uuid or ""),
             "output": short_output(baseline_suite),
         }
+        if adapter.known_failures:
+            proof["baseline"]["known_failures"] = {"declared": list(adapter.known_failures),
+                                                    "observed": ordinary_status(text_output(baseline_suite))}
         if baseline_suite.exit_code != 0:
             raise PatchProofError(f"Baseline command failed for runtime {adapter.id}.")
 
@@ -1944,9 +2046,15 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                 # silently omit the regression and must block export.
                 discovery = run_protected_tests(verifier_state, test_path, adapter.baseline_command, helpers)
                 discovered = discovery.exit_code == 1 and has_expected_test_hash(text_output(discovery), test_hash)
+                if adapter.known_failures:
+                    # Declared failures share the output, so assertion evidence for the whole run cannot be
+                    # read as before. The explicit run above already proved an assertion failure; here the
+                    # ordinary command only has to execute the file and report a failure nobody declared.
+                    status = ordinary_status(text_output(discovery))
+                    discovered = discovered and bool(status.get("new_failures"))
                 # For Python the ordinary command emits native pytest output; the
                 # explicit run above already supplies exception-type evidence.
-                if adapter.test_runtime not in {"pytest", "pytest-playwright"}:
+                if adapter.test_runtime not in {"pytest", "pytest-playwright"} and not adapter.known_failures:
                     discovered = has_expected_test_hash(text_output(discovery), test_hash) and adapter.is_regression_failure(discovery.exit_code, text_output(discovery))
                 proof["regression_test"]["ordinary_ci"] = {
                     "discovered": discovered, "command": adapter.baseline_command,
@@ -2207,7 +2315,7 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                     raise AgentStop("blocked_setup", "Local source changed after the snapshot; refusing to overwrite it.")
                 if not expected and path.exists() and path.read_bytes() != item["content"].encode("utf-8"):
                     raise AgentStop("blocked_setup", "A local delivery file appeared during the run; refusing to overwrite it.")
-        proof["pr_files"] = [{"path": item["path"], "sha256": sha256_text(item["content"])} for item in delivered]
+        proof["pr_files"] = [{"path": delivery_prefix + item["path"], "sha256": sha256_text(item["content"])} for item in delivered]
         for change in delivered:
             destination = root / change["path"]
             destination.parent.mkdir(parents=True, exist_ok=True)

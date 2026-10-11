@@ -3,16 +3,19 @@ from __future__ import annotations
 
 import ast
 import json
+from contextvars import ContextVar
 from pathlib import Path, PurePosixPath
 
+# patchproof.json lives in the repository checkout even when the project is a subfolder (`root`).
+CONFIG_ROOT: ContextVar = ContextVar("patchproof_config_root", default=None)
 JS_EXTENSIONS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
 
 
 def validate_scope(value: object) -> dict:
     if value is None:
         return {}
-    if not isinstance(value, dict) or set(value) - {"allowed_paths", "protected_symbols"}:
-        raise ValueError("scope accepts allowed_paths and protected_symbols only")
+    if not isinstance(value, dict) or set(value) - {"allowed_paths", "protected_symbols", "new_file_dirs"}:
+        raise ValueError("scope accepts allowed_paths, protected_symbols and new_file_dirs only")
 
     def safe(path):
         return (isinstance(path, str) and bool(path) and "\\" not in path
@@ -23,6 +26,13 @@ def validate_scope(value: object) -> dict:
         paths = value["allowed_paths"]
         if not isinstance(paths, list) or not paths or not all(safe(p) for p in paths):
             raise ValueError("scope.allowed_paths needs a nonempty list of exact repository-relative paths")
+    if "new_file_dirs" in value:
+        dirs = value["new_file_dirs"]
+        if (not isinstance(dirs, list) or not 1 <= len(dirs) <= 5 or not all(safe(d) for d in dirs)
+                or any(part.startswith(".") for d in dirs for part in PurePosixPath(d).parts)
+                or len(set(dirs)) != len(dirs)):
+            raise ValueError("scope.new_file_dirs needs 1 to 5 distinct existing repository-relative folders "
+                             "(no hidden folders) where the repair may create new source files")
     symbols = value.get("protected_symbols", {})
     if not isinstance(symbols, dict):
         raise ValueError("scope.protected_symbols must map source paths to symbol-name lists")
@@ -35,7 +45,7 @@ def validate_scope(value: object) -> dict:
 
 
 def load_scope(root: Path) -> dict:
-    config = root / "patchproof.json"
+    config = (CONFIG_ROOT.get() or root) / "patchproof.json"
     scope = validate_scope(json.loads(config.read_text()).get("scope")) if config.is_file() else {}
     for name in scope.get("protected_symbols", {}):
         path = root / name
@@ -44,10 +54,19 @@ def load_scope(root: Path) -> dict:
     return scope
 
 
+def new_file_allowed(name: str, scope: dict) -> bool:
+    """A file that does not exist yet may be created only inside a declared folder."""
+    return any(name.startswith(folder + "/") for folder in scope.get("new_file_dirs", ()))
+
+
 def check_paths(root: Path, changes: list[dict], scope: dict) -> None:
     allowed = scope.get("allowed_paths")
     for change in changes:
         name = change["path"]
+        if not (root / name).is_file():
+            if not new_file_allowed(name, scope):
+                raise ValueError(f"scope_failed: {name} does not exist and is outside scope.new_file_dirs")
+            continue
         if allowed is not None and name not in allowed:
             raise ValueError(f"scope_failed: {name} is outside scope.allowed_paths")
     updated = {item["path"]: item["content"] for item in changes}
@@ -70,6 +89,6 @@ def node_payload(root: Path, changes: list[dict], scope: dict) -> dict:
     files = {item["path"]: item for item in changes}
     for name in scope.get("protected_symbols", {}):
         files.setdefault(name, {"path": name, "content": (root / name).read_text()})
-    return {"files": [{**change, "original": (root / change["path"]).read_text(),
+    return {"files": [{**change, "original": (root / change["path"]).read_text() if (root / change["path"]).is_file() else "",
                        "protected_symbols": scope.get("protected_symbols", {}).get(change["path"], [])}
                       for change in files.values() if Path(change["path"]).suffix in JS_EXTENSIONS]}

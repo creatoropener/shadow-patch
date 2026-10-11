@@ -44,7 +44,7 @@ ENGINE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$")
 PLACEHOLDER = re.compile(r"TODO|<<|>>")
 RUNTIME_ID = re.compile(r"^[a-z][a-z0-9-]*$")
 # Keys the engine itself accepts in patchproof.json (runtimes.detect_runtime).
-CONFIG_KEYS = frozenset({"runtime", "test_directory", "scope"})
+CONFIG_KEYS = frozenset({"runtime", "test_directory", "scope", "root"})
 
 # Trial outcomes. Only `infra` is excluded from rates, and it is always shown.
 INFRA = "infra"
@@ -103,7 +103,7 @@ def config_problems(config: Any) -> list[str]:
     out: list[str] = []
     extra = sorted(str(key) for key in set(config) - CONFIG_KEYS)
     if extra:
-        out.append("patchproof_config accepts only runtime, test_directory and scope, not " + ", ".join(extra))
+        out.append("patchproof_config accepts only runtime, test_directory, scope and root, not " + ", ".join(extra))
     try:
         validate_scope(config.get("scope"))
     except ValueError as error:
@@ -114,6 +114,8 @@ def config_problems(config: Any) -> list[str]:
         directory = config["test_directory"]
         if not (isinstance(directory, str) and (directory == "" or _safe_relative(directory))):
             out.append("patchproof_config.test_directory must be a relative path without ..")
+    if "root" in config and not (isinstance(config["root"], str) and _safe_relative(config["root"])):
+        out.append("patchproof_config.root must be a relative folder path without ..")
     return out
 
 

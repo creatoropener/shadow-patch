@@ -20,6 +20,8 @@ class RepositorySnapshot:
         files, editable = {}, set()
         total = 0
         excluded = set(excluded_dirs) | {"bench", "legacy", "patchproof_runtime", "patchproof_helpers"}
+        self.root = Path(root).resolve()
+        self.excluded, self.protected_path = frozenset(excluded), protected_path
         skipped = []
         for directory, dirs, names in os.walk(root, followlinks=False):
             dirs[:] = sorted(d for d in dirs if d not in excluded and not d.startswith(".")
@@ -63,21 +65,32 @@ class RepositorySnapshot:
                 "skipped": self.skipped, "file_count": len(self.files),
                 "retrieval": "literal search and lexical declaration lookup; pagination and line ranges"}
 
-    def tools(self, allowed=None):
-        return ContextTools(self, self.editable if allowed is None else allowed)
+    def tools(self, allowed=None, new_dirs=()):
+        return ContextTools(self, self.editable if allowed is None else allowed, new_dirs)
 
 
 class ContextTools:
-    def __init__(self, snapshot: RepositorySnapshot, allowed):
+    MAX_NEW_FILES = 3
+    MAX_NEW_BYTES = 200_000
+
+    def __init__(self, snapshot: RepositorySnapshot, allowed, new_dirs=()):
         self.snapshot = snapshot
         self.allowed = frozenset(allowed)
+        self.new_dirs = tuple(new_dirs)
         self.overlay: dict[str, str] = {}
         self.observed: dict[str, str] = {}
 
+    def created(self) -> set[str]:
+        return {path for path in self.overlay if path not in self.snapshot.files}
+
     def content(self, path):
-        if not isinstance(path, str) or PurePosixPath(path).as_posix() != path or path not in self.snapshot.files:
+        if not isinstance(path, str) or PurePosixPath(path).as_posix() != path:
             raise ValueError("Path is not in the immutable repository inventory.")
-        return self.overlay.get(path, self.snapshot.files[path])
+        if path in self.overlay:
+            return self.overlay[path]
+        if path not in self.snapshot.files:
+            raise ValueError("Path is not in the immutable repository inventory.")
+        return self.snapshot.files[path]
 
     @staticmethod
     def number(value, low, high, label):
@@ -150,11 +163,11 @@ class ContextTools:
             path, old, new = edit["path"], edit["old"], edit["new"]
             if not all(isinstance(value, str) for value in (path, old, new)) or not old:
                 raise ValueError("Edits require strings and a non-empty old snippet.")
-            if path not in self.allowed:
+            if path not in self.allowed and path not in self.created():
                 raise ValueError("scope_failed: edit targets a protected, unknown, or disallowed path.")
             if self.observed.get(path) != digest(self.content(path)):
                 raise ValueError("Read the current file before editing it.")
-            content = proposed.get(path, self.snapshot.files[path])
+            content = proposed[path] if path in proposed else self.snapshot.files[path]
             if content.count(old) != 1:
                 raise ValueError(f"Exact old snippet must occur once in {path}.")
             proposed[path] = content.replace(old, new, 1)
@@ -162,9 +175,39 @@ class ContextTools:
                 raise ValueError("Edited source exceeds the supported 1MB file limit.")
             adapter.validate_candidate_file(path, proposed[path])
         changes = [{"path": path, "content": content} for path, content in sorted(proposed.items())
-                   if content != self.snapshot.files[path]]
+                   if content != self.snapshot.files.get(path)]
         if not changes:
             raise ValueError("The proposal has no net source change.")
+        if len(changes) > 10:
+            raise ValueError("A bounded repair may change at most ten source files.")
+        return changes
+
+    def prepare_creation(self, path, content, adapter) -> list[dict]:
+        """Add one new source file inside a declared folder; never replace anything that exists."""
+        if not self.new_dirs:
+            raise ValueError("Creating files is not enabled: the repair scope declares no new_file_dirs.")
+        if not isinstance(path, str) or not isinstance(content, str) or not content.strip():
+            raise ValueError("create needs a path and non-empty content, both strings.")
+        pure = PurePosixPath(path)
+        if (pure.is_absolute() or ".." in pure.parts or pure.as_posix() != path or "\\" in path
+                or any(part.startswith(".") for part in pure.parts)):
+            raise ValueError("scope_failed: new file path must be a clean, non-hidden, repository-relative path.")
+        if not any(path.startswith(folder + "/") for folder in self.new_dirs):
+            raise ValueError("scope_failed: new files may be created only under " + ", ".join(self.new_dirs) + ".")
+        if any(part in self.snapshot.excluded for part in pure.parts) or self.snapshot.protected_path(Path(path)):
+            raise ValueError("scope_failed: that location is protected, generated, or a test path.")
+        if not adapter.is_editable_source(pure):
+            raise ValueError("scope_failed: new files must use a source extension this profile edits.")
+        target = self.snapshot.root.joinpath(*pure.parts)
+        if path in self.snapshot.files or path in self.overlay or target.exists() or target.is_symlink():
+            raise ValueError("A file already exists at that path; use edit on existing files.")
+        if len(content.encode("utf-8")) > self.MAX_NEW_BYTES:
+            raise ValueError("A new file may not exceed 200000 bytes.")
+        if len(self.created()) >= self.MAX_NEW_FILES:
+            raise ValueError("A bounded repair may create at most three new files.")
+        adapter.validate_candidate_file(path, content)
+        changes = [{"path": name, "content": text} for name, text in sorted({**self.overlay, path: content}.items())
+                   if text != self.snapshot.files.get(name)]
         if len(changes) > 10:
             raise ValueError("A bounded repair may change at most ten source files.")
         return changes

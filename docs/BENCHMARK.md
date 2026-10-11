@@ -77,7 +77,7 @@ checkout's `patchproof.json` just before each trial:
 "patchproof_config": { "runtime": "node-typescript" }
 ```
 
-- It accepts `runtime`, `test_directory`, and `scope`. The current file-sharing case protects `formatEta` and limits edits to `lib/utils/format.ts`. Older engines may not understand `scope`; compare using an explicitly versioned compatible protocol.
+- It accepts `runtime`, `test_directory`, `scope`, `root` and `known_failures`. The current file-sharing case protects `formatEta` and limits edits to `lib/utils/format.ts`. Older engines may not understand `scope`; compare using an explicitly versioned compatible protocol.
 - The file is **replaced, not merged**; `{}` removes the pin so the engine auto-detects.
 - Each trial's `meta.json` records the object and the hash of the file it replaced, and
   the report's "Read before quoting" section names every case that used one.
@@ -218,3 +218,7 @@ Use the workflow's `agent_mode` input (`bounded` or `legacy`). Bounded mode requ
 Meta records the requested mode and configured limits; proof records actual mode, shared usage, role histories and stop reasons. Reports reject mixed modes/model budgets for the same engine. Budget exhaustion and missing-specification stops are counted as unsuccessful attempts, not excluded infrastructure failures. Compare the same model, cases and explicitly recorded budgets; legacy three-proposal runs and bounded one-session runs are different execution policies.
 
 The current local fixtures demonstrate control flow, not new model accuracy. After a live run, inspect the entire trajectory, frozen test, winning diff and normal target CI before judging correctness or moving to fresh evaluation cases. See [BATCH2.md](BATCH2.md).
+
+## rc.27 additions
+
+rc.27 changes how a project is set up and described, not how a trial is judged. A case may now carry `root`, `known_failures` and `scope.new_file_dirs` in its `patchproof_config`; `scope.new_file_dirs` runs only in bounded mode. Each proof records the engine version, file hashes, project manifests and lockfiles, archive hash and the toolchain versions printed by the sandbox, so a result can be tied to the exact inputs. Compare only trials run with the same engine and configuration; a case whose config gained `known_failures` or `new_file_dirs` is a different case snapshot. See [GENERALIZATION.md](GENERALIZATION.md).

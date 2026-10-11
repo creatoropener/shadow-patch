@@ -30,7 +30,7 @@ class AgentSession:
                  checkpoint=lambda: None, redact=lambda value: value, max_steps=18,
                  strategy=""):
         self.role, self.adapter = role, adapter
-        self.tools = snapshot.tools(allowed_paths)
+        self.tools = snapshot.tools(allowed_paths, scope.get("new_file_dirs", ()))
         self.model_call, self.run_check, self.validate_changes = model_call, run_check, validate_changes
         self.budget, self.record, self.checkpoint, self.redact = budget, record, checkpoint, redact
         self.max_steps, self.used_steps = max_steps, 0
@@ -52,6 +52,11 @@ class AgentSession:
             "another edit. Never modify tests, configs, workflow or engine files. Every edit is "
             "validated before execution. Finish requires a nonempty patch and passing ordinary "
             "baseline and typecheck on the latest source; failures return diagnostics for correction.\n"
+            + (("A new source file may be created ONLY under " + ", ".join(scope["new_file_dirs"]) + " with:\n"
+                '{"action":"create","path":"' + scope["new_file_dirs"][0] + '/helper.ts","content":"complete file text"}\n'
+                "Create a file only when the repair genuinely needs one, import it from existing code with "
+                "a real edit, and never replace an existing file. At most three files may be created.\n")
+               if scope.get("new_file_dirs") else "")
             + adapter.solver_guidance)
         self.record["initial_context"] = self.redact(self.seed)
         self.record["system_sha256"] = digest(self.system)
@@ -130,6 +135,14 @@ class AgentSession:
                     if self.role != "solver":
                         raise ValueError("Verifier investigation is read-only; source edits are unavailable.")
                     changes = self.tools.prepare_edits(action.get("edits"), self.adapter)
+                    self.validate_changes(changes)
+                    self.tools.accept(changes)
+                    self.successful_checks.clear()
+                    result = {"accepted": True, "files": [{"path": c["path"], "sha256": digest(c["content"])} for c in changes]}
+                elif name == "create":
+                    if self.role != "solver":
+                        raise ValueError("Verifier investigation is read-only; source edits are unavailable.")
+                    changes = self.tools.prepare_creation(action.get("path"), action.get("content"), self.adapter)
                     self.validate_changes(changes)
                     self.tools.accept(changes)
                     self.successful_checks.clear()

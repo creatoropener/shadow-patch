@@ -1,0 +1,22 @@
+TAP version 13
+# Subtest: byte stream helper preserves bytes across uneven segments
+ok 1 - byte stream helper preserves bytes across uneven segments
+  ---
+  duration_ms: 9.324257
+  type: 'test'
+  ...
+# Subtest: byte stream helper rejects invalid inputs
+ok 2 - byte stream helper rejects invalid inputs
+  ---
+  duration_ms: 0.812177
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 104.871033

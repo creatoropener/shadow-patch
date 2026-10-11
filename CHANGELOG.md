@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.0-rc.27 — Project support: package managers, project folder, declared failures, new files, provenance
+
+Built from the audit's generalization table. Local validation only: 304 Python tests (45 new) and 2 Node helper tests; no live run covers these paths. See docs/GENERALIZATION.md.
+
+- Install and test with the project's own package manager: `packageManager` or the lockfile selects npm, pnpm, Yarn Classic or Yarn Berry, with frozen lockfile installs and install scripts disabled. Conflicting lockfiles, a missing lockfile for the declared tool, Bun and Yarn Plug'n'Play stop with a specific message instead of installing with a different tool. Real lockfiles of all four managers were installed and tested locally.
+- `root` in patchproof.json treats a self-contained subfolder as the project. Scope, test placement and install follow it, evidence stays at the repository root, and PR paths carry the folder prefix. Workspace packages are refused.
+- `.mts` and `.cts` are editable and visible context for the TypeScript adapter.
+- `known_failures` lists tests that already fail on the base commit. The ordinary command passes only when those are the sole failures (node:test TAP, exact names), so a new failure or a broken passing test still blocks. A candidate cannot hide behind the list.
+- `scope.new_file_dirs` lets a bounded repair create up to three new source files under declared, existing folders. Verifier sessions stay read-only, legacy mode refuses the option, and created files go through the same type check, interference check, frozen regression, clean replay and delivery hash check.
+- Proofs record the engine version and file hashes, project manifests and lockfiles, archive hash, package-manager command and sandbox toolchain versions in both modes.
+- Not changed: the frozen verifier, ordinary-CI discovery, clean replay, budgets, and every default. Unverified: `npm install -g pnpm|yarn` inside the apt-based sandbox image.
+
 ## v0.6.0-rc.26 — Bounded Node/TypeScript investigation and debugging
 
 - Add opt-in repository list/read/search/symbol tools and independent verifier/solver histories.

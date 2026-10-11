@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shlex
 import re
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 
@@ -778,6 +779,13 @@ class RuntimeAdapter:
     solver_guidance: str
     test_directory: str = ""
     tool_command: str = ""
+    package_manager: str = "npm"
+    package_manager_version: str = ""
+    known_failures: tuple[str, ...] = ()
+
+    def script_command(self, name: str) -> str:
+        """Run a package.json script with the project's own package manager."""
+        return f"CI=1 {self.package_manager} run {shlex.quote(name)}"
 
     def test_path(self, issue_number: int, root: Path | None = None) -> str:
         identifier = str(issue_number) if issue_number else "manual"
@@ -1196,7 +1204,99 @@ def _python_bootstrap(root: Path) -> str:
     return "true"
 
 
-def _node_baseline(root: Path) -> tuple[str, str]:
+_PM_LOCKFILES = {
+    "npm": ("package-lock.json", "npm-shrinkwrap.json"),
+    "pnpm": ("pnpm-lock.yaml",),
+    "yarn": ("yarn.lock",),
+    "bun": ("bun.lock", "bun.lockb"),
+}
+# pnpm-lock.yaml lockfileVersion -> the pnpm major that wrote it (10 still writes 9.0).
+_PNPM_BY_LOCKFILE = {"5.3": "7", "5.4": "7", "6.0": "8", "6.1": "8", "9.0": "9"}
+# yarn.lock __metadata.version -> the Yarn Berry major that wrote it.
+_YARN_BERRY_BY_METADATA = {"6": "3", "8": "4"}
+
+
+class PackageManager(NamedTuple):
+    name: str        # npm | pnpm | yarn
+    version: str     # exact version, a major (resolved by the registry), or "" for the image's npm
+    berry: bool      # Yarn 2+ (Berry) rather than Yarn Classic
+    locked: bool     # a lockfile for this manager is present
+
+
+def detect_package_manager(root: Path, package: dict) -> PackageManager:
+    """Pick the install tool from package.json `packageManager`, else from the lockfile.
+
+    Never falls back to a different tool than the lockfile was written by: an npm install in
+    a pnpm repository ignores pnpm-lock.yaml and resolves different dependency versions.
+    """
+    present = [name for name, files in _PM_LOCKFILES.items() if any((root / f).is_file() for f in files)]
+    declared = package.get("packageManager") if isinstance(package, dict) else None
+    name = version = ""
+    if declared is not None:
+        match = re.fullmatch(r"(npm|pnpm|yarn|bun)@(\d+(?:\.\d+){0,2})(?:[+-].*)?", declared.strip()) if isinstance(declared, str) else None
+        if not match:
+            raise RuntimeDetectionError(f"Unsupported packageManager value {declared!r}; expected npm, pnpm or yarn with a version, such as pnpm@9.15.0.")
+        name, version = match.group(1), match.group(2)
+        if present and name not in present:
+            raise RuntimeDetectionError(
+                f"package.json declares {name} but the repository has only a {', '.join(present)} lockfile; "
+                "make them agree so the install is reproducible.")
+    else:
+        if len(present) > 1:
+            raise RuntimeDetectionError(
+                "Multiple package-manager lockfiles found (" + ", ".join(present) + "); "
+                "set packageManager in package.json to say which one the project uses.")
+        name = present[0] if present else "npm"
+    if name == "bun":
+        raise RuntimeDetectionError("Bun is not supported by this profile; use a project that installs with npm, pnpm or yarn.")
+    locked = name in present
+    if name == "npm":
+        return PackageManager("npm", "", False, locked)
+    if name == "pnpm":
+        if not version and locked:
+            header = (root / "pnpm-lock.yaml").read_text(encoding="utf-8", errors="replace")[:400]
+            found = re.search(r"lockfileVersion:\s*['\"]?(\d+\.\d+)", header)
+            version = _PNPM_BY_LOCKFILE.get(found.group(1), "") if found else ""
+        return PackageManager("pnpm", version or "9", False, locked)
+    # Yarn: Classic has no `__metadata` block in yarn.lock; Berry always has one.
+    lock_text = (root / "yarn.lock").read_text(encoding="utf-8", errors="replace") if locked else ""
+    metadata = re.search(r"^__metadata:\s*\n\s+version:\s*['\"]?(\d+)", lock_text, re.MULTILINE)
+    berry = bool(metadata) or (bool(version) and int(version.split(".")[0]) >= 2)
+    if berry:
+        if not version:
+            version = _YARN_BERRY_BY_METADATA.get(metadata.group(1), "") if metadata else ""
+            if not version:
+                raise RuntimeDetectionError("Cannot tell which Yarn version this project uses; set packageManager in package.json (for example yarn@4.5.0).")
+        linker = root / ".yarnrc.yml"
+        linker_text = linker.read_text(encoding="utf-8", errors="replace") if linker.is_file() else ""
+        if (root / ".pnp.cjs").exists() or not re.search(r"^nodeLinker:\s*['\"]?node-modules", linker_text, re.MULTILINE):
+            raise RuntimeDetectionError(
+                "Yarn Plug'n'Play is not supported: the checker and sandbox need a node_modules directory. "
+                "Set `nodeLinker: node-modules` in .yarnrc.yml.")
+        return PackageManager("yarn", version, True, locked)
+    return PackageManager("yarn", version or "1.22.22", False, locked)
+
+
+def package_manager_commands(manager: PackageManager) -> tuple[str, str]:
+    """(bootstrap, version-probe) for the sandbox; scripts never run during install."""
+    flags = "--no-audit --no-fund"
+    if manager.name == "npm":
+        install = "npm ci" if manager.locked else "npm install"
+        return f"{install} --ignore-scripts {flags}", "npm --version"
+    if manager.name == "pnpm":
+        frozen = "--frozen-lockfile" if manager.locked else "--no-frozen-lockfile"
+        return (f"npm install -g --force {flags} pnpm@{manager.version} && "
+                f"pnpm install {frozen} --ignore-scripts"), "pnpm --version"
+    if manager.berry:
+        immutable = "--immutable " if manager.locked else ""
+        return (f"npm install -g --force {flags} @yarnpkg/cli-dist@{manager.version} && "
+                f"yarn install {immutable}--mode=skip-build"), "yarn --version"
+    frozen = "--frozen-lockfile " if manager.locked else ""
+    return (f"npm install -g --force {flags} yarn@{manager.version} && "
+            f"yarn install {frozen}--ignore-scripts --non-interactive"), "yarn --version"
+
+
+def _node_baseline(root: Path) -> tuple[str, str, PackageManager]:
     package_path = root / "package.json"
     try:
         package = json.loads(package_path.read_text(encoding="utf-8"))
@@ -1204,14 +1304,10 @@ def _node_baseline(root: Path) -> tuple[str, str]:
         raise RuntimeDetectionError(f"Invalid package.json: {error}") from error
     scripts = package.get("scripts") if isinstance(package, dict) else None
     has_test_script = isinstance(scripts, dict) and isinstance(scripts.get("test"), str)
-    baseline = "CI=1 npm test" if has_test_script else "node --test"
-    if (root / "npm-shrinkwrap.json").is_file() or (
-        root / "package-lock.json"
-    ).is_file():
-        bootstrap = "npm ci --ignore-scripts --no-audit --no-fund"
-    else:
-        bootstrap = "npm install --ignore-scripts --no-audit --no-fund"
-    return baseline, bootstrap
+    manager = detect_package_manager(root, package if isinstance(package, dict) else {})
+    baseline = f"CI=1 {manager.name} test" if has_test_script else "node --test"
+    bootstrap, _ = package_manager_commands(manager)
+    return baseline, bootstrap, manager
 
 
 def _strip_jsonc(text: str) -> str:
@@ -1329,21 +1425,103 @@ def _compiled_adapter(root: Path, runtime: str, test_directory: str) -> RuntimeA
         verifier_guidance="Write one JUnit test class whose class name exactly matches the required filename, with no package declaration. Import application classes by fully qualified name and test public behavior with assertions. For Maven/Gradle reuse the existing JUnit version; do not add dependencies. Plain Java supplies JUnit Jupiter. Never skip tests or edit the build configuration.")
 
 
-def detect_runtime(root: Path) -> RuntimeAdapter:
-    root = root.resolve()
-    config_path = root / "patchproof.json"
+CONFIG_KEYS = frozenset({"runtime", "test_directory", "scope", "root", "known_failures"})
+
+
+def _read_config(repo: Path) -> dict:
+    config_path = repo / "patchproof.json"
     try:
         config = json.loads(config_path.read_text()) if config_path.is_file() else {}
     except (OSError, ValueError) as error:
         raise RuntimeDetectionError(f"Invalid patchproof.json: {error}") from error
-    if not isinstance(config, dict) or set(config) - {"runtime", "test_directory", "scope"}:
-        raise RuntimeDetectionError("patchproof.json accepts only runtime, test_directory and scope.")
+    if not isinstance(config, dict) or set(config) - CONFIG_KEYS:
+        raise RuntimeDetectionError("patchproof.json accepts only runtime, test_directory, scope, root and known_failures.")
+    return config
+
+
+def resolve_project_root(repo: Path) -> Path:
+    """The directory the engine treats as the project: the checkout, or a self-contained subfolder.
+
+    `root` in patchproof.json names a subfolder such as "server" that has its own manifest,
+    lockfile and tests (a repository holding client/ and server/ projects). The archive, install,
+    tests, type check and delivered paths are all scoped to it. Workspace packages that depend on
+    their siblings or on a hoisted root install are refused rather than half-supported.
+    """
+    repo = repo.resolve()
+    config = _read_config(repo)
+    name = config.get("root")
+    if name is None or name in ("", "."):
+        return repo
+    path = PurePosixPath(name) if isinstance(name, str) else None
+    if (path is None or path.is_absolute() or ".." in path.parts or path.as_posix() != name
+            or "\\" in name or name.startswith("./")):
+        raise RuntimeDetectionError("root must be a clean relative folder path inside the repository, such as server.")
+    project = repo.joinpath(*path.parts)
+    if project.is_symlink() or not project.is_dir() or not project.resolve().is_relative_to(repo):
+        raise RuntimeDetectionError(f"root {name!r} is not a folder inside the repository.")
+    problems = _workspace_problems(repo, project)
+    if problems:
+        raise RuntimeDetectionError(
+            f"root {name!r} is part of a workspace ({problems}). Workspace packages need an install from the "
+            "repository root and are not supported; point root at a self-contained project.")
+    return project
+
+
+def _workspace_problems(repo: Path, project: Path) -> str:
+    if (repo / "pnpm-workspace.yaml").is_file():
+        return "pnpm-workspace.yaml at the repository root"
+    for folder in (repo, project):
+        manifest = folder / "package.json"
+        if not manifest.is_file():
+            continue
+        try:
+            package = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(package, dict):
+            continue
+        if package.get("workspaces"):
+            return f"workspaces in {manifest.relative_to(repo).as_posix()}"
+        for group in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
+            for dependency, spec in (package.get(group) or {}).items():
+                if isinstance(spec, str) and (spec.startswith(("workspace:", "link:")) or spec.startswith("file:..")):
+                    return f"{dependency} is a local sibling dependency ({spec})"
+    return ""
+
+
+def known_failure_names(config: dict) -> tuple[str, ...]:
+    names = config.get("known_failures")
+    if names is None:
+        return ()
+    if (not isinstance(names, list) or not names or len(names) > 50
+            or not all(isinstance(n, str) and n.strip() and len(n) <= 300 and "\n" not in n for n in names)
+            or len(set(names)) != len(names)):
+        raise RuntimeDetectionError(
+            "known_failures must be a list of 1 to 50 distinct test names, exactly as the runner prints them.")
+    return tuple(names)
+
+
+def with_known_failures(adapter: RuntimeAdapter, names: tuple[str, ...]) -> RuntimeAdapter:
+    """Make the ordinary command succeed only when its sole failures are the declared ones."""
+    if not names:
+        return adapter
+    if adapter.test_runtime != "node-test":
+        raise RuntimeDetectionError("known_failures supports node:test (TAP) projects only; this runtime reports tests differently.")
+    encoded = base64.b64encode(json.dumps(sorted(names)).encode("utf-8")).decode("ascii")
+    wrapped = f"python /patchproof/known_failures.py {encoded} {shlex.quote(adapter.baseline_command)}"
+    return replace(adapter, baseline_command=wrapped, known_failures=names)
+
+
+def detect_runtime(root: Path) -> RuntimeAdapter:
+    repo = root.resolve()
+    config = _read_config(repo)
+    root = resolve_project_root(repo)
     requested = config.get("runtime")
     if requested is not None and not isinstance(requested, str):
         raise RuntimeDetectionError("runtime must be a string adapter ID.")
     directory = config.get("test_directory", "")
     if not isinstance(directory, str) or Path(directory).is_absolute() or ".." in Path(directory).parts or not (root / directory).resolve().is_relative_to(root):
-        raise RuntimeDetectionError("test_directory must stay inside the repository.")
+        raise RuntimeDetectionError("test_directory must stay inside the project.")
     markers = {"java-maven": "pom.xml", "java-gradle": "build.gradle", "go": "go.mod", "rust": "Cargo.toml", "node-package": "package.json"}
     found = [key for key, name in markers.items() if (root / name).is_file()]
     if (root / "build.gradle.kts").is_file() and "java-gradle" not in found:
@@ -1363,7 +1541,7 @@ def detect_runtime(root: Path) -> RuntimeAdapter:
     adapter = _detect_script_runtime(root, requested)
     if requested is not None and requested != adapter.id:
         raise RuntimeDetectionError(f"Requested runtime {requested!r} does not match detected {adapter.id!r}.")
-    return replace(adapter, test_directory=directory)
+    return with_known_failures(replace(adapter, test_directory=directory), known_failure_names(config))
 
 
 def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeAdapter:
@@ -1407,15 +1585,15 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
         )
 
     if requested in (None, "node-typescript") and (root / "package.json").is_file() and (root / "tsconfig.json").is_file():
-        baseline, bootstrap = _node_baseline(root)
+        baseline, bootstrap, manager = _node_baseline(root)
         return RuntimeAdapter(
             id="node-typescript",
             display_name="Node.js / TypeScript (tsx)",
             application_languages=("JavaScript", "TypeScript"),
             test_runtime="node-test",
-            source_extensions=frozenset({".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"}),
+            source_extensions=frozenset({".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts"}),
             context_extensions=frozenset(
-                {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".json"}
+                {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".mts", ".cts", ".json"}
             ),
             context_names=frozenset({"package.json", "tsconfig.json"}),
             test_suffix=".test.ts",
@@ -1423,9 +1601,12 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             bootstrap_command=bootstrap,
             preflight_command=(
                 "node --version && npm --version && "
-                "/opt/patchproof/node/node_modules/.bin/tsx --version && "
+                + (package_manager_commands(manager)[1] + " && " if manager.name != "npm" else "")
+                + "/opt/patchproof/node/node_modules/.bin/tsx --version && "
                 "test -x ./node_modules/.bin/tsc && ./node_modules/.bin/tsc --version"
             ),
+            package_manager=manager.name,
+            package_manager_version=manager.version,
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert, "
                 "executed with tsx (real TypeScript, not a custom loader). `test` and "
@@ -1506,7 +1687,7 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
         )
 
     if requested in (None, "node-package") and (root / "package.json").is_file():
-        baseline, bootstrap = _node_baseline(root)
+        baseline, bootstrap, manager = _node_baseline(root)
         return RuntimeAdapter(
             id="node-package",
             display_name="Node.js / JavaScript",
@@ -1520,7 +1701,10 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             test_suffix=".test.mjs",
             baseline_command=baseline,
             bootstrap_command=bootstrap,
-            preflight_command="node --version && npm --version",
+            preflight_command=("node --version && npm --version"
+                               + (" && " + package_manager_commands(manager)[1] if manager.name != "npm" else "")),
+            package_manager=manager.name,
+            package_manager_version=manager.version,
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert. "
                 "The test may import project modules but must not modify the repository. "

@@ -1,0 +1,47 @@
+{
+  "release": "0.6.0-rc.27",
+  "validated_environment_date": "2026-10-11",
+  "baseline": {
+    "kind": "rc.26 tree supplied as shadow-patch-main.zip on 2026-10-10 (RC26-CHANGES.json applied, local reviewed snapshot)"
+  },
+  "python": "3.13.16",
+  "node": "v22.22.0",
+  "typescript": "5.6.3 (unit and pipeline tests); 5.6.3 and 7.0.2 (JSONC/ambient-declaration probe, run before the build)",
+  "tsx": "4.20.6",
+  "node_types": "20.17.30",
+  "python_tests": {
+    "count": 304,
+    "passed": 304,
+    "skipped": 0,
+    "new_in_rc27": 45,
+    "log": "python-tests.txt"
+  },
+  "node_tests": {
+    "count": 2,
+    "passed": 2,
+    "skipped": 0,
+    "log": "node-tests.txt"
+  },
+  "native_pipelines": [
+    "subfolder project with .mts sources, scope read from the checkout, checkout-relative PR paths",
+    "failing existing test declared in known_failures: repair verified; undeclared failure blocks; broken passing test rejected",
+    "bounded repair that creates a helper file and edits an existing file to import it: verified and delivered",
+    "creation outside the declared folder refused, nothing delivered"
+  ],
+  "package_manager_checks": "frozen install, version probe and test run with real npm, pnpm 9.15.9, Yarn 1.22.22 and Yarn 4.5.0 lockfiles, run outside the engine on this machine",
+  "target_archive": {
+    "file": "patchproof-target-v0.6.0-rc.27.zip",
+    "engine_files": 23,
+    "sha256": "f86b7cf3df72a2db9de500e43d202aca4c96e2a2c340467aa8ed7963764c49dc"
+  },
+  "remote_inference_runs": 0,
+  "nebius_runs": 0,
+  "published_tags": [],
+  "created_prs": [],
+  "not_verified": [
+    "npm install -g pnpm|yarn inside the apt-based sandbox image",
+    "live model behaviour with the create action",
+    "known_failures against a real project's runner output",
+    "GitHub Engine Checks on Node 20"
+  ]
+}
