@@ -1,0 +1,62 @@
+{
+  "release": "0.6.0-rc.28",
+  "baseline_kind": "rc.27 tree as delivered 2026-10-11",
+  "deleted_files": [],
+  "files": [
+    {
+      "path": ".github/workflows/benchmark.yml",
+      "sha256": "832bdda635b2d62032d6abda72da79a1db244545f62ed5360e4d2491ead4fc71",
+      "baseline_sha256": "a968f92044261e5182d8f4142aca36b0f4e9c70d66965c712064bd2683fd2190"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "760e7da067ac94e6e39d15e6f5b7abe9a9a49ee07bdb219d0a2ae9ee23f71f4c",
+      "baseline_sha256": "00df6ceb79d8d2c070b883a9493d28006f6c3ed759c2c3b98196c6ed7c8dcf61"
+    },
+    {
+      "path": "README.md",
+      "sha256": "f17470e4f5d13f96ba84a7064b94b98903731431bc2a7e2cf40932272d600a54",
+      "baseline_sha256": "734c12c312151dc62ea9c2c29afd0743eea09d8560a9dbb801e3d2268366aed6"
+    },
+    {
+      "path": "RELEASE.md",
+      "sha256": "72823ddb8ea87058cdcc296df7c8e2190d5f645b901d70d655ccb027e02df64d",
+      "baseline_sha256": "443b833ae7ca01b262d1de6e23723dd3081848ea23092e1ca4ab2483cd32c51a"
+    },
+    {
+      "path": "RELEASE_FILES.sha256",
+      "sha256": "c68afb78937e8a3f5337484fe30f34079fef9f499da9e4d0b7641dfb22eef561",
+      "baseline_sha256": "cf7f04e01bce3010f793d195818fd6c4cee165c18b856f830cc4d12ce7c0c75d"
+    },
+    {
+      "path": "docs/GENERALIZATION.md",
+      "sha256": "7db1f0f704b99525c6bc5f08acf61f5863a42ac8c6e0104b4a033b70498a2697",
+      "baseline_sha256": "119c33c4c02340fd675bf9cc6dcc09777562571517d859bf69baf0ec16b09f01"
+    },
+    {
+      "path": "docs/evidence/rc28-local/python-tests.txt",
+      "sha256": "8de75b970adcb496a4cf6776d5528da0bdd1afc6af8c67e38c5d94bb41ba4c45",
+      "baseline_sha256": null
+    },
+    {
+      "path": "examples/action-usage/shadow-fix.yml",
+      "sha256": "f976d541b32fba98d0ca92109d1e21080bac356a96d49c735a3c9d83e6685a28",
+      "baseline_sha256": "2e53376e11909ad7a0c47f896bcf16918577beff88b912095c91a86693634f29"
+    },
+    {
+      "path": "proof.py",
+      "sha256": "666b5dcf608252b6def29209312d762e4451121839bf7b458652bf799c79a938",
+      "baseline_sha256": "3254dab013c4bccc06b50d921bc5cbfe8dbb47f5193173f652f0a8273de920c3"
+    },
+    {
+      "path": "runtimes.py",
+      "sha256": "93985c79a545f9bcf5153fb824f99edbe1092250782f65b2843d567a0513137a",
+      "baseline_sha256": "134caf67fdf590d373fbc627b4c778c86c8c16f6520d755e0d6256e088914ad5"
+    },
+    {
+      "path": "tests/test_rc27_package_managers.py",
+      "sha256": "382fddd72ad3fe011137ee226c9b7fb72c4bbaede896808970d11a9a8baf9bf0",
+      "baseline_sha256": "f59be53c2df10336b5798abdf79f84fbb60d6eebd8235777eb7a13c737afdf85"
+    }
+  ]
+}

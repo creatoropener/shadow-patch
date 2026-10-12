@@ -1,4 +1,6 @@
-# PatchProof v0.6.0-rc.27 — project support
+# PatchProof v0.6.0-rc.28 — project support, lockfile fix
+
+rc.28 is rc.27 plus one fix found by the first live attempt. rc.27 refused any repository with two lockfiles, which blocked QRcrafts (`package-lock.json` plus a Bun lockfile) before any model call; rc.20 to rc.26 installed it with npm. A Bun lockfile beside exactly one supported lockfile (npm, pnpm or Yarn) is now ignored, the supported tool is used, and the proof records a warning in `runtime.package_manager.notes`. Two supported lockfiles (for example npm and Yarn) still stop the run, Bun alone is still refused, and a `packageManager` field still decides. The rest of this page describes rc.27, which rc.28 contains.
 
 rc.27 builds on the reviewed rc.26 bounded profile (see [docs/BATCH2.md](docs/BATCH2.md)). It widens which Node/TypeScript projects the engine can set up and repair, and records exactly what ran. The implementation is locally validated; a live Nebius run of these paths is the next gate.
 
@@ -15,14 +17,14 @@ The frozen verifier, ordinary-CI discovery, clean replay, delivery hashes, budge
 
 ## Install the engine update
 
-1. Extract **shadow-patch-rc27-changed-files.zip** into the root of your rc.26 **shadow-patch** repository, preserving paths. It adds new files and replaces changed ones; no file needs deleting. `RC27-CHANGES.json` lists every file with its hash and the rc.26 hash it replaces.
+1. If rc.27 is already in your **shadow-patch** repository, extract **shadow-patch-rc28-changed-files.zip** into its root, preserving paths (11 files, none deleted; `RC28-CHANGES.json` lists them with hashes). If you are still on rc.26, extract **shadow-patch-rc27-changed-files.zip** first, then the rc.28 zip.
 2. Commit on a review branch and run **Engine Checks**. It installs pinned test dependencies and makes no model or sandbox calls (it also checks Node 20; the included evidence ran locally on Node 22).
-3. Publish **v0.6.0-rc.27** from the reviewed commit. The Benchmark workflow checks the engine out from this tag, and the example Action reference needs it to exist.
+3. Publish **v0.6.0-rc.28** from the reviewed commit. The Benchmark workflow checks the engine out from this tag, and the example Action reference needs it to exist.
 
-For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.27.zip** into the target root (23 engine and workflow files plus install notes). Copy every file, including the new **patchproof_runtime/known_failures.py**. Regenerate it with:
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.28.zip** into the target root (23 engine and workflow files plus install notes). Copy every file, including the new **patchproof_runtime/known_failures.py**. Regenerate it with:
 
 ~~~bash
-python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.27.zip
+python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.28.zip
 ~~~
 
 ## Next live run
@@ -31,7 +33,7 @@ The rc.26 smoke in [docs/BATCH2.md](docs/BATCH2.md) still comes first: it is the
 
 | Input | Value |
 | --- | --- |
-| engines | v0.6.0-rc.27 |
+| engines | v0.6.0-rc.28 |
 | trials | 1 |
 | split | dev |
 | cases | qrcrafts-1 |

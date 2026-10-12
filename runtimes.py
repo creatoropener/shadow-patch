@@ -781,6 +781,7 @@ class RuntimeAdapter:
     tool_command: str = ""
     package_manager: str = "npm"
     package_manager_version: str = ""
+    package_manager_notes: tuple[str, ...] = ()
     known_failures: tuple[str, ...] = ()
 
     def script_command(self, name: str) -> str:
@@ -1221,6 +1222,7 @@ class PackageManager(NamedTuple):
     version: str     # exact version, a major (resolved by the registry), or "" for the image's npm
     berry: bool      # Yarn 2+ (Berry) rather than Yarn Classic
     locked: bool     # a lockfile for this manager is present
+    notes: tuple = ()  # plain-language warnings, recorded in proof.json
 
 
 def detect_package_manager(root: Path, package: dict) -> PackageManager:
@@ -1232,6 +1234,7 @@ def detect_package_manager(root: Path, package: dict) -> PackageManager:
     present = [name for name, files in _PM_LOCKFILES.items() if any((root / f).is_file() for f in files)]
     declared = package.get("packageManager") if isinstance(package, dict) else None
     name = version = ""
+    notes: tuple = ()
     if declared is not None:
         match = re.fullmatch(r"(npm|pnpm|yarn|bun)@(\d+(?:\.\d+){0,2})(?:[+-].*)?", declared.strip()) if isinstance(declared, str) else None
         if not match:
@@ -1242,22 +1245,28 @@ def detect_package_manager(root: Path, package: dict) -> PackageManager:
                 f"package.json declares {name} but the repository has only a {', '.join(present)} lockfile; "
                 "make them agree so the install is reproducible.")
     else:
-        if len(present) > 1:
+        # Bun cannot be chosen (unsupported), so a stray Bun lockfile beside one supported
+        # lockfile does not make the choice ambiguous; the engine records a warning instead.
+        supported = [n for n in present if n != "bun"]
+        if len(supported) > 1:
             raise RuntimeDetectionError(
                 "Multiple package-manager lockfiles found (" + ", ".join(present) + "); "
                 "set packageManager in package.json to say which one the project uses.")
-        name = present[0] if present else "npm"
+        name = supported[0] if supported else (present[0] if present else "npm")
+        if supported and "bun" in present:
+            notes = (f"A Bun lockfile is also present and was ignored; dependencies install with {name} "
+                     f"from its own lockfile. If the project really installs with Bun, this checkout may not match it.",)
     if name == "bun":
         raise RuntimeDetectionError("Bun is not supported by this profile; use a project that installs with npm, pnpm or yarn.")
     locked = name in present
     if name == "npm":
-        return PackageManager("npm", "", False, locked)
+        return PackageManager("npm", "", False, locked, notes)
     if name == "pnpm":
         if not version and locked:
             header = (root / "pnpm-lock.yaml").read_text(encoding="utf-8", errors="replace")[:400]
             found = re.search(r"lockfileVersion:\s*['\"]?(\d+\.\d+)", header)
             version = _PNPM_BY_LOCKFILE.get(found.group(1), "") if found else ""
-        return PackageManager("pnpm", version or "9", False, locked)
+        return PackageManager("pnpm", version or "9", False, locked, notes)
     # Yarn: Classic has no `__metadata` block in yarn.lock; Berry always has one.
     lock_text = (root / "yarn.lock").read_text(encoding="utf-8", errors="replace") if locked else ""
     metadata = re.search(r"^__metadata:\s*\n\s+version:\s*['\"]?(\d+)", lock_text, re.MULTILINE)
@@ -1273,8 +1282,8 @@ def detect_package_manager(root: Path, package: dict) -> PackageManager:
             raise RuntimeDetectionError(
                 "Yarn Plug'n'Play is not supported: the checker and sandbox need a node_modules directory. "
                 "Set `nodeLinker: node-modules` in .yarnrc.yml.")
-        return PackageManager("yarn", version, True, locked)
-    return PackageManager("yarn", version or "1.22.22", False, locked)
+        return PackageManager("yarn", version, True, locked, notes)
+    return PackageManager("yarn", version or "1.22.22", False, locked, notes)
 
 
 def package_manager_commands(manager: PackageManager) -> tuple[str, str]:
@@ -1607,6 +1616,7 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             ),
             package_manager=manager.name,
             package_manager_version=manager.version,
+            package_manager_notes=manager.notes,
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert, "
                 "executed with tsx (real TypeScript, not a custom loader). `test` and "
@@ -1705,6 +1715,7 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                                + (" && " + package_manager_commands(manager)[1] if manager.name != "npm" else "")),
             package_manager=manager.name,
             package_manager_version=manager.version,
+            package_manager_notes=manager.notes,
             verifier_guidance=(
                 "Return an offline deterministic test using node:test and node:assert. "
                 "The test may import project modules but must not modify the repository. "

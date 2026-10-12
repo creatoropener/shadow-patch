@@ -26,7 +26,7 @@ The install tool comes from the project, never from a default:
 
 Installs use the lockfile (`npm ci`, `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile`, or `yarn install --immutable` for Yarn 2+) with install scripts disabled. pnpm, Yarn Classic and Yarn Berry are installed into the sandbox with `npm install -g` at the pinned version; when only a lockfile is present, the pnpm major comes from `lockfileVersion` and Yarn Berry's from its `__metadata` block. The ordinary test command and `build` check then run through the same tool (`CI=1 pnpm test`).
 
-The engine stops with a specific message instead of guessing when: two lockfiles disagree and `packageManager` does not settle it; `packageManager` names a tool whose lockfile is absent; the tool is Bun; or the project is Yarn Plug'n'Play (the type checker and sandbox need `node_modules`; set `nodeLinker: node-modules`).
+The engine stops with a specific message instead of guessing when: two supported lockfiles disagree and `packageManager` does not settle it (a stray Bun lockfile beside one supported lockfile is ignored and recorded as a warning in `runtime.package_manager.notes`); `packageManager` names a tool whose lockfile is absent; the tool is Bun; or the project is Yarn Plug'n'Play (the type checker and sandbox need `node_modules`; set `nodeLinker: node-modules`).
 
 Checked locally with real npm, pnpm 9, Yarn 1 and Yarn 4 lockfiles: frozen install, version probe and test run all succeed. **Not checked:** the sandbox image installs Node from apt, so confirm that `npm install -g` can write there on the first pnpm or Yarn target. Native-addon packages that need install scripts are out of scope.
 

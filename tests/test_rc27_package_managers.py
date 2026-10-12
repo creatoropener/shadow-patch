@@ -70,6 +70,17 @@ class PackageManagerDetectionTests(unittest.TestCase):
         manager = detect({"package-lock.json": "{}", "yarn.lock": "# yarn lockfile v1\n"}, {"packageManager": "yarn@1.22.22"})
         self.assertEqual(manager.name, "yarn")
 
+    def test_stray_bun_lockfile_beside_npm_lockfile_does_not_block_the_run(self):
+        # QRcrafts ships package-lock.json and a Bun lockfile; npm is what rc.20-rc.26 used.
+        for bun in ("bun.lock", "bun.lockb"):
+            manager = detect({"package-lock.json": "{}", bun: "{}"})
+            self.assertEqual((manager.name, manager.locked), ("npm", True))
+            self.assertIn("Bun lockfile", manager.notes[0])
+        with self.assertRaisesRegex(RuntimeDetectionError, "Multiple package-manager lockfiles"):
+            detect({"package-lock.json": "{}", "yarn.lock": "# yarn lockfile v1\n", "bun.lock": "{}"})
+        root = project({"package-lock.json": "{}", "bun.lock": "{}"})
+        self.assertIn("Bun lockfile", detect_runtime(root).package_manager_notes[0])
+
     def test_bun_and_malformed_declarations_are_refused(self):
         with self.assertRaisesRegex(RuntimeDetectionError, "Bun is not supported"):
             detect({"bun.lock": "{}"})

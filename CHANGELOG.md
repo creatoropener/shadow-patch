@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.0-rc.28 — A stray Bun lockfile no longer blocks a project that has one supported lockfile
+
+The first live run of rc.27 (qrcrafts-1, bounded mode) stopped at runtime detection, before any inference: "Multiple package-manager lockfiles found (npm, bun)". QRcrafts has `package-lock.json` and a Bun lockfile, and every release up to rc.26 installed it with npm, so rc.27 turned a working case into an infrastructure failure.
+
+- Bun cannot be selected (it is unsupported), so a Bun lockfile beside exactly one supported lockfile no longer makes the choice ambiguous. The supported tool is used and `runtime.package_manager.notes` in proof.json records that the Bun lockfile was ignored.
+- Unchanged: two supported lockfiles (npm and Yarn, say) stop the run; a Bun lockfile alone stops the run; a `packageManager` field decides first; Bun in `packageManager` is refused.
+- One new test; 305 Python tests. No live run covers rc.28.
+
 ## v0.6.0-rc.27 — Project support: package managers, project folder, declared failures, new files, provenance
 
 Built from the audit's generalization table. Local validation only: 304 Python tests (45 new) and 2 Node helper tests; no live run covers these paths. See docs/GENERALIZATION.md.

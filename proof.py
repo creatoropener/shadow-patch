@@ -33,7 +33,7 @@ from context_tools import RepositorySnapshot
 from agent_loop import AgentSession
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.27"
+APP_VERSION = "0.6.0-rc.28"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1845,7 +1845,8 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                 "id": adapter.id,
                 "display_name": adapter.display_name,
                 "package_manager": {"name": adapter.package_manager, "version": adapter.package_manager_version or None,
-                                    "bootstrap_command": adapter.bootstrap_command},
+                                    "bootstrap_command": adapter.bootstrap_command,
+                                    "notes": list(adapter.package_manager_notes)},
                 "application_languages": list(adapter.application_languages),
                 "test_runtime": adapter.test_runtime,
                 "image_env": runtime_image_env
