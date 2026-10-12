@@ -7,7 +7,7 @@ regression before asking a solver for a patch, evaluates repairs
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.28 (bounded investigation and broader project support; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.29 (bounded investigation and broader project support; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -86,8 +86,8 @@ because its issue text names a helper that does not exist at its base commit.
 ## Use as a GitHub Action (beta)
 
 The lightest way to try it: add one workflow file that calls
-`creatoropener/shadow-patch@v0.6.0-rc.28` and pass your Nebius secrets and sandbox
-image. Publish the reviewed rc.28 tag before using that pin. No engine files are copied into your repository. See
+`creatoropener/shadow-patch@v0.6.0-rc.29` and pass your Nebius secrets and sandbox
+image. Publish the reviewed rc.29 tag before using that pin. No engine files are copied into your repository. See
 [docs/ACTION.md](docs/ACTION.md) and
 [examples/action-usage/shadow-fix.yml](examples/action-usage/shadow-fix.yml). The
 copy-install route below remains supported.
@@ -97,7 +97,7 @@ copy-install route below remains supported.
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.28.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.29.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible

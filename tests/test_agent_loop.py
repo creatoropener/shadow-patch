@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 import proof
-from agent_budget import ACTIVE_BUDGET, AgentStop, BudgetExhausted, Limits, RunBudget, BudgetedState
+from agent_budget import ACTIVE_BUDGET, AgentStop, BudgetExhausted, Limits, RunBudget, BudgetedState, SessionStalled
 from agent_loop import AgentSession
 from context_tools import RepositorySnapshot, digest
 from runtimes import detect_runtime
@@ -185,11 +185,54 @@ class ContextAndIsolationTests(unittest.TestCase):
         self.assertIn('read-only', record['events'][0]['observation']['error'])
 
     def test_loop_exhaustion_and_raw_shell_rejection(self):
-        agent = self.session('solver', [{'action':'shell','command':'cat proof.json'}] * 6)
+        agent = self.session('solver', [{'action':'shell','command':f'cat proof.json {i}'} for i in range(6)])
         with self.assertRaises(BudgetExhausted):
             agent.run()
         self.assertEqual(agent.record['status'], 'budget_exhausted')
         self.assertTrue(all('Unknown action' in e['observation']['error'] for e in agent.events))
+
+    def test_edit_errors_name_the_missing_key_and_show_the_shape(self):
+        tools = self.snapshot.tools()
+        tools.invoke({'action': 'read', 'path': 'src/app.ts'})
+        with self.assertRaises(ValueError) as error:
+            tools.prepare_edits([{'old': '1', 'new': '2'}], self.adapter)
+        self.assertIn('Edit 1 is invalid; missing path', str(error.exception))
+        self.assertIn('Put path inside every edit', str(error.exception))
+        with self.assertRaisesRegex(ValueError, 'unexpected extra'):
+            tools.prepare_edits([{'path': 'src/app.ts', 'old': '1', 'new': '2', 'extra': 1}], self.adapter)
+
+    def test_path_on_the_action_fills_only_edits_that_lack_one(self):
+        agent = self.session('solver', [
+            {'action': 'read', 'path': 'src/app.ts'},
+            {'action': 'edit', 'path': 'src/app.ts', 'edits': [{'old': '1', 'new': '2'}]},
+            {'action': 'finish', 'summary': 'Changed the value.'}])
+        changes, _ = agent.run()
+        self.assertEqual(changes, [{'path': 'src/app.ts', 'content': 'export const value = 2;\n'}])
+        self.assertIn('path was taken from the action', agent.events[1]['observation']['note'])
+        # The action path never overrides an edit's own path, and is still scope-checked.
+        agent = self.session('solver', [
+            {'action': 'read', 'path': 'src/app.ts'},
+            {'action': 'edit', 'path': 'src/app.ts', 'edits': [{'path': 'tests/current.test.ts', 'old': '1', 'new': '2'}]},
+            ] + [{'action': 'finish', 'summary': f'attempt {i}'} for i in range(4)])
+        with self.assertRaises(BudgetExhausted):
+            agent.run()
+        self.assertIn('protected', agent.events[1]['observation']['error'])
+
+    def test_identical_rejected_action_is_flagged_then_stops_only_that_solver(self):
+        bad = {'action': 'edit', 'path': 'src/app.ts', 'edits': [{'path': 'src/app.ts', 'old': 'missing text', 'new': 'x'}]}
+        agent = self.session('solver', [{'action': 'read', 'path': 'src/app.ts'}] + [dict(bad) for _ in range(5)])
+        with self.assertRaises(SessionStalled) as error:
+            agent.run()
+        self.assertEqual(error.exception.reason, 'candidate_invalid')
+        self.assertEqual(agent.record['status'], 'stalled')
+        self.assertEqual(agent.used_steps, 4)
+        self.assertNotIn('already rejected', agent.events[1]['observation']['error'])
+        self.assertIn('already rejected 1 time', agent.events[2]['observation']['error'])
+        # A verifier is only warned; it keeps its allocation instead of ending the run.
+        verifier = self.session('verifier', [{'action': 'shell', 'command': 'ls'}] * 6)
+        with self.assertRaises(BudgetExhausted):
+            verifier.run()
+        self.assertIn('already rejected', verifier.events[-1]['observation']['error'])
 
     def test_malformed_action_fields_return_diagnostics_and_allow_correction(self):
         agent = self.session('verifier', [
@@ -211,7 +254,7 @@ class ContextAndIsolationTests(unittest.TestCase):
 
 @unittest.skipUnless((DEPS / '.bin/tsx').exists(), 'requires TypeScript, tsx and @types/node')
 class NativeBoundedPipelineTests(unittest.TestCase):
-    def run_pipeline(self, *, hidden_failure=False):
+    def run_pipeline(self, *, hidden_failure=False, action_path=False):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         base = Path(temp.name); root = base/'subject'; root.mkdir()
@@ -270,6 +313,10 @@ test('HIDDEN_REGRESSION_SENTINEL', async () => { assert.equal(describeBytes(1536
             {'action':'read','path':'lib/api.ts'}, {'action':'read','path':'z/presentation.ts'},
             {'action':'edit','edits':[{'path':'z/presentation.ts','old':'readout.value','new':'readout.amount.value + 1' if hidden_failure else 'readout.amount.value'}]},
             {'action':'finish','summary':'Format the measured amount and unit.'}]
+        if action_path:  # the shape rc.28's first live run produced: path on the action, not in each edit
+            solver_actions = [({'action': 'edit', 'path': a['edits'][0]['path'],
+                                'edits': [{k: v for k, v in a['edits'][0].items() if k != 'path'}]}
+                               if a['action'] == 'edit' else a) for a in solver_actions]
         solver = iter(solver_actions); solver_prompts = []
         def model_json(**kwargs):
             if 'independent verifier' in kwargs['system']:
@@ -315,6 +362,12 @@ test('HIDDEN_REGRESSION_SENTINEL', async () => { assert.equal(describeBytes(1536
         self.assertEqual(record['race']['planned'],1)
         result=subprocess.run(['npm','test'],cwd=root,capture_output=True,text=True,timeout=60)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_path_on_the_action_still_reaches_a_verified_repair(self):
+        root,record=self.run_pipeline(action_path=True)
+        self.assertEqual(record['verdict'],'verified')
+        events=json.loads((root/'proof.json').read_text())['agent_sessions']['solvers'][0]['events']
+        self.assertTrue(any('note' in e['observation'] for e in events))
 
     def test_hidden_failure_has_no_solver_retry_and_no_local_delivery(self):
         root,record=self.run_pipeline(hidden_failure=True)

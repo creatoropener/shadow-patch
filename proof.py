@@ -28,12 +28,12 @@ from runtimes import (
     RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports, resolve_project_root,
 )
 from scope_policy import CONFIG_ROOT, load_scope, check_paths, node_payload
-from agent_budget import ACTIVE_BUDGET, COMPLETION_CAP, AgentStop, BudgetExhausted, BudgetedState, Limits, RunBudget, integer
+from agent_budget import ACTIVE_BUDGET, COMPLETION_CAP, AgentStop, BudgetExhausted, BudgetedState, Limits, RunBudget, SessionStalled, integer
 from context_tools import RepositorySnapshot
 from agent_loop import AgentSession
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.28"
+APP_VERSION = "0.6.0-rc.29"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -2241,6 +2241,8 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                     passing.append((score, candidate_record, changes))
             except AgentStop as candidate_error:
                 candidate_record.update(error=str(candidate_error), stop_reason=candidate_error.reason)
+                if isinstance(candidate_error, SessionStalled):
+                    continue
                 if isinstance(candidate_error, BudgetExhausted):
                     if passing:
                         proof["search_stopped"] = str(candidate_error)

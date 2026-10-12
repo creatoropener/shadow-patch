@@ -1,3 +1,7 @@
+# PatchProof v0.6.0-rc.29 — project support, lockfile fix, edit-shape fix
+
+rc.29 is rc.28 plus one fix from its first live run (qrcrafts-1, bounded). Setup and the verifier test passed, but the solver put `path` on the edit action instead of inside each edit, was told only "Each edit requires exactly path, old, new", and resent the identical edit 22 times until its 24 steps ran out. Now: the error names the missing or unexpected key and shows the correct shape; a `path` on the action fills an edit that has none (the path is still scope-checked, and the result carries a note); and a solver that resends the same rejected action a third time is stopped as `candidate_invalid` (only that solver session; other sessions and the run continue) instead of burning its allocation as `budget_exhausted`. The verifier is warned on repeats but never stopped by this rule. The rest of this page describes rc.27/rc.28, which rc.29 contains.
+
 # PatchProof v0.6.0-rc.28 — project support, lockfile fix
 
 rc.28 is rc.27 plus one fix found by the first live attempt. rc.27 refused any repository with two lockfiles, which blocked QRcrafts (`package-lock.json` plus a Bun lockfile) before any model call; rc.20 to rc.26 installed it with npm. A Bun lockfile beside exactly one supported lockfile (npm, pnpm or Yarn) is now ignored, the supported tool is used, and the proof records a warning in `runtime.package_manager.notes`. Two supported lockfiles (for example npm and Yarn) still stop the run, Bun alone is still refused, and a `packageManager` field still decides. The rest of this page describes rc.27, which rc.28 contains.
@@ -17,14 +21,14 @@ The frozen verifier, ordinary-CI discovery, clean replay, delivery hashes, budge
 
 ## Install the engine update
 
-1. If rc.27 is already in your **shadow-patch** repository, extract **shadow-patch-rc28-changed-files.zip** into its root, preserving paths (11 files, none deleted; `RC28-CHANGES.json` lists them with hashes). If you are still on rc.26, extract **shadow-patch-rc27-changed-files.zip** first, then the rc.28 zip.
+1. If rc.28 is already in your **shadow-patch** repository, extract **shadow-patch-rc29-changed-files.zip** into its root, preserving paths (none deleted; `RC29-CHANGES.json` lists the files with hashes). If you are on rc.27, extract the rc.28 zip first, then the rc.29 zip. If you are on rc.26, extract the rc.27, rc.28 and rc.29 zips in that order.
 2. Commit on a review branch and run **Engine Checks**. It installs pinned test dependencies and makes no model or sandbox calls (it also checks Node 20; the included evidence ran locally on Node 22).
-3. Publish **v0.6.0-rc.28** from the reviewed commit. The Benchmark workflow checks the engine out from this tag, and the example Action reference needs it to exist.
+3. Publish **v0.6.0-rc.29** from the reviewed commit. The Benchmark workflow checks the engine out from this tag, and the example Action reference needs it to exist.
 
-For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.28.zip** into the target root (23 engine and workflow files plus install notes). Copy every file, including the new **patchproof_runtime/known_failures.py**. Regenerate it with:
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.29.zip** into the target root (23 engine and workflow files plus install notes). Copy every file, including the new **patchproof_runtime/known_failures.py**. Regenerate it with:
 
 ~~~bash
-python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.28.zip
+python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.29.zip
 ~~~
 
 ## Next live run
@@ -33,7 +37,7 @@ The rc.26 smoke in [docs/BATCH2.md](docs/BATCH2.md) still comes first: it is the
 
 | Input | Value |
 | --- | --- |
-| engines | v0.6.0-rc.28 |
+| engines | v0.6.0-rc.29 |
 | trials | 1 |
 | split | dev |
 | cases | qrcrafts-1 |

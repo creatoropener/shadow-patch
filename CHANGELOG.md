@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.0-rc.29 — A solver that sends edits in the wrong shape is told exactly what is wrong, and stops repeating it
+
+The first live run of rc.28 (qrcrafts-1, bounded mode) got through setup and the verifier test (valid on attempt 1), then ended `budget_exhausted` at candidate evaluation with no candidate evaluated. The solver read the file correctly and proposed a plausible edit, but put `path` on the action instead of inside the edit. The tool answered "Each edit requires exactly path, old, new." without saying which key was wrong, and the model resent the identical edit 22 times (steps 3 to 24, about 228 output tokens each) until its 24-step allocation ended. It was reported as budget exhaustion although the cause was a tool-format error.
+
+- The edit error now names the edit number and the missing or unexpected key and shows the exact shape, with `path` inside every edit.
+- When an edit has no `path` and the action carries one, that path is used for the edit that lacks one. It never overrides an edit's own path, is still checked against the allowed source files, and the observation carries a note.
+- An identical action that is rejected with an identical error twice gets "already rejected, do not resend it" appended. A solver that does it a third time stops with `candidate_invalid` for that candidate only; other candidates and the run continue. Verifier investigations are warned but never stopped by this rule.
+- Not changed: budgets and their limits, the hidden test, eligibility, replay.
+- Four new tests (one a native pipeline using the wrong-shape edit); 309 Python tests, zero skips. No live run covers rc.29. Unverified: whether Nemotron follows the clearer error.
+
 ## v0.6.0-rc.28 — A stray Bun lockfile no longer blocks a project that has one supported lockfile
 
 The first live run of rc.27 (qrcrafts-1, bounded mode) stopped at runtime detection, before any inference: "Multiple package-manager lockfiles found (npm, bun)". QRcrafts has `package-lock.json` and a Bun lockfile, and every release up to rc.26 installed it with npm, so rc.27 turned a working case into an infrastructure failure.

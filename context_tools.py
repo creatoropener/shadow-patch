@@ -157,9 +157,17 @@ class ContextTools:
         if not isinstance(edits, list) or not 1 <= len(edits) <= 20:
             raise ValueError("edit requires 1 to 20 exact-match edits.")
         proposed = dict(self.overlay)
-        for edit in edits:
-            if not isinstance(edit, dict) or set(edit) != {"path", "old", "new"}:
-                raise ValueError("Each edit requires exactly path, old, new.")
+        for number, edit in enumerate(edits, 1):
+            if not isinstance(edit, dict):
+                raise ValueError("Each edit must be an object with path, old and new.")
+            if set(edit) != {"path", "old", "new"}:
+                missing = sorted({"path", "old", "new"} - set(edit))
+                extra = sorted(set(edit) - {"path", "old", "new"})
+                raise ValueError(
+                    f"Edit {number} is invalid"
+                    + (f"; missing {', '.join(missing)}" if missing else "")
+                    + (f"; unexpected {', '.join(extra)}" if extra else "")
+                    + '. Put path inside every edit: {"action":"edit","edits":[{"path":"src/file.ts","old":"...","new":"..."}]}.')
             path, old, new = edit["path"], edit["old"], edit["new"]
             if not all(isinstance(value, str) for value in (path, old, new)) or not old:
                 raise ValueError("Edits require strings and a non-empty old snippet.")

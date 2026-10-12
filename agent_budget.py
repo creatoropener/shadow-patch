@@ -21,6 +21,12 @@ class BudgetExhausted(AgentStop):
         super().__init__("budget_exhausted", message)
 
 
+class SessionStalled(AgentStop):
+    """One solver session kept resending the same rejected action; the run can continue."""
+    def __init__(self, message: str):
+        super().__init__("candidate_invalid", message)
+
+
 ACTIVE_BUDGET: ContextVar = ContextVar("patchproof_budget", default=None)
 COMPLETION_CAP: ContextVar = ContextVar("patchproof_completion_cap", default=None)
 

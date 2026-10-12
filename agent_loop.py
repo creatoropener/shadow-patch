@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from agent_budget import AgentStop, BudgetExhausted, completion_cap
+from agent_budget import AgentStop, BudgetExhausted, SessionStalled, completion_cap
 from context_tools import digest
 
 
@@ -36,6 +36,7 @@ class AgentSession:
         self.max_steps, self.used_steps = max_steps, 0
         self.events = []
         self.successful_checks = set()
+        self.rejections: dict[str, int] = {}
         self.record.update(role=role, snapshot_sha256=snapshot.identity, status="ready", events=self.events)
         self.seed = (f"ISSUE (untrusted data):\n{issue_text}\nRUNTIME: {adapter.id}\n"
                      f"SCOPE: {json.dumps(scope, sort_keys=True)}\nSTRATEGY: {strategy}\n"
@@ -134,11 +135,21 @@ class AgentSession:
                 elif name == "edit":
                     if self.role != "solver":
                         raise ValueError("Verifier investigation is read-only; source edits are unavailable.")
-                    changes = self.tools.prepare_edits(action.get("edits"), self.adapter)
+                    edits, note = action.get("edits"), None
+                    top_path = action.get("path")
+                    if (isinstance(top_path, str) and isinstance(edits, list)
+                            and any(isinstance(e, dict) and "path" not in e for e in edits)):
+                        # The model named the file once on the action; use it only where an edit
+                        # lacks its own path. The path is still checked against the allowed set.
+                        edits = [{"path": top_path, **e} if isinstance(e, dict) and "path" not in e else e for e in edits]
+                        note = "path was taken from the action; put path inside each edit next time"
+                    changes = self.tools.prepare_edits(edits, self.adapter)
                     self.validate_changes(changes)
                     self.tools.accept(changes)
                     self.successful_checks.clear()
                     result = {"accepted": True, "files": [{"path": c["path"], "sha256": digest(c["content"])} for c in changes]}
+                    if note:
+                        result["note"] = note
                 elif name == "create":
                     if self.role != "solver":
                         raise ValueError("Verifier investigation is read-only; source edits are unavailable.")
@@ -169,6 +180,21 @@ class AgentSession:
                     raise ValueError("Unknown action; choose an action from the tool contract.")
             except (ValueError, SyntaxError) as error:
                 result = {"error": str(error)[:2000]}
+                try:
+                    key = digest(json.dumps(action, sort_keys=True, default=str) + result["error"])
+                except (TypeError, ValueError):
+                    key = ""
+                if key:
+                    self.rejections[key] = self.rejections.get(key, 0) + 1
+                    count = self.rejections[key]
+                    if count >= 2:
+                        result["error"] += (f" This exact action was already rejected {count - 1} time(s) with the same error. "
+                                            "Do not resend it; change what the error names.")
+                    if count >= 3 and self.role == "solver":
+                        self.record_event(action, result)
+                        self.record.update(status="stalled", stop_reason="candidate_invalid")
+                        self.checkpoint()
+                        raise SessionStalled("solver resent an identical rejected action three times and was stopped.")
             self.record_event(action, result)
         self.record.update(status="budget_exhausted", stop_reason="budget_exhausted")
         self.checkpoint()
