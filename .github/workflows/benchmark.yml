@@ -9,7 +9,7 @@ on:
       engines:
         description: 'Engine tag(s) to benchmark, comma-separated, e.g. v0.6.0-rc.20 or v0.6.0-rc.19,v0.6.0-rc.20'
         required: true
-        default: v0.6.0-rc.29
+        default: v0.6.0-rc.30
       trials:
         description: 'Trials per case and engine (1 to 5)'
         required: true
@@ -28,6 +28,11 @@ on:
         type: choice
         options: [legacy, bounded]
         default: bounded
+      verifier:
+        description: 'Regression-test profile: freeform, spec (engine-compiled from a specification quoted from the issue) or auto. Needs rc.30 or later.'
+        type: choice
+        options: [freeform, spec, auto]
+        default: freeform
 
 permissions:
   contents: read
@@ -84,6 +89,7 @@ jobs:
       NEBIUS_MODEL: ${{ vars.NEBIUS_MODEL || secrets.NEBIUS_MODEL }}
       NEBIUS_MAX_TOKENS: ${{ vars.NEBIUS_MAX_TOKENS || '12000' }}
       PATCHPROOF_AGENT_MODE: ${{ inputs.agent_mode }}
+      PATCHPROOF_VERIFIER: ${{ inputs.verifier }}
       PATCHPROOF_AGENT_CANDIDATES: ${{ vars.PATCHPROOF_AGENT_CANDIDATES || '1' }}
       PATCHPROOF_MAX_AGENT_STEPS: ${{ vars.PATCHPROOF_MAX_AGENT_STEPS || '40' }}
       PATCHPROOF_MAX_MODEL_REQUESTS: ${{ vars.PATCHPROOF_MAX_MODEL_REQUESTS || '32' }}
