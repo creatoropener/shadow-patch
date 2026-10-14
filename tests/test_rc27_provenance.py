@@ -54,6 +54,13 @@ class ProvenanceTests(unittest.TestCase):
         found = proof.toolchain_versions(adapter, output)["versions"]
         self.assertEqual(found, {"node": "20.11.1", "npm": "10.2.4", "pnpm": "9.15.9", "tsx": "4.20.6", "tsc": "5.6.3"})
 
+    def test_toolchain_reads_the_two_line_tsx_banner(self):
+        # Real rc.30 sandbox output: tsx 4.23 prints its own version and then node's.
+        adapter = detect_runtime(project({"package.json": "{}", "tsconfig.json": "{}"}))
+        output = "v20.19.2\n9.2.0\ntsx v4.23.15\nnode v20.19.2\nVersion 7.0.2\n"
+        found = proof.toolchain_versions(adapter, output)["versions"]
+        self.assertEqual(found, {"node": "20.19.2", "npm": "9.2.0", "tsx": "4.23.15", "tsc": "7.0.2"})
+
     def test_toolchain_keeps_raw_lines_when_output_is_unexpected(self):
         adapter = detect_runtime(project({"package.json": "{}", "tsconfig.json": "{}"}))
         result = proof.toolchain_versions(adapter, "something unexpected\n")

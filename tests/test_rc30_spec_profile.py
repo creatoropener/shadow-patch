@@ -250,6 +250,34 @@ class ValidationTests(unittest.TestCase):
         short = check(evidence="B")
         self.assertIn("too short to be a quotation", short.errors[0])
 
+    def test_partial_mode_keeps_grounded_examples_and_records_the_rest(self):
+        raw = good_spec()
+        raw["examples"].append(example("e4", "formatBytes", [7], returns="seven bytes", evidence="formatBytes 7 gives seven bytes"))
+        strict = validate(raw)
+        self.assertFalse(strict.ok)  # strict mode is unchanged: one bad example sinks the specification
+        loose = sp.validate_spec(raw, issue_text=ISSUE, modules=MODULES, source_literals=set(), partial=True)
+        self.assertTrue(loose.ok, loose.errors)
+        self.assertEqual([e.id for e in loose.spec.examples], ["e1", "e2", "e3"])
+        self.assertEqual([label for label, _ in loose.rejected], ["example e4"])
+        self.assertIn("does not appear in the issue", loose.rejected[0][1])
+
+    def test_partial_mode_still_fails_when_nothing_is_grounded_or_the_module_is_wrong(self):
+        raw = good_spec()
+        raw["examples"] = [example("e4", "formatBytes", [7], returns="seven bytes", evidence="formatBytes 7 gives seven bytes")]
+        result = sp.validate_spec(raw, issue_text=ISSUE, modules=MODULES, source_literals=set(), partial=True)
+        self.assertFalse(result.ok)
+        self.assertIn("does not appear in the issue", result.errors[0])
+        raw = good_spec()
+        raw["module"] = "lib/other.ts"
+        self.assertFalse(sp.validate_spec(raw, issue_text=ISSUE, modules=MODULES, source_literals=set(), partial=True).ok)
+
+    def test_json_errors_show_where_the_text_went_wrong(self):
+        body = '{"returns": "say"hello", "x": 1}'
+        with self.assertRaises(sp.SpecFormatError) as caught:
+            sp.parse_spec_response(f"{sp.SPEC_BEGIN}\n{body}\n{sp.SPEC_END}")
+        self.assertIn("near", str(caught.exception))
+        self.assertIn("say", str(caught.exception))
+
     def test_shape_errors(self):
         def broken(change):
             raw = good_spec()

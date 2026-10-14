@@ -121,6 +121,8 @@ class Validation:
     spec: Spec | None = None
     errors: list[str] = field(default_factory=list)
     unsupported: str | None = None
+    # partial mode only: examples refused one by one while others were kept (id or position, message)
+    rejected: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -163,8 +165,10 @@ def parse_spec_response(text: str) -> dict[str, Any]:
     try:
         value = json.loads(body, object_pairs_hook=unique, parse_constant=constant)
     except json.JSONDecodeError as error:
+        near = body[max(0, error.pos - 70):error.pos + 30]
         raise SpecFormatError(
-            f"The block is not valid JSON ({error.msg} at line {error.lineno}, column {error.colno}). "
+            f"The block is not valid JSON ({error.msg} at line {error.lineno}, column {error.colno}; "
+            f"near {json.dumps(near)}). "
             "In a JSON string a backslash is written as two backslashes and a double quote as \\\"; "
             "a lone backslash before any other character is invalid.") from error
     if not isinstance(value, dict):
@@ -383,12 +387,18 @@ def _unsafe_number(value: Any) -> bool:
 
 def validate_spec(
     raw: dict[str, Any], *, issue_text: str, modules: dict[str, str], source_literals: set[str],
+    partial: bool = False,
 ) -> Validation:
     """Check a parsed specification against the issue and the repository. Never raises on bad input.
 
     `modules` maps each candidate target path (an editable TypeScript source file) to its text.
     `source_literals` are string literals found in the repository source: discriminators such as
     "wifi" that an argument may use without the issue quoting them.
+
+    Strict (default): any problem anywhere makes the specification invalid. Partial: a problem in one
+    example refuses only that example (recorded in `rejected`) and the specification stands if at least
+    one example is grounded. Every example that remains has passed every check; refusing the others
+    only means fewer things are asserted.
     """
     result = Validation()
     errors = result.errors
@@ -430,79 +440,89 @@ def validate_spec(
         error(f"At most {MAX_EXAMPLES} examples are allowed; got {len(examples_raw)}.")
         return result
 
+    def reject(message: str) -> None:
+        if partial:
+            result.rejected.append((label_of[0], message))
+        else:
+            error(message)
+
+    label_of = [""]
     examples: list[Example] = []
     seen_ids: set[str] = set()
     seen_calls: dict[str, str] = {}
     for position, item in enumerate(examples_raw, start=1):
         label = f"example {position}"
+        label_of[0] = label
         if not isinstance(item, dict):
-            error(f"{label} must be an object.")
+            reject(f"{label} must be an object.")
             continue
         ident = item.get("id")
         if isinstance(ident, str):
             label = f"example {ident}"
+            label_of[0] = label
         extra = sorted(set(item) - {"id", "export", "args", "returns", "throws", "evidence"})
         if extra:
-            error(f"{label}: unknown field(s) {', '.join(extra)}.")
+            reject(f"{label}: unknown field(s) {', '.join(extra)}.")
+            continue
         if not isinstance(ident, str) or not _ID.match(ident):
-            error(f"{label}: `id` must be a short lowercase identifier such as e1.")
+            reject(f"{label}: `id` must be a short lowercase identifier such as e1.")
             continue
         if ident in seen_ids:
-            error(f"{label}: duplicate id.")
+            reject(f"{label}: duplicate id.")
             continue
         seen_ids.add(ident)
 
         export = item.get("export")
         if not isinstance(export, str) or not (export == "default" or _IDENTIFIER.match(export)):
-            error(f"{label}: `export` must be an exported name or \"default\".")
+            reject(f"{label}: `export` must be an exported name or \"default\".")
             continue
         if export in _RESERVED:
-            error(f"{label}: {export!r} is a reserved word, not an exported function name.")
+            reject(f"{label}: {export!r} is a reserved word, not an exported function name.")
             continue
         kind_of_export = scan.names.get(export)
         if kind_of_export is None and not scan.opaque:
             found = ", ".join(sorted(scan.names)) or "nothing"
-            error(f"{label}: {module} does not export {export!r}. The module exports: {found}.")
+            reject(f"{label}: {module} does not export {export!r}. The module exports: {found}.")
             continue
         if kind_of_export in {"class", "enum"}:
-            error(f"{label}: {export!r} is a {kind_of_export}; only exported functions can be called here.")
+            reject(f"{label}: {export!r} is a {kind_of_export}; only exported functions can be called here.")
             continue
 
         args = item.get("args")
         if not isinstance(args, list) or len(args) > MAX_ARGS:
-            error(f"{label}: `args` must be a JSON array of at most {MAX_ARGS} values.")
+            reject(f"{label}: `args` must be a JSON array of at most {MAX_ARGS} values.")
             continue
         has_returns, has_throws = "returns" in item, item.get("throws") is True
         if "throws" in item and item["throws"] is not True:
-            error(f"{label}: `throws` may only be true.")
+            reject(f"{label}: `throws` may only be true.")
             continue
         if has_returns == has_throws:
-            error(f"{label}: give exactly one of `returns` (the expected JSON value) or `throws: true`.")
+            reject(f"{label}: give exactly one of `returns` (the expected JSON value) or `throws: true`.")
             continue
         expected = item.get("returns")
         if _json_size(args) > MAX_VALUE_CHARS or _json_size(expected) > MAX_VALUE_CHARS:
-            error(f"{label}: values are limited to {MAX_VALUE_CHARS} characters of JSON.")
+            reject(f"{label}: values are limited to {MAX_VALUE_CHARS} characters of JSON.")
             continue
         if _depth(args) > MAX_DEPTH or _depth(expected) > MAX_DEPTH:
-            error(f"{label}: values may be nested at most {MAX_DEPTH} levels deep.")
+            reject(f"{label}: values may be nested at most {MAX_DEPTH} levels deep.")
             continue
         if _has_proto_key(args) or _has_proto_key(expected):
-            error(f"{label}: an object key named __proto__ changes meaning in a JavaScript literal and cannot be used.")
+            reject(f"{label}: an object key named __proto__ changes meaning in a JavaScript literal and cannot be used.")
             continue
         if _unsafe_number(args) or _unsafe_number(expected):
-            error(f"{label}: numbers beyond 2^53 cannot be compared exactly; use another example.")
+            reject(f"{label}: numbers beyond 2^53 cannot be compared exactly; use another example.")
             continue
 
         evidence = item.get("evidence")
         if not isinstance(evidence, str) or not evidence.strip():
-            error(f"{label}: `evidence` must quote the issue text that supports this example.")
+            reject(f"{label}: `evidence` must quote the issue text that supports this example.")
             continue
         if len("".join(evidence.split())) < MIN_EVIDENCE_CHARS:
-            error(f"{label}: `evidence` is too short to be a quotation; copy the issue lines that state the "
+            reject(f"{label}: `evidence` is too short to be a quotation; copy the issue lines that state the "
                   "input and the expected result.")
             continue
         if len(evidence) > MAX_EVIDENCE_CHARS:
-            error(f"{label}: `evidence` is limited to {MAX_EVIDENCE_CHARS} characters; quote only the relevant lines.")
+            reject(f"{label}: `evidence` is limited to {MAX_EVIDENCE_CHARS} characters; quote only the relevant lines.")
             continue
         span = locate_evidence(evidence, issue_text)
         if span is None:
@@ -511,7 +531,7 @@ def validate_spec(
             if hint:
                 message += (f" The closest issue line is {json.dumps(hint)} (shown as a JSON string, so "
                             "copy backslashes and quotes exactly as written there).")
-            error(message)
+            reject(message)
             continue
 
         problems: list[str] = []
@@ -540,20 +560,24 @@ def validate_spec(
             problems.append("the quoted evidence does not talk about throwing, rejecting, errors or refusal, "
                             "so it cannot support `throws: true`")
         if problems:
-            error(f"{label}: " + "; ".join(problems[:3]) + ". Quote the issue text that contains every value "
+            reject(f"{label}: " + "; ".join(problems[:3]) + ". Quote the issue text that contains every value "
                   "you use, and write each value exactly as the issue does.")
             continue
 
         key = json.dumps([export, args], sort_keys=True, ensure_ascii=True)
         signature = json.dumps(["throws"] if has_throws else ["returns", expected], sort_keys=True, ensure_ascii=True)
         if key in seen_calls and seen_calls[key] != signature:
-            error(f"{label}: the same call is given two different expected results.")
+            reject(f"{label}: the same call is given two different expected results.")
             continue
         seen_calls[key] = signature
         examples.append(Example(ident, export, tuple(args), "throws" if has_throws else "returns",
                                 expected, evidence.strip(), span))
     if not errors and not examples:
-        error("No usable examples.")
+        if partial and result.rejected:
+            for _, message in result.rejected[:8]:
+                error(message)
+        else:
+            error("No usable examples.")
     if not errors:
         result.spec = Spec(module, tuple(examples))
     return result
@@ -729,8 +753,11 @@ Rules the engine checks mechanically:
   compute one: if the issue does not state it, do not use that example.
 - Argument strings that are not in the evidence are allowed only if the repository source already uses them
   as string literals (for example a type tag such as "wifi").
-- Include the examples the issue states as currently wrong. Include the ones it states as already right
-  too: they guard against regressions. Prefer several examples. Never assert error message wording.
+- Include every example the issue states as currently wrong, and every one it states as already right
+  (they guard against regressions). Use ONLY examples whose input and expected result are both written
+  in the issue. Do not make up example values for behavior the issue describes in words (for example
+  "ordinary inputs must keep working"): leave that out. A smaller specification is better than an
+  invented one, and an invented example is discarded. Never assert error message wording.
 - `throws: true` only when the quoted text says the call must throw, reject or refuse.
 - The answer is JSON inside a text block. In a JSON string write a backslash as two backslashes and a double
   quote as backslash-quote. If the issue shows the text  a\\;b  the JSON value is "a\\\\;b".

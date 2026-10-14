@@ -156,13 +156,26 @@ class SpecPipelineTests(unittest.TestCase):
     # -- refused before any run ----------------------------------------------------------------
     def test_a_value_the_issue_does_not_contain_is_refused_before_any_sandbox_run(self):
         invented = dict(E_KB, returns="1.5 kB")  # lowercase k appears nowhere in the evidence
-        result, record, error, calls, _ = self.execute([good(E_ROUND, invented), good(E_ROUND, E_KB)])
+        result, record, error, calls, _ = self.execute([good(invented), good(E_ROUND, E_KB)])
         self.assertIsNone(error)
         self.assertEqual(len(calls), 2)
         self.assertIn('is not in the quoted evidence', calls[1]["user"])
         self.assertEqual(len(result["regression_test"]["attempts"]), 1)  # only the grounded spec ever ran
         statuses = [a["status"] for a in result["regression_test"]["spec"]["attempts"]]
         self.assertEqual(statuses, ["validation_failed", "validated"])
+
+    def test_an_invented_example_is_dropped_and_the_grounded_ones_are_kept(self):
+        # The live qrcrafts-1 failure: the model added a third example with values the issue never gives.
+        invented = example("e6", "formatBytes", [999], returns="ninety-nine B", evidence="formatBytes 999 ordinary values keep working")
+        result, record, error, calls, _ = self.execute([good(E_ROUND, E_KB, E_SPEED, invented)])
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("spec"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(calls), 1)  # no retry spent on the example the issue does not support
+        spec = result["regression_test"]["spec"]
+        self.assertEqual([e["id"] for e in spec["examples"]], ["e1", "e2", "e3"])
+        self.assertEqual([r["example"] for r in spec["rejected_examples"]], ["example e6"])
+        self.assertIn("evidence", spec["rejected_examples"][0]["reason"])
+        self.assertNotIn("ninety-nine", result["regression_test"]["content"])
 
     def test_a_json_backslash_mistake_comes_back_with_the_escaping_rule(self):
         bad = f'{sp.SPEC_BEGIN}\n{{"supported": true, "module": "src/format.ts", "examples": [{{"returns": "a{BS};b"}}]}}\n{sp.SPEC_END}'

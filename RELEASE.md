@@ -1,4 +1,37 @@
-# PatchProof v0.6.0-rc.30 — readiness, a stricter verifier gate, specification-compiled tests
+# PatchProof v0.6.0-rc.31 — one invented example no longer sinks a specification
+
+rc.31 is rc.30 plus the fix for the first live specification run (qrcrafts-1, `verifier=spec`): the model added a third example with values the issue never gives, and that one example made the engine refuse the whole specification, including the two grounded ones. Examples are now judged one by one: an ungrounded example is left out and recorded in `regression_test.spec.rejected_examples`, and the specification stands if at least one example passes every check. The prompt now says to use only examples written in the issue, JSON parse errors show the text around the failure, and the recorded tool versions are no longer shifted by newer tsx's two-line banner. Nothing else changes; rc.30 is described below.
+
+## Install the engine update
+
+1. Extract **shadow-patch-rc31-changed-files.zip** into the root of your **shadow-patch** repository on top of rc.30, preserving paths (none deleted; `RC31-CHANGES.json` lists the files with hashes).
+2. Commit on a review branch and run **Engine Checks**.
+3. Publish **v0.6.0-rc.31** from the reviewed commit. The Benchmark workflow checks the engine out from this tag, and the example Action reference needs it to exist.
+
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.31.zip** into the target root (it includes `outcomes.py` and `spec_profile.py`).
+
+## Next live run
+
+Repeat the specification run on the same case, with everything else equal to the rc.30 smoke:
+
+| Input | Value |
+| --- | --- |
+| engines | v0.6.0-rc.31 |
+| trials | 1 |
+| split | dev |
+| cases | qrcrafts-1 |
+| agent_mode | legacy |
+| verifier | spec |
+
+Send back the trial's `proof.json` and `engine-stderr.txt`. Read `regression_test.spec`: `status`, `rejected_examples`, `examples`, `pre_fix_states`, `dropped_examples`, `frozen_test_sha256`. Run the held-out cases only after `spec` works on the development cases.
+
+## Validation
+
+**413 Python tests, zero skips, and 2 Node helper tests**, plus Python compilation and JavaScript syntax checks. Logs: docs/evidence/rc31-local/. No live run covers rc.31.
+
+---
+
+# PatchProof v0.6.0-rc.30 notes (feature description; its install and run steps are superseded by rc.31's above)
 
 rc.30 is rc.29 plus the five steps of the test-quality review. Locally validated only: no live run covers it. The free-form verifier is still the default, so an unchanged workflow behaves as it did on rc.29 apart from the new records and the stop rules below.
 

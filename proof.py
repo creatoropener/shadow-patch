@@ -37,7 +37,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.30"
+APP_VERSION = "0.6.0-rc.31"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1092,7 +1092,7 @@ class VerifierPlan:
                 print(f"Specification response rejected: {error} | {_raw_response_preview(raw)}", file=sys.stderr)
             if parsed is not None:
                 validation = spec_profile.validate_spec(parsed, issue_text=issue_text, modules=self.modules,
-                                                        source_literals=self.literals)
+                                                        source_literals=self.literals, partial=True)
                 if validation.unsupported is not None:
                     self.generation_attempts.append({**entry, "status": "unsupported"})
                     attempts.append({"attempt": attempt, "status": "unsupported", "reason": validation.unsupported})
@@ -1113,6 +1113,13 @@ class VerifierPlan:
             self.spec = validation.spec
             self.expected = None
             self.record["status"] = "specified"
+            if validation.rejected:
+                # Examples the issue does not support are left out, never repaired into shape; the
+                # remaining examples passed every check. The proof says what was refused and why.
+                self.record["rejected_examples"] = [{"example": label, "reason": message[:400]}
+                                                    for label, message in validation.rejected]
+                print(f"Specification kept {len(validation.spec.examples)} example(s) and refused "
+                      f"{len(validation.rejected)}: {validation.rejected[0][1][:160]}", file=sys.stderr)
             self._sync_record()
             content = self._compile()
             try:
@@ -2089,6 +2096,9 @@ def project_input_hashes(repo_root: Path, project: Path) -> dict[str, str]:
 def toolchain_versions(adapter: RuntimeAdapter, output: str) -> dict[str, Any]:
     """Name the versions the sandbox preflight printed; always keep the raw lines."""
     lines = [line.strip() for line in output.splitlines() if line.strip()]
+    # Newer tsx prints two lines ("tsx v4.23.15", then "node v20.19.2"); keep one line per tool.
+    lines = [line for index, line in enumerate(lines)
+             if not (line.startswith("node v") and index and lines[index - 1].startswith("tsx"))]
     names: list[str] = []
     if adapter.id in {"node-typescript", "node-package"}:
         names = ["node", "npm"] + ([adapter.package_manager] if adapter.package_manager != "npm" else [])
@@ -2097,7 +2107,7 @@ def toolchain_versions(adapter: RuntimeAdapter, output: str) -> dict[str, Any]:
     named = {}
     if names and len(lines) >= len(names):
         for name, line in zip(names, lines[-len(names):]):
-            named[name] = line.removeprefix("Version ").removeprefix("v")
+            named[name] = line.removeprefix("Version ").removeprefix("tsx ").removeprefix("v")
     return {"versions": named, "raw": lines[-12:]}
 
 

@@ -63,6 +63,11 @@ calls (network, DOM, timing, files, behavior described only in words).
 - `throws: true` needs failure language in the evidence (throw, reject, error, invalid, ...).
 - Integers beyond 2^53, unknown fields, duplicate ids, more than 12 examples, more than 8 arguments, and
   two different expectations for the same call are refused.
+- **Examples are judged one by one (rc.31).** An example the issue does not support is refused and left
+  out; the specification stands if at least one example passes every check, and `rejected_examples` in
+  the proof says which were refused and why. Problems with the specification as a whole (wrong module,
+  unknown top-level field, invalid JSON, nothing grounded) still fail it and go back to the model. Before
+  rc.31 one invented example sank the whole specification.
 - **Backslashes.** The issue shows one backslash; JSON text spells it with two. A value that decodes to
   the wrong number of backslashes no longer appears in the evidence and is refused with a message
   explaining the JSON rule. Escaping was a recurring free-form failure (the useless-escape gate of
