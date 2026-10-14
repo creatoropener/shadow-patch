@@ -82,11 +82,11 @@
     {
       "id": "heldout-3",
       "split": "heldout",
-      "repo": "TODO/TODO",
-      "base_commit": "TODO",
+      "repo": "https://github.com/creatoropener/PlanMorph",
+      "base_commit": "5a912017d2c410b26e075fdce813034379698fd1",
       "issue": {
         "number": 1,
-        "title": "TODO: unseen pilot case",
+        "title": "No application authentication or subscription ownership checks",
         "body_file": "bench/issues/heldout-3.md"
       },
       "oracle": null,
