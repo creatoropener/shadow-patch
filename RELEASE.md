@@ -1,3 +1,60 @@
+# PatchProof v0.6.0-rc.30 — readiness, a stricter verifier gate, specification-compiled tests
+
+rc.30 is rc.29 plus the five steps of the test-quality review. Locally validated only: no live run covers it. The free-form verifier is still the default, so an unchanged workflow behaves as it did on rc.29 apart from the new records and the stop rules below.
+
+## What changed
+
+- **Readiness before inference.** `proof.json` and the report carry a readiness summary (root, runtime, install, test command, discovered test counts, required checks, specific blockers). A baseline that ran zero tests is recorded as absent compatibility coverage. `python proof.py --readiness-only ...` stops before the first model request with verdict `ready`.
+- **Outcome buckets.** Every run gets one bucket from its own evidence (verified, readiness_blocked, needs_specification, spec_invalid, verifier_invalid, no_reproduction, repair_invalid, repair_failed, replay_failed, delivery_blocked, budget_exhausted, infrastructure_error).
+- **Verifier execution gate.** A generated test that never ran (syntax, lint, type-check, unresolved import) no longer uses one of the three execution attempts; it has its own allowance of three. The same rejected output three times in a row stops the run with its own message. Syntax failures come back with the line and a caret. Plain JavaScript tests get a `node --check` step.
+- **Specification-compiled tests (opt in).** `verifier-profile: spec` or `auto` (Action), `PATCHPROOF_VERIFIER` (variable), or the Benchmark workflow's `verifier` input. The model returns a specification quoted from the issue; the engine validates it, writes the test, decides per example which ones show the bug, and freezes the result before the solver starts. Default `freeform`. `node-typescript` only. Details and limits: [docs/SPEC_PROFILE.md](docs/SPEC_PROFILE.md).
+- **Benchmark report.** Verifier profile recorded and never pooled; solve rate, coverage and conditional repair success shown together; one column per bucket; `needs_specification` stays in the denominator.
+- New engine files **outcomes.py** and **spec_profile.py**. Copy them with the rest.
+
+Not changed: the frozen verifier rule, ordinary-CI discovery, clean replay, delivery hashes, budgets, the bounded loop and every default.
+
+## Install the engine update
+
+1. Extract **shadow-patch-rc30-changed-files.zip** into the root of your **shadow-patch** repository, preserving paths, on top of rc.29 (none deleted; `RC30-CHANGES.json` lists the files with hashes). If you are on an earlier release, apply the intermediate zips first.
+2. Commit on a review branch and run **Engine Checks**. It installs pinned test dependencies and makes no model or sandbox calls (it also checks Node 20; the included evidence ran locally on Node 22).
+3. Publish **v0.6.0-rc.30** from the reviewed commit. The Benchmark workflow checks the engine out from this tag, and the example Action reference needs it to exist.
+
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.30.zip** into the target root. Copy every file, including the new **outcomes.py** and **spec_profile.py**. Regenerate it with:
+
+~~~bash
+python tools/export_target.py --output ../patchproof-target-v0.6.0-rc.30.zip
+~~~
+
+## Next live run
+
+Order matters, and nothing below has been run.
+
+1. **Legacy smoke first.** It checks that rc.30 did not disturb the path that is known to work.
+
+| Input | Value |
+| --- | --- |
+| engines | v0.6.0-rc.30 |
+| trials | 1 |
+| split | dev |
+| cases | qrcrafts-1 |
+| agent_mode | legacy |
+| verifier | freeform |
+
+2. **Then the specification profile on the same case** (`verifier` = `spec`, everything else equal). The `qrcrafts-1` issue text contains both payloads exactly, which is what the profile needs; read `regression_test.spec` in the proof: status, examples, `pre_fix_states`, `dropped_examples`, `frozen_test_sha256`.
+3. **Only then fresh cases.** Choose the held-out issues before running anything on rc.30, keep any case used to tune the engine out of the held-out split, run once, and quote coverage next to the solve rate. `heldout-3` and `heldout-4` are still placeholders in the manifest.
+
+## Validation and boundaries
+
+Final local validation: **408 Python tests, zero skips, and 2 Node helper tests**, plus Python compilation and JavaScript syntax checks. The new tests include native pipelines (real TypeScript, tsx, Node test runner; scripted model and substituted sandbox) for the specification path, the execution gate and the readiness-only run. Logs: docs/evidence/rc30-local/.
+
+Not verified: any live model behaviour on the specification path (the prompt, how often Nemotron produces a specification the engine accepts, how often an issue is expressible at all); the Engine Checks workflow on Node 20 for rc.27 to rc.30; `npm install -g pnpm|yarn` inside the sandbox image; the known-failure path against a real project's runner output. The expected values are as correct as the issue is; the engine proves they are quoted, not that the issue is right.
+
+---
+
+# Earlier release notes (rc.29, rc.28, rc.27)
+
+The install and run steps above replace the ones below. The rest is kept as history.
+
 # PatchProof v0.6.0-rc.29 — project support, lockfile fix, edit-shape fix
 
 rc.29 is rc.28 plus one fix from its first live run (qrcrafts-1, bounded). Setup and the verifier test passed, but the solver put `path` on the edit action instead of inside each edit, was told only "Each edit requires exactly path, old, new", and resent the identical edit 22 times until its 24 steps ran out. Now: the error names the missing or unexpected key and shows the correct shape; a `path` on the action fills an edit that has none (the path is still scope-checked, and the result carries a note); and a solver that resends the same rejected action a third time is stopped as `candidate_invalid` (only that solver session; other sessions and the run continue) instead of burning its allocation as `budget_exhausted`. The verifier is warned on repeats but never stopped by this rule. The rest of this page describes rc.27/rc.28, which rc.29 contains.

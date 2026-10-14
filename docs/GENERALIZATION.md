@@ -65,3 +65,7 @@ Every proof now records, in both modes: `engine` (version, commit when known, re
 ## Still not supported
 
 Workspace installs from a repository root, Yarn Plug'n'Play, Bun, non-TAP test runners for known failures, new files in legacy mode or for other runtimes, dependency or config repairs, and a bounded profile for runtimes other than `node-typescript`.
+
+## Test generation (rc.30)
+
+Project support above decides whether the engine can run a repository. [SPEC_PROFILE.md](SPEC_PROFILE.md) covers the other half: whether the regression test can be trusted. rc.30 adds a readiness report before any inference, a verifier gate that distinguishes a refused test from a failed reproduction, and an opt-in profile in which the model writes a specification quoted from the issue and the engine writes the test. The profile covers exported TypeScript functions with JSON arguments and results; other issues stop with `needs_specification` or fall back to the free-form verifier.

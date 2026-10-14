@@ -60,6 +60,14 @@ NEEDS_SPECIFICATION = "needs_specification"
 OUTCOMES = (TRUE_ACCEPT, FALSE_ACCEPT, VERIFIED_UNLABELED, FALSE_REJECT,
             TRUE_REJECT, REJECTED_UNLABELED, VERIFIER_FAILED, BUDGET_STOP, NEEDS_SPECIFICATION, INFRA)
 VERIFIER_STAGES = {"verifier-investigation", "verifier-generation", "verifier-reproduction"}
+# rc.30 outcome buckets, as the engine writes them into proof["outcome"]["bucket"] (outcomes.py).
+# They say where a run stopped, which the trial outcomes above deliberately do not.
+BUCKETS = ("verified", "readiness_blocked", "needs_specification", "spec_invalid", "verifier_invalid",
+           "no_reproduction", "repair_invalid", "repair_failed", "replay_failed", "delivery_blocked",
+           "budget_exhausted", "infrastructure_error", "unclassified")
+EVALUATED_REPAIR = frozenset({"verified", "repair_failed", "replay_failed"})
+NO_BUCKET = "not recorded"  # the engine predates rc.30, or wrote no proof
+VERIFIER_PROFILES = ("freeform", "spec", "auto")
 AGENT_SETTINGS = ("PATCHPROOF_AGENT_CANDIDATES", "PATCHPROOF_MAX_AGENT_STEPS", "PATCHPROOF_MAX_MODEL_REQUESTS",
                   "PATCHPROOF_MAX_TOTAL_TOKENS", "PATCHPROOF_MAX_SANDBOX_COMMANDS", "PATCHPROOF_MAX_RUN_SECONDS",
                   "PATCHPROOF_MAX_COST_USD", "PATCHPROOF_INPUT_USD_PER_MILLION", "PATCHPROOF_OUTPUT_USD_PER_MILLION")
@@ -347,6 +355,7 @@ def run_trial(*, case: dict[str, Any], trial: int, engine_ref: str, engine_dir: 
         "manifest_sha256": manifest_sha256(root / "bench" / "manifest.json"),
         "model": env.get("NEBIUS_MODEL", ""), "max_tokens": env.get("NEBIUS_MAX_TOKENS", ""),
         "agent_mode": env.get("PATCHPROOF_AGENT_MODE", "legacy"),
+        "verifier_profile": env.get("PATCHPROOF_VERIFIER", "freeform") or "freeform",
         "agent_settings": {key: env[key] for key in AGENT_SETTINGS if env.get(key)},
         "exit_code": exit_code, "timed_out": timed_out, "elapsed_seconds": elapsed,
         "has_proof": (out / "proof.json").is_file(),
@@ -467,6 +476,11 @@ def collect_results(results_dir: Path) -> list[dict[str, Any]]:
                 meta["evidence_error"] = "proof run_id does not match this trial"
             if meta.get("agent_mode", "legacy") != proof.get("agent_mode", "legacy"):
                 meta["evidence_error"] = "engine did not run the requested execution profile"
+            requested_verifier = meta.get("verifier_profile", "freeform")
+            recorded_verifier = (proof.get("verifier") or {}).get("profile_requested", "freeform")
+            if requested_verifier != recorded_verifier:
+                meta["evidence_error"] = ("engine did not run the requested verifier profile "
+                                          f"({requested_verifier} requested, {recorded_verifier} recorded)")
         trials.append({"meta": meta, "proof": proof, "dir": str(meta_path.parent)})
     return trials
 
@@ -642,6 +656,25 @@ def wilson(successes: int, total: int, z: float = 1.96) -> tuple[float, float] |
     return max(0.0, centre - half), min(1.0, centre + half)
 
 
+def repair_and_coverage(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Two numbers that must be read next to the headline rate, never instead of it.
+
+    `repair_*` is conditional: it only counts runs that reached an evaluated repair, so it says nothing
+    about the runs that stopped earlier. `coverage_*` is how many runs of a specification-capable
+    profile produced a grounded specification at all.
+    """
+    reached = [r for r in rows if r.get("evaluated_repair") and r["outcome"] != INFRA]
+    correct = sum(1 for r in reached if r["outcome"] == TRUE_ACCEPT)
+    spec_rows = [r for r in rows if r.get("profile_covered") is not None and r["outcome"] != INFRA]
+    covered = sum(1 for r in spec_rows if r["profile_covered"])
+    return {
+        "repair_evaluated": len(reached), "repair_correct": correct,
+        "repair_ci": wilson(correct, len(reached)),
+        "coverage_runs": len(spec_rows), "coverage_covered": covered,
+        "coverage_ci": wilson(covered, len(spec_rows)),
+    }
+
+
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     counts = {name: 0 for name in OUTCOMES}
     for row in rows:
@@ -657,6 +690,30 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "end_to_end_upper": success + counts[VERIFIED_UNLABELED],
         "end_to_end_ci": wilson(success, effective),
         "verifier_failure_rate": (counts[VERIFIER_FAILED] / effective) if effective else None,
+        "buckets": {name: sum(1 for r in rows if r.get("bucket", NO_BUCKET) == name)
+                    for name in BUCKETS + (NO_BUCKET,)},
+        **repair_and_coverage(rows),
+    }
+
+
+def verifier_fields(meta: dict[str, Any], proof: dict[str, Any] | None) -> dict[str, Any]:
+    """What the engine recorded about readiness, the verifier profile and where the run stopped."""
+    proof = proof or {}
+    verifier = proof.get("verifier") or {}
+    spec = (proof.get("regression_test") or {}).get("spec") or {}
+    outcome = proof.get("outcome") or {}
+    requested = verifier.get("profile_requested") or meta.get("verifier_profile", "freeform")
+    return {
+        "bucket": outcome.get("bucket") or NO_BUCKET,
+        "evaluated_repair": bool(outcome.get("evaluated_repair")),
+        "readiness": (proof.get("readiness") or {}).get("status"),
+        "verifier_requested": requested,
+        "verifier_used": verifier.get("profile_used") or "freeform",
+        "fallback": bool(verifier.get("fallback")),
+        "spec_status": spec.get("status"),
+        # Inside the profile: a specification was grounded in the issue text (a hash exists), whether
+        # or not it went on to reproduce anything. Freeform runs have no such notion.
+        "profile_covered": (bool(spec.get("spec_sha256")) if requested != "freeform" else None),
     }
 
 
@@ -680,6 +737,7 @@ def build_rows(trials: list[dict[str, Any]], manifest: dict[str, Any],
             "agent_mode": (proof or {}).get("agent_mode", "legacy"),
             "stop_reason": (proof or {}).get("stop_reason"),
             "budget": (proof or {}).get("budget"),
+            **verifier_fields(meta, proof),
         })
     rows.sort(key=lambda r: (r["engine"], r["split"], r["case"], r["trial"]))
     return rows
@@ -714,6 +772,8 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
     out.append(f"- Engines: {', '.join(meta_summary['engines'])}; trials recorded: {len(rows)}")
     out.append(f"- Protocol: `{meta_summary.get('protocol_id', 'legacy')}`. Split membership comes from each trial snapshot.")
     out.append("- Execution profiles: " + ", ".join(sorted({f"{row['engine']}={row.get('agent_mode', 'legacy')}" for row in rows})) + ".")
+    out.append("- Verifier profiles (requested): " + ", ".join(sorted({
+        f"{row['engine']}={row.get('verifier_requested', 'freeform')}" for row in rows})) + ".")
     operational = summarize(rows)
     out.append(f"- Operational success (all attempts, including infrastructure failures): {operational['end_to_end_success']}/{operational['trials']}.")
     out.append("")
@@ -740,12 +800,41 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
                 "*Verifier failed* = no repair was ever evaluated because the generated test was never accepted. "
                 "Budget and specification stops remain in the denominator. "
                 "Rows for `all` combine dev and heldout; report heldout on its own.", ""]
+    out += ["## Profile coverage and repair rate", "",
+            "Read these two columns next to the first one, never instead of it. *Coverage* is how many runs of a "
+            "specification-capable verifier profile produced a specification grounded in the issue text. *Repair "
+            "success* only counts runs that reached an evaluated repair.", "",
+            "| Engine | Split | Solved, of all non-infra trials | Coverage (grounded spec) | "
+            "Repair success, runs that reached a repair |",
+            "| --- | --- | ---: | ---: | ---: |"]
+    for (engine, split), members in sorted(groups.items()):
+        s = summarize(members)
+        coverage = (f"{s['coverage_covered']}/{s['coverage_runs']} ({pct(s['coverage_covered'] / s['coverage_runs'])})"
+                    if s["coverage_runs"] else "n/a (free-form verifier)")
+        repair = (f"{s['repair_correct']}/{s['repair_evaluated']} ({pct(s['repair_correct'] / s['repair_evaluated'])})"
+                  if s["repair_evaluated"] else "n/a (no repair evaluated)")
+        out.append(f"| {engine} | {split} | {s['end_to_end_success']}/{s['effective']} | {coverage} | {repair} |")
+    out.append("")
+    out += ["## Where runs stopped", "",
+            "One bucket per run, written by the engine from its own evidence. Readiness failures, unusable "
+            "specifications, tests that never reproduced the issue and repairs that failed are different "
+            "problems and are not merged here.", ""]
+    shown = [name for name in BUCKETS + (NO_BUCKET,) if any(r.get("bucket", NO_BUCKET) == name for r in rows)]
+    out.append("| Engine | Split | " + " | ".join(shown) + " |")
+    out.append("| --- | --- | " + " | ".join("---:" for _ in shown) + " |")
+    for (engine, split), members in sorted(groups.items()):
+        counts = summarize(members)["buckets"]
+        out.append(f"| {engine} | {split} | " + " | ".join(str(counts[name]) for name in shown) + " |")
+    out.append("")
     out.append("## Every trial")
     out.append("")
-    out.append("| Engine | Case | Split | Trial | Outcome | Stage | Verifier tries | Seconds | Note |")
-    out.append("| --- | --- | --- | ---: | --- | --- | ---: | ---: | --- |")
+    out.append("| Engine | Case | Split | Trial | Outcome | Bucket | Verifier | Stage | Verifier tries | Seconds | Note |")
+    out.append("| --- | --- | --- | ---: | --- | --- | --- | --- | ---: | ---: | --- |")
     for row in rows:
+        used = row.get("verifier_used", "freeform")
+        verifier = f"{row.get('verifier_requested', 'freeform')}→{used}" if row.get("fallback") else used
         out.append(f"| {row['engine']} | {row['case']} | {row['split']} | {row['trial']} | {row['outcome']} | "
+                   f"{row.get('bucket', NO_BUCKET)} | {verifier} | "
                    f"{row['stage']} | {row['verifier_generations']} | {row['elapsed_seconds']} | "
                    f"{row['reason'].replace('|', '/')} |")
     warnings = []
@@ -753,6 +842,15 @@ def render_markdown(rows: list[dict[str, Any]], needed: list[dict[str, Any]], *,
     if infra:
         warnings.append(f"{infra} trial(s) were infrastructure failures and are excluded from the rates. "
                         "Re-run them before quoting numbers.")
+    readiness = sum(1 for r in rows if r["outcome"] == INFRA and r.get("bucket") == "readiness_blocked")
+    if readiness:
+        warnings.append(f"{readiness} of those stopped at the readiness check. That can be the repository rather "
+                        "than the harness (a baseline that fails, a runtime that cannot be detected), so a re-run "
+                        "may not change it; they are unsolved in the 'Operational success' line above.")
+    if any(r.get("verifier_requested", "freeform") != "freeform" for r in rows):
+        warnings.append("Spec and auto runs count needs_specification and spec_invalid as unsolved in the headline "
+                        "numbers. An engine-compiled test is written from the issue text only; a case the profile "
+                        "cannot express is a case the engine did not solve. Quote coverage with the solve rate.")
     unjudged = sum(1 for r in rows if r["outcome"] in (VERIFIED_UNLABELED, REJECTED_UNLABELED))
     if unjudged:
         warnings.append(f"{unjudged} trial(s) have an outcome that depends on an unjudged repair, so they are "
@@ -814,7 +912,8 @@ def write_report(results_dir: Path, oracle_dir: Path, out_dir: Path, *,
     profiles: dict[str, set[str]] = {}
     for trial in trials:
         meta = trial["meta"]
-        profile = json.dumps({"mode": meta.get("agent_mode", "legacy"), "settings": meta.get("agent_settings", {}),
+        profile = json.dumps({"mode": meta.get("agent_mode", "legacy"), "verifier": meta.get("verifier_profile", "freeform"),
+                              "settings": meta.get("agent_settings", {}),
                               "model": meta.get("model", ""), "max_tokens": meta.get("max_tokens", "")}, sort_keys=True)
         profiles.setdefault(meta["engine_ref"], set()).add(profile)
     if any(len(values) > 1 for values in profiles.values()):

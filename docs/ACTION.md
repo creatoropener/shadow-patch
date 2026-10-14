@@ -52,7 +52,8 @@ Inputs: `nebius-api-key`, `nebius-project-id`, `nebius-model` (required);
 `nebius-max-tokens` (default `12000`); `sandbox-image`; one `image-<adapter>` per
 adapter (`python-pytest`, `node-package`, `node-typescript`, `static-web`,
 `web-playwright`, `java-junit`, `java-maven`, `java-gradle`, `go`, `rust`);
-`github-token` (default `github.token`).
+`github-token` (default `github.token`); `agent-mode` (`legacy` or `bounded`); and, from rc.30,
+`verifier-profile` (`freeform`, the default, `spec` or `auto`; see [SPEC_PROFILE.md](SPEC_PROFILE.md)).
 
 Outputs: `verdict` (`verified`, `rejected`, `blocked`) and `pull-request-url`.
 

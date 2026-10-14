@@ -222,3 +222,9 @@ The current local fixtures demonstrate control flow, not new model accuracy. Aft
 ## rc.27 additions
 
 rc.27 changes how a project is set up and described, not how a trial is judged. A case may now carry `root`, `known_failures` and `scope.new_file_dirs` in its `patchproof_config`; `scope.new_file_dirs` runs only in bounded mode. Each proof records the engine version, file hashes, project manifests and lockfiles, archive hash and the toolchain versions printed by the sandbox, so a result can be tied to the exact inputs. Compare only trials run with the same engine and configuration; a case whose config gained `known_failures` or `new_file_dirs` is a different case snapshot. See [GENERALIZATION.md](GENERALIZATION.md).
+
+## rc.30 additions
+
+rc.30 changes what a run reports, not how a trial is judged. Each proof carries a `readiness` summary and an `outcome` bucket (see [SPEC_PROFILE.md](SPEC_PROFILE.md)), and `meta.json` records the requested `verifier_profile` (the Benchmark workflow's `verifier` input; `freeform` unless set). The report gains three views that must be quoted together: the solve rate over all non-infrastructure trials (`needs_specification` and `spec_invalid` stay in the denominator), the coverage of the specification profile (how many trials produced a grounded specification), and the repair success among runs that reached an evaluated repair. It also shows where each run stopped, in separate columns, and refuses to pool trials of one engine that used different verifier profiles. Trials from engines older than rc.30 show `not recorded` for the bucket instead of a guessed one.
+
+For a held-out claim, choose the cases before running anything on rc.30, write each issue as a maintainer would, run once, and keep any case that was used to tune the engine out of the held-out split. Coverage is reported next to the solve rate because a profile that expresses only the easy cases can post a high rate over a small covered set.

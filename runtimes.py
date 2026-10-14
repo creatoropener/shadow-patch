@@ -853,7 +853,11 @@ class RuntimeAdapter:
                 "node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs "
                 f"--test --test-reporter=tap {target}"
             )
-        return f"node --test --test-reporter=tap {target}"
+        # rc.30: parse the generated file first. A syntax error is then reported with the parser's
+        # own file, line and caret and a marker the engine recognises as "never ran", instead of as
+        # a generic test failure. The subshell keeps its `exit` from ending the protected wrapper.
+        return (f"( node --check {target} || {{ echo PATCHPROOF_JS_PARSE=failed >&2; exit 2; }} ) && "
+                f"node --test --test-reporter=tap {target}")
 
     def full_command(self, test_path: str) -> str:
         # The isolated regression always runs explicitly, even if a project's

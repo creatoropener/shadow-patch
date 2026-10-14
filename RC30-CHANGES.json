@@ -1,0 +1,142 @@
+{
+  "release": "0.6.0-rc.30",
+  "baseline_kind": "rc.29 tree as uploaded 2026-10-13",
+  "deleted_files": [],
+  "files": [
+    {
+      "path": ".github/workflows/benchmark.yml",
+      "sha256": "d90ad7494dceb1214e5a8c7518ea6a86b6c1512782c4f4a7f2775fac85da301d",
+      "baseline_sha256": "f0ca8e2ff3d2c3b43d7f2bf857215c767c07e1aa38f760fca9742bd747af6534"
+    },
+    {
+      "path": ".github/workflows/engine-checks.yml",
+      "sha256": "e2f2ac2c29a8b0432419733c370f86837fee605a6823b898e7beba2acfb39ccf",
+      "baseline_sha256": "8ed8a2480de326de278678c5c19bfaf86d89c70cd9b2b089827df3ee9983cf4f"
+    },
+    {
+      "path": ".github/workflows/shadow-fix.yml",
+      "sha256": "38cf0c24cc997bb61595efea03ae8250cc4a8f5562006bcc5695420124156e4f",
+      "baseline_sha256": "cdaeb8aed616ff500eec6ccf68dad8b35dd403fb35a029354b1d6e137eaf79e5"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "729ad7a6e96dc6d6d39a47b3bd58f682227450e4d25a01dd9c3acb566c9994f0",
+      "baseline_sha256": "5131d071a3cf5ae1c57e4dec0183d2659c1e7b1520a3672b1a36fdb290172a78"
+    },
+    {
+      "path": "README.md",
+      "sha256": "345f0f1ce5d36d754bfb23457408d2e445251f62cb4413343072b8ec64f3e0b7",
+      "baseline_sha256": "f172e36fe7be36966937dd8970827fe12440e3042b2543e5aa79f77e8cf10fd9"
+    },
+    {
+      "path": "RELEASE.md",
+      "sha256": "e1dc72d4389e4ed02f884e93f553b17694464301064682538d1750a180dca000",
+      "baseline_sha256": "a3d0b915353bd134616b6f7de2b591e3828ee9f12aa6bb0d3d35e5a491b69442"
+    },
+    {
+      "path": "RELEASE_FILES.sha256",
+      "sha256": "2709d5bc987d2db0f024a5e7093f065d0264c496a507de89c9e17d9d4ba48b0c",
+      "baseline_sha256": "a6fd75856bb2cb70f15f2d322bcd2c4b8851edf54ed5baa6fae4fc1c4b7ce112"
+    },
+    {
+      "path": "action.yml",
+      "sha256": "66151e20206d47da867b5db0e405c38b7cb4ea2aa5ffa84276f64b4c914b61c5",
+      "baseline_sha256": "ef396336f72b9e47b095afad25528d5e7d6a246355ccb054fe8eae8998572257"
+    },
+    {
+      "path": "bench/harness.py",
+      "sha256": "97c46fc80e35cc29cb3d19c0d55c787d0cdfadf4ec4458650a2da9714aa177a2",
+      "baseline_sha256": "f90d06897f069fb93a48c312c0c06962f0f20e875d8f8aa43046ebbdf0c5f793"
+    },
+    {
+      "path": "docs/ACTION.md",
+      "sha256": "e268f872e9a35b62320d4afad183cb5e23b43a306e6d34fbac568444cac1177d",
+      "baseline_sha256": "21bad83a07bbca131879ae4e187821cf27d612802adb4238c76b2e05421f3be7"
+    },
+    {
+      "path": "docs/BENCHMARK.md",
+      "sha256": "84757be0a3715b060f3e34bde56641730d7e5d756a590617c5e0e62d5b4ed5a7",
+      "baseline_sha256": "251249e01acd15bf7231fd81a55e91597d58a0d75ca3e2f1d4f2843d897b0d84"
+    },
+    {
+      "path": "docs/GENERALIZATION.md",
+      "sha256": "5fed7231cd6f2e8d2041ceca301bcad1c92100348401e6403a103a1abc149a2d",
+      "baseline_sha256": "7db1f0f704b99525c6bc5f08acf61f5863a42ac8c6e0104b4a033b70498a2697"
+    },
+    {
+      "path": "docs/SPEC_PROFILE.md",
+      "sha256": "09acdd818f63908deb068b9fc3637f027ba5bc0fb93563c265a33d3ab85107f5",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/evidence/rc30-local/python-tests.txt",
+      "sha256": "257ce82b26c41e4177574ec15feb6aa874d583d8669f79d091feef1ce3930793",
+      "baseline_sha256": null
+    },
+    {
+      "path": "examples/action-usage/shadow-fix.yml",
+      "sha256": "92c4c0541922312aa98e81df82a94c03a508f0ed8cb4170373854fa6fce029ad",
+      "baseline_sha256": "2d00ca9880a7e462ee873805adbfd189f18f02b5a3cfb2dfa0b7568fd8de2423"
+    },
+    {
+      "path": "outcomes.py",
+      "sha256": "b00f64acd9b3753a02f759b714d3d8173e09e007c4260700907f4ab27d90f32e",
+      "baseline_sha256": null
+    },
+    {
+      "path": "proof.py",
+      "sha256": "c5d39b8ad7496afba7605ee01ec93b8de0d50b88e7819098781f7b6b69764bfa",
+      "baseline_sha256": "305b0497e99edcdc3a33f31d9622052a0c2b766f3f09f990c48e020e35fc81e5"
+    },
+    {
+      "path": "runtimes.py",
+      "sha256": "bf2bb267ac0adc4b62ff6393806dfd3b726a7e9cf1b7f9b0e90bd4216338a0c6",
+      "baseline_sha256": "93985c79a545f9bcf5153fb824f99edbe1092250782f65b2843d567a0513137a"
+    },
+    {
+      "path": "spec_profile.py",
+      "sha256": "81c828f44f7b669140f0496bf07d5cbe59c5779e648d88d808b2b5273baf7d75",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/support_pipeline.py",
+      "sha256": "855dfdc814ded228df21a246d2d107290db57b0056a064c139cd168e4075cf36",
+      "baseline_sha256": "1458609fe842d173e3fa648a36ecb6def5b963a682f64cc5a0b1f5d720a53f64"
+    },
+    {
+      "path": "tests/test_rc30_bench.py",
+      "sha256": "871e3aab1e36f62e98a7eb709efa36ae6d0e4744de9c285645b9b517442639c2",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_rc30_execution_gate.py",
+      "sha256": "d917c1c44ecea91a3b7ff8ff7ccf0f5b5e6a83331fe15e42a9eea305879a585a",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_rc30_outcomes.py",
+      "sha256": "6df4013ce2060caaef8475fab697d5c6975583cb4885cd8d885c59b581ac5689",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_rc30_spec_pipeline.py",
+      "sha256": "33830fe83fc73c99e65b6815a8ee6b901d5eb25606f0db8372e3e1352722ca9a",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_rc30_spec_profile.py",
+      "sha256": "1691845dc1c895c80ae0ed7dab7cf3e40a521b539d71834f3858774e62d4a783",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_stream_contracts.py",
+      "sha256": "c10662a1df63de2a25d4832005ac77bbfc49f53767533abcf8a282458bbc0c4b",
+      "baseline_sha256": "2f874e09c1f6eb7d1764a72b2c807168f3b8cc03b88031722659f5238bab0b4c"
+    },
+    {
+      "path": "tools/export_target.py",
+      "sha256": "bc1cc99693eb558c791588d283e5cb0bad503ed8fdd19ae1f074097ac227cc76",
+      "baseline_sha256": "287a88b0f2a4b17565fd3e2ce35499c52e6b16b3fb8ecdb565a47fc8e76f94f8"
+    }
+  ]
+}

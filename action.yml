@@ -26,6 +26,10 @@ inputs:
     description: 'legacy or bounded (bounded currently supports node-typescript).'
     required: false
     default: 'legacy'
+  verifier-profile:
+    description: 'freeform (the model writes the regression test), spec (the model writes a specification quoted from the issue and the engine compiles the test; stops with needs_specification when it cannot) or auto (spec first, then freeform, recorded). node-typescript only for spec and auto.'
+    required: false
+    default: 'freeform'
   agent-candidates:
     description: 'Bounded solver sessions, 1 to 3; all share the same run limits.'
     required: false
@@ -196,6 +200,7 @@ runs:
         NEBIUS_MODEL: ${{ inputs.nebius-model }}
         NEBIUS_MAX_TOKENS: ${{ inputs.nebius-max-tokens }}
         PATCHPROOF_AGENT_MODE: ${{ inputs.agent-mode }}
+        PATCHPROOF_VERIFIER: ${{ inputs.verifier-profile }}
         PATCHPROOF_AGENT_CANDIDATES: ${{ inputs.agent-candidates }}
         PATCHPROOF_MAX_AGENT_STEPS: ${{ inputs.max-agent-steps }}
         PATCHPROOF_MAX_MODEL_REQUESTS: ${{ inputs.max-model-requests }}

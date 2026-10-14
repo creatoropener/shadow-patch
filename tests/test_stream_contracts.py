@@ -156,7 +156,9 @@ class RetryLoopTests(unittest.TestCase):
     def test_repeated_duplicates_exhaust_budget_without_candidates(self):
         report, calls, candidates, _, error = self.run_loop(['bad', 'bad', 'bad'])
         self.assertEqual((calls, candidates), (1, 0))
-        self.assertIn('budget exhausted', error)
+        # rc.30: three identical rejected outputs in a row end the run with their own message
+        # instead of spending the rest of the retry budget.
+        self.assertIn('repeated the same rejected output 3 times', error)
         self.assertEqual(len(report['regression_test']['generation_attempts']), 3)
 
 

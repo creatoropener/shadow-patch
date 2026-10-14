@@ -31,9 +31,13 @@ from scope_policy import CONFIG_ROOT, load_scope, check_paths, node_payload
 from agent_budget import ACTIVE_BUDGET, COMPLETION_CAP, AgentStop, BudgetExhausted, BudgetedState, Limits, RunBudget, SessionStalled, integer
 from context_tools import RepositorySnapshot
 from agent_loop import AgentSession
+import spec_profile
+from outcomes import (
+    BLOCKED_STAGES, classify_outcome, is_static_rejection, legacy_stop_reason, summarize_readiness,
+)
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.29"
+APP_VERSION = "0.6.0-rc.30"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -47,6 +51,8 @@ PROTECTED_NAMES = {
     "agent_budget.py",
     "context_tools.py",
     "agent_loop.py",
+    "outcomes.py",
+    "spec_profile.py",
     "apply_fix.py",
     "pr_files.py",
     "test_proof.py",
@@ -754,11 +760,102 @@ def repeated_failure_feedback(diagnostic: str, previous_content: str | None) -> 
     return "".join(parts)
 
 
+# rc.30: how many model rounds a verifier run may spend. A test refused by a static gate (syntax,
+# lint, type-check, import) never ran an assertion, so it no longer uses up one of the three
+# execution attempts; it has its own, separate allowance instead. The same invalid output three
+# times in a row ends the run, because a fourth identical request would not change the answer.
+MAX_EXECUTED_ATTEMPTS = 3
+MAX_STATIC_REJECTIONS = 3
+MAX_IDENTICAL_DIAGNOSTICS = 3
+
+
+class RepeatGuard:
+    """Counts consecutive identical diagnostics across every stage of the verifier run."""
+
+    def __init__(self, limit: int = MAX_IDENTICAL_DIAGNOSTICS):
+        self.limit = limit
+        self.signature: str | None = None
+        self.count = 0
+
+    def note(self, signature: str) -> int:
+        if signature == self.signature:
+            self.count += 1
+        else:
+            self.signature, self.count = signature, 1
+        return self.count
+
+    def exceeded(self) -> bool:
+        return self.count >= self.limit
+
+
+_DIAGNOSTIC_LINE = re.compile(r"(?:\berror TS\d+|SyntaxError|:\d+:\d+: )[^\n]*", re.IGNORECASE)
+
+
+def _verifier_exhausted_message(executed: int, static: int, classification: str) -> str:
+    if executed >= MAX_EXECUTED_ATTEMPTS:
+        return ("Verifier retry budget exhausted without an accepted pre-fix "
+                f"assertion failure; last result: {classification}.")
+    return (f"Verifier tests were refused by static checks {static} times without ever running an assertion "
+            f"(syntax, lint, type-check or import); last result: {classification}.")
+
+
+def diagnostic_signature(classification: str, output: str) -> str:
+    """A short, stable key for "the same failure again": the class plus its first compiler/parser line.
+
+    Digits are masked so that a test which moves a line but keeps the same mistake still counts as
+    a repeat.
+    """
+    match = _DIAGNOSTIC_LINE.search(output)
+    detail = match.group(0) if match else ""
+    detail = re.sub(r"\d+", "#", detail)
+    return f"{classification}|{' '.join(detail.split())[:160]}"
+
+
+_TS_PARSE_LINE = re.compile(r"^(?P<file>\S+\.(?:ts|mts|cts)):(?P<line>\d+):(?P<col>\d+): (?P<message>.+)$", re.MULTILINE)
+_NODE_SYNTAX_HEAD = re.compile(r"^(?P<file>\S+\.(?:mjs|cjs|js)):(?P<line>\d+)\s*$", re.MULTILINE)
+_NODE_SYNTAX_ERROR = re.compile(r"^SyntaxError: (?P<message>.+)$", re.MULTILINE)
+
+
+def describe_syntax_errors(content: str, output: str, limit: int = 4) -> str:
+    """Parser diagnostics located in the submitted source, with the offending line shown.
+
+    The execution output already carries the parser's own text, but only as the tail of a long
+    log. This puts the position and the line itself next to the message so the next attempt can
+    change that line rather than guess at it. It never rewrites anything.
+    """
+    lines = content.splitlines()
+    found: list[tuple[int, int | None, str]] = []
+    for match in _TS_PARSE_LINE.finditer(output):
+        found.append((int(match["line"]), int(match["col"]), match["message"].strip()))
+    if not found:
+        head = _NODE_SYNTAX_HEAD.search(output)
+        error = _NODE_SYNTAX_ERROR.search(output)
+        if head and error:
+            found.append((int(head["line"]), None, error["message"].strip()))
+    if not found:
+        return ""
+    parts = ["\nENGINE DIAGNOSIS: The parser rejected the submitted source before any test ran, so this "
+             "says nothing about the reported behavior. Parser errors in your source:"]
+    for number, column, message in found[:limit]:
+        where = f"line {number}" + (f", column {column}" if column else "")
+        parts.append(f"- {where}: {message}")
+        if 1 <= number <= len(lines):
+            text = lines[number - 1]
+            parts.append(f"    {number}: {text[:200]}")
+            if column and 1 <= column <= len(text) + 1:
+                parts.append("    " + " " * (len(str(number)) + 2 + column - 1) + "^")
+    if any("nterminated" in message for _, _, message in found):
+        parts.append("An unterminated string usually means a quote or backslash was not escaped as the "
+                     "language requires; check the quoting on the reported line.")
+    parts.append("Change only what the reported lines need. Resubmitting the same source fails again.")
+    return "\n".join(parts)
+
+
 def generate_regression_with_retry(
     *, issue: Issue, context: str, api_key: str, model: str,
     adapter: RuntimeAdapter, test_path: str, retry_feedback: str = "",
     generation_attempts: list[dict[str, Any]] | None = None,
-    root: Path | None = None,
+    root: Path | None = None, guard: RepeatGuard | None = None,
 ) -> tuple[str, str]:
     last_error: Exception | None = None
     previous_diagnostic: str | None = None
@@ -786,6 +883,13 @@ def generate_regression_with_retry(
             last_error = error
             diagnostic = str(error)
             rejected_content = getattr(error, "rejected_content", None)
+            if guard is not None:
+                guard.note("generation|" + re.sub(r"\d+", "#", diagnostic)[:200])
+                if guard.exceeded():
+                    raise PatchProofError(
+                        f"Verifier repeated the same rejected output {guard.count} times in a row "
+                        f"({diagnostic[:200]}); stopping instead of spending more inference."
+                    ) from error
             if diagnostic == previous_diagnostic:
                 # A second identical diagnosis means plainly restating the rule
                 # did not help. Show the model exactly what it just submitted
@@ -804,6 +908,274 @@ def generate_regression_with_retry(
                     file=sys.stderr,
                 )
     raise PatchProofError(f"Verifier could not produce a valid regression test: {last_error}") from last_error
+
+
+# ---------------------------------------------------------------------------------------------
+# rc.30: choice of verifier profile. "freeform" is the long-standing path (the model writes the
+# test). "spec" asks the model for a specification and has the engine write the test from it
+# (spec_profile.py); it stops with needs_specification when the issue cannot be grounded. "auto"
+# tries the specification first and falls back to the free-form verifier, recording why.
+# ---------------------------------------------------------------------------------------------
+VERIFIER_PROFILES = ("freeform", "spec", "auto")
+SPEC_AUTO_FALLBACK_AFTER = 2
+SPEC_MAX_RECOMPILES = 3
+
+
+def verifier_profile_from_env() -> str:
+    value = os.environ.get("PATCHPROOF_VERIFIER", "freeform").strip().lower() or "freeform"
+    if value not in VERIFIER_PROFILES:
+        raise PatchProofError("PATCHPROOF_VERIFIER must be freeform, spec or auto.")
+    return value
+
+
+class SpecUnavailable(Exception):
+    """The specification profile cannot produce a verifier test for this issue."""
+
+    def __init__(self, status: str, message: str):
+        self.status = status  # "unsupported" (nothing to ground) or "invalid" (could not be made valid)
+        super().__init__(message)
+
+
+def collect_spec_modules(root: Path, editable: set[str]) -> tuple[dict[str, str], set[str]]:
+    """TypeScript source files a specification may target, and the string literals they use."""
+    modules: dict[str, str] = {}
+    for path in sorted(editable):
+        if not path.endswith(spec_profile.MODULE_EXTENSIONS) or path.endswith((".d.ts", ".d.mts", ".d.cts")):
+            continue
+        if is_test_path(Path(path)):
+            continue
+        file = root / path
+        try:
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > 300_000:
+                continue
+            modules[path] = file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if len(modules) >= 400:
+            break
+    literals: set[str] = set()
+    for text in modules.values():
+        literals |= spec_profile.string_literals(text)
+        if len(literals) > 20_000:
+            break
+    return modules, literals
+
+
+@dataclass
+class Review:
+    reproduced: bool
+    classification: str
+    feedback: str | None = None  # replaces the generic reproduction feedback when not None
+    counts: bool = True  # False for a step the engine took itself (recompiling without dropped examples)
+
+
+class VerifierPlan:
+    """Which verifier produces the test, and what the specification path adds around a run.
+
+    The free-form path is untouched: `generate` calls the same retry function as before and
+    `review` returns None. With the specification path active, `generate` returns an
+    engine-compiled test and `review` replaces the free-form reading of the unfixed-code run
+    with the per-example decision of spec_profile.decide.
+    """
+
+    def __init__(self, *, requested: str, adapter: RuntimeAdapter, issue: Issue, root: Path, test_path: str,
+                 modules: dict[str, str], literals: set[str], api_key: str, model: str,
+                 generation_attempts: list[dict[str, Any]], guard: "RepeatGuard"):
+        self.requested, self.adapter, self.issue, self.root = requested, adapter, issue, root
+        self.test_path, self.modules, self.literals = test_path, modules, literals
+        self.api_key, self.model = api_key, model
+        self.generation_attempts, self.guard = generation_attempts, guard
+        self.active = "freeform"
+        self.record: dict[str, Any] = {}
+        self.summary: dict[str, Any] = {"profile_requested": requested, "profile_used": "freeform", "fallback": None}
+        self.spec: spec_profile.Spec | None = None
+        self.style = 0
+        self.failed_rounds = 0
+        self.recompiles = 0
+        self.pending: tuple[str, str] | None = None
+        self.expected: list[str] | None = None
+        if requested == "freeform":
+            return
+        reason = None
+        if adapter.id != "node-typescript":
+            reason = f"The specification profile supports node-typescript only, not {adapter.id}."
+        elif not modules:
+            reason = "No exported TypeScript source files were found for the specification profile."
+        if reason is None:
+            self.active = "spec"
+            self.summary["profile_used"] = "spec"
+        elif requested == "spec":
+            raise AgentStop("blocked_setup", reason)
+        else:
+            self._fall_back(reason)
+
+    # -- bookkeeping ---------------------------------------------------------------------------
+    def _fall_back(self, reason: str) -> None:
+        self.summary["fallback"] = {"from": "spec", "to": "freeform", "reason": reason[:400]}
+        self.summary["profile_used"] = "freeform"
+        self.active = "freeform"
+        self.pending = None
+
+    def _rationale(self) -> str:
+        spec = self.spec
+        kinds = sorted({e.kind for e in spec.examples}) if spec else []
+        return (f"Specification-compiled regression: {len(spec.examples) if spec else 0} example(s) quoted from the "
+                f"issue ({', '.join(kinds)}); written by the engine, not the model.")
+
+    def _compile(self) -> str:
+        assert self.spec is not None
+        return spec_profile.compile_test(self.spec, test_path=self.test_path,
+                                         style=spec_profile.IMPORT_STYLES[self.style])
+
+    def _sync_record(self) -> None:
+        if self.spec is not None:
+            self.record.update({
+                "profile": spec_profile.PROFILE, "module": self.spec.module,
+                "spec_sha256": self.spec.sha256(), "import_style": spec_profile.IMPORT_STYLES[self.style],
+                "examples": [{**e.as_dict(), "issue_span": e.span} for e in self.spec.examples],
+            })
+
+    # -- generation ----------------------------------------------------------------------------
+    def generate(self, *, context: str, retry_feedback: str) -> tuple[str, str]:
+        if self.active == "spec":
+            try:
+                content, rationale = self._generate_spec(context, retry_feedback)
+                self.summary["profile_used"] = "spec"
+                return content, rationale
+            except SpecUnavailable as unavailable:
+                self.record["status"] = unavailable.status
+                self.record["reason"] = str(unavailable)
+                if self.requested == "spec":
+                    raise AgentStop("needs_specification",
+                                    f"The specification profile could not verify this issue: {unavailable}") from unavailable
+                self._fall_back(str(unavailable))
+                retry_feedback = ""
+        return generate_regression_with_retry(
+            issue=self.issue, context=context, api_key=self.api_key, model=self.model, adapter=self.adapter,
+            test_path=self.test_path, retry_feedback=retry_feedback,
+            generation_attempts=self.generation_attempts, root=self.root, guard=self.guard,
+        )
+
+    def take_pending(self) -> tuple[str, str]:
+        assert self.pending is not None
+        content, rationale = self.pending
+        self.pending = None
+        self.generation_attempts.append({
+            "attempt": len(self.generation_attempts) + 1, "profile": "spec", "status": "validated",
+            "sha256": sha256_text(content), "origin": "engine recompile (no model call)",
+        })
+        return content, rationale
+
+    def _generate_spec(self, context: str, retry_feedback: str) -> tuple[str, str]:
+        issue_text = f"{self.issue.title}\n{self.issue.body}"
+        inventory = spec_profile.inventory_text(self.modules)
+        feedback = retry_feedback
+        attempts = self.record.setdefault("attempts", [])
+        last: list[str] = []
+        for attempt in range(1, 4):
+            user = spec_profile.build_user_prompt(
+                issue_number=self.issue.number, title=self.issue.title, body=self.issue.body,
+                test_path=self.test_path, inventory=inventory, context=context, retry_feedback=feedback)
+            entry: dict[str, Any] = {"attempt": len(self.generation_attempts) + 1, "profile": "spec"}
+            try:
+                raw = model_text(api_key=self.api_key, model=self.model, system=spec_profile.SYSTEM_PROMPT,
+                                 user=user, temperature=0.1)
+            except InferenceError:
+                self.generation_attempts.append({**entry, "status": "inference_failed"})
+                raise
+            errors: list[str]
+            try:
+                text = _strip_reasoning(raw)
+                parsed = spec_profile.parse_spec_response(text)
+            except (PatchProofError, spec_profile.SpecFormatError) as error:
+                errors, text, parsed = [str(error)], raw, None
+                print(f"Specification response rejected: {error} | {_raw_response_preview(raw)}", file=sys.stderr)
+            if parsed is not None:
+                validation = spec_profile.validate_spec(parsed, issue_text=issue_text, modules=self.modules,
+                                                        source_literals=self.literals)
+                if validation.unsupported is not None:
+                    self.generation_attempts.append({**entry, "status": "unsupported"})
+                    attempts.append({"attempt": attempt, "status": "unsupported", "reason": validation.unsupported})
+                    raise SpecUnavailable("unsupported", validation.unsupported)
+                errors = validation.errors
+            if errors:
+                last = errors
+                diagnostic = errors[0]
+                self.generation_attempts.append({**entry, "status": "validation_failed", "diagnostic": diagnostic[:400]})
+                attempts.append({"attempt": attempt, "status": "validation_failed", "errors": [e[:400] for e in errors[:8]]})
+                self.guard.note("spec|" + re.sub(r"\d+", "#", diagnostic)[:160])
+                if self.guard.exceeded():
+                    raise SpecUnavailable("invalid", f"The model repeated the same rejected specification {self.guard.count} times "
+                                                     f"({diagnostic[:200]}).")
+                feedback = spec_profile.validation_feedback(errors, text[:3000])
+                print(f"Specification rejected: {diagnostic[:200]}; retrying ({attempt + 1}/3).", file=sys.stderr)
+                continue
+            self.spec = validation.spec
+            self.expected = None
+            self.record["status"] = "specified"
+            self._sync_record()
+            content = self._compile()
+            try:
+                self.adapter.validate_generated_test(content, self.test_path)
+                self.adapter.validate_generated_pins(content, issue_text)
+                self.adapter.validate_generated_imports(content, self.test_path, self.root)
+            except (SyntaxError, ValueError) as error:
+                raise PatchProofError(f"The engine-compiled specification test failed the engine's own gate: {error}") from error
+            self.generation_attempts.append({**entry, "status": "validated", "sha256": sha256_text(content),
+                                             "spec_sha256": self.spec.sha256()})
+            attempts.append({"attempt": attempt, "status": "validated"})
+            return content, self._rationale()
+        raise SpecUnavailable("invalid", "The model could not produce a specification the engine could ground after 3 attempts: "
+                              + "; ".join(e[:200] for e in last[:3]))
+
+    # -- reading a run ---------------------------------------------------------------------------
+    def review(self, *, reproduced: bool, protected: bool, classification: str, output: str,
+               test_content: str) -> Review | None:
+        if self.active != "spec" or self.spec is None or not protected:
+            return None
+        spec_json = json.dumps(self.spec.as_dict(), indent=2, sort_keys=True)
+        if is_static_rejection(classification):
+            if spec_profile.MODULE_RESOLUTION_CODES.search(output) and self.style + 1 < len(spec_profile.IMPORT_STYLES):
+                self.style += 1
+                self.pending = (self._compile(), self._rationale())
+                self.record.setdefault("import_style_changes", []).append(
+                    {"to": spec_profile.IMPORT_STYLES[self.style], "after": classification})
+                self._sync_record()
+                return Review(False, classification, None)
+            return Review(False, classification, spec_profile.static_feedback(spec_json, classification, output))
+        ids = [e.id for e in self.spec.examples]
+        decision = spec_profile.decide(spec_profile.parse_example_results(output, ids), self.spec)
+        states = self.record.setdefault("pre_fix_states", [])
+        states.append({"test_sha256": sha256_text(test_content), "states": decision.states})
+        if decision.action == "accept" and reproduced:
+            if self.expected is not None and sorted(decision.qualifying) != sorted(self.expected):
+                self.failed_rounds += 1
+                self.expected = None
+                return Review(False, "test failed without accepted assertion evidence",
+                              "The examples that reproduced the issue changed between two runs of the same specification "
+                              "(" + ", ".join(decision.qualifying) + " now), so the result is not deterministic. "
+                              "Choose examples whose result does not depend on timing, randomness or state.")
+            self.record["status"] = "accepted"
+            self.record["frozen_test_sha256"] = sha256_text(test_content)
+            self.record["reproducing_examples"] = decision.qualifying
+            return Review(True, decision.classification)
+        if decision.action == "recompile" and self.recompiles < SPEC_MAX_RECOMPILES:
+            self.recompiles += 1
+            dropped = [{"id": ident, "reason": reason} for ident, reason in decision.pruned.items()]
+            self.record.setdefault("dropped_examples", []).extend(dropped)
+            self.spec = self.spec.without(set(decision.pruned))
+            self.expected = list(decision.qualifying)
+            self.pending = (self._compile(), self._rationale())
+            self._sync_record()
+            return Review(False, "specification examples dropped; re-running without them", None, counts=False)
+        self.failed_rounds += 1
+        feedback: str | None = spec_profile.run_feedback(spec_json, decision, output)
+        if (self.requested == "auto" and self.failed_rounds >= SPEC_AUTO_FALLBACK_AFTER):
+            self._fall_back(f"the specification did not reproduce the issue after {self.failed_rounds} rounds "
+                            f"({decision.classification})")
+            feedback = ""
+        final = decision.classification if decision.action == "retry" else "test failed without accepted assertion evidence"
+        return Review(False, final, feedback)
 
 
 def has_expected_test_hash(output: str, expected_hash: str) -> bool:
@@ -947,7 +1319,10 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
                 "to silence the mismatch. Keep stream values as streams until all pipeThrough "
                 "operations are complete; collectBytes returns Uint8Array."
             )
+    if "PATCHPROOF_JS_PARSE=failed" in output:
+        feedback += describe_syntax_errors(content, output)
     if "PATCHPROOF_TYPESCRIPT_PARSE=failed" in output:
+        feedback += describe_syntax_errors(content, output)
         feedback += (
             "\nENGINE DIAGNOSIS: The generated TypeScript source has a syntax error. "
             "Fix the reported parser diagnostics and return a complete valid test. "
@@ -1027,6 +1402,8 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
         return False, False, "protected test hash was missing or changed"
     if "PATCHPROOF_TYPESCRIPT_PARSE=failed" in output:
         return False, True, "generated TypeScript regression failed syntax parsing"
+    if "PATCHPROOF_JS_PARSE=failed" in output:
+        return False, True, "generated JavaScript regression failed syntax parsing"
     if "PATCHPROOF_TYPESCRIPT_CONTRACT=failed" in output:
         return False, True, "generated TypeScript regression failed stream contract"
     if "PATCHPROOF_TYPESCRIPT_LITERAL=failed" in output:
@@ -1470,11 +1847,63 @@ exit "$status"
     ).wait()
 
 
+def render_readiness(proof: dict[str, Any]) -> list[str]:
+    """Report lines for the readiness summary and the outcome bucket (rc.30)."""
+    readiness = proof.get("readiness")
+    outcome = proof.get("outcome") or {}
+    if not readiness and not outcome:
+        return []
+    marks = {"passed": "✅", "failed": "❌", "warning": "⚠️", "skipped": "—"}
+    lines = ["", "## Readiness and outcome", ""]
+    if outcome.get("bucket"):
+        detail = f" — {outcome['detail']}" if outcome.get("detail") and outcome["bucket"] != "verified" else ""
+        lines.append(f"- Outcome: `{outcome['bucket']}`{detail}")
+        if not outcome.get("evaluated_repair") and outcome["bucket"] != "verified":
+            lines.append("- No repair was evaluated, so this run is not evidence about repair quality.")
+    for check in (readiness or {}).get("checks", []):
+        lines.append(f"- {marks.get(check['status'], '•')} {check['check'].replace('_', ' ')}: {check['detail']}")
+    for blocker in (readiness or {}).get("blockers", []):
+        lines.append(f"- ❌ Blocked at `{blocker['stage']}`: {blocker['message']}")
+        if blocker.get("change"):
+            lines.append(f"  - To change: {blocker['change']}")
+    return lines
+
+
+def render_verifier(proof: dict[str, Any]) -> list[str]:
+    """Report lines for the verifier profile and, when it ran, the specification's examples (rc.30)."""
+    verifier = proof.get("verifier") or {}
+    spec = (proof.get("regression_test") or {}).get("spec") or {}
+    if not verifier or (verifier.get("profile_requested") == "freeform" and not spec):
+        return []
+    lines = ["", "## Verifier profile", "",
+             f"- Requested: `{verifier.get('profile_requested')}`; used for the frozen test: `{verifier.get('profile_used')}`."]
+    fallback = verifier.get("fallback")
+    if fallback:
+        lines.append(f"- Fell back from the specification profile to the free-form verifier: {fallback.get('reason', '')}")
+    if spec:
+        lines.append(f"- Specification status: `{spec.get('status', 'unknown')}`"
+                     + (f"; module `{spec['module']}`; import style `{spec.get('import_style')}`" if spec.get("module") else "")
+                     + (f"; {spec['reason']}" if spec.get("reason") else "") + ".")
+        latest = ((spec.get("pre_fix_states") or [{}])[-1]).get("states", {})
+        marks = {"pass": "✅ already correct", "mismatch": "❌ wrong value (the bug)", "error": "⚠️ call failed",
+                 "missing": "⚠️ no result"}
+        for example in spec.get("examples") or []:
+            what = ("throws" if example.get("throws") else f"returns {json.dumps(example.get('returns'))[:80]}")
+            call = f"{example.get('export')}({', '.join(json.dumps(a) for a in example.get('args', []))})"[:120]
+            lines.append(f"  - `{example.get('id')}` {call} {what}: {marks.get(latest.get(example.get('id')), 'not run')} on the unfixed code")
+        for dropped in spec.get("dropped_examples") or []:
+            lines.append(f"  - `{dropped.get('id')}` dropped: {dropped.get('reason')}")
+        lines.append("- Expected values are quoted from the issue and checked against its text; the engine proves they are "
+                     "quoted, not that the issue is right. Passing examples guard stated behavior only, not all unrelated behavior.")
+    return lines
+
+
 def render_report(proof: dict[str, Any]) -> str:
     verified = proof.get("verdict") == "verified"
     blocked = proof.get("verdict") == "blocked"
-    mark = "✅" if verified else ("⚠️" if blocked else "❌")
-    verdict_label = "VERIFIED" if verified else ("BLOCKED" if blocked else "REJECTED")
+    ready = proof.get("verdict") == "ready"
+    mark = "✅" if verified or ready else ("⚠️" if blocked else "❌")
+    verdict_label = "VERIFIED" if verified else ("READY" if ready else ("BLOCKED" if blocked else "REJECTED"))
     regression = proof.get("regression_test") or {}
     candidates = proof.get("candidates") or []
     sandbox_branches = sum(1 for candidate in candidates if "image" in candidate)
@@ -1506,6 +1935,8 @@ def render_report(proof: dict[str, Any]) -> str:
         f"- Regression test: `{regression.get('path', '')}`",
         f"- Source scope: `{(proof.get('scope') or {}).get('status', 'not recorded')}`; protected symbols constrain edits, not all possible behavioral effects.",
     ]
+    lines.extend(render_readiness(proof))
+    lines.extend(render_verifier(proof))
     generations = regression.get("generation_attempts") or []
     if proof.get("agent_mode") == "bounded":
         budget = proof.get("budget", {})
@@ -1528,13 +1959,14 @@ def render_report(proof: dict[str, Any]) -> str:
     attempts = regression.get("attempts") or []
     if attempts:
         lines.extend(["", "## Regression reproduction attempts", "",
-                      "| Attempt | Exit code | Test hash protected | Classification |",
-                      "| ---: | ---: | --- | --- |"])
+                      "| Attempt | Exit code | Test hash protected | Counted | Classification |",
+                      "| ---: | ---: | --- | --- | --- |"])
         for attempt in attempts:
             classification = str(attempt.get("classification", "")).replace("|", "\\|")
+            counted = "no (static gate)" if attempt.get("static_rejection") else "yes"
             lines.append(
                 f"| {attempt.get('attempt', '')} | {attempt.get('exit_code', '')} | "
-                f"{'✅' if attempt.get('protected') else '❌'} | {classification} |"
+                f"{'✅' if attempt.get('protected') else '❌'} | {counted} | {classification} |"
             )
         lines.append("")
         lines.append("Diagnostic test contents and bounded execution output are saved in the `proof.json` Actions artifact under `regression_test.attempts`.")
@@ -1610,7 +2042,7 @@ def write_evidence(root: Path, proof: dict[str, Any]) -> None:
 
 
 ENGINE_MODULES = ("proof.py", "runtimes.py", "scope_policy.py", "agent_budget.py", "context_tools.py",
-                  "agent_loop.py", "requirements-patchproof.txt")
+                  "agent_loop.py", "outcomes.py", "spec_profile.py", "requirements-patchproof.txt")
 PROJECT_INPUTS = ("package.json", "tsconfig.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml",
                   "yarn.lock", ".yarnrc.yml", "bun.lock", "bun.lockb", "requirements.txt", "pyproject.toml",
                   "pom.xml", "build.gradle", "build.gradle.kts", "go.mod", "go.sum", "Cargo.toml", "Cargo.lock")
@@ -1825,6 +2257,7 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
             location = root / folder
             if location.is_symlink() or not location.is_dir() or not location.resolve().is_relative_to(root.resolve()):
                 raise PatchProofError(f"scope.new_file_dirs entry {folder!r} is not an existing folder in the project.")
+    editable_inventory = set(allowed_paths)  # before scope narrows what a repair may edit
     if "allowed_paths" in scope:
         missing = set(scope["allowed_paths"]) - allowed_paths
         if missing:
@@ -1924,6 +2357,14 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
             if not source_check_enabled:
                 raise PatchProofError(f"Required baseline TypeScript check is {status}.")
 
+        if os.environ.get("PATCHPROOF_READINESS_ONLY", "").strip().lower() in {"1", "true", "yes"}:
+            # rc.30: report readiness without a model request. Everything above (runtime, install,
+            # baseline, whole-project type check) is exactly what a full run needs first.
+            proof["stage"] = "readiness"
+            proof["verdict"] = "ready"
+            proof["readiness_only"] = True
+            return proof
+
         # Do not spend an inference request until the selected image, dependency
         # bootstrap, runtime preflight, and existing baseline have all passed.
         # The regression is still generated before any solver call or candidate.
@@ -1937,11 +2378,21 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
         proof["stage"] = "verifier-generation"
         generation_attempts: list[dict[str, Any]] = []
         proof["regression_test"] = {"generation_attempts": generation_attempts}
-        test_content, rationale = generate_regression_with_retry(
-            issue=issue, context=verifier_context, api_key=api_key, model=model,
-            adapter=adapter, test_path=test_path,
-            generation_attempts=generation_attempts, root=root,
+        guard = RepeatGuard()
+        requested_profile = verifier_profile_from_env()
+        spec_modules, spec_literals = (collect_spec_modules(root, editable_inventory)
+                                       if requested_profile != "freeform" else ({}, set()))
+        plan = VerifierPlan(
+            requested=requested_profile, adapter=adapter, issue=issue, root=root, test_path=test_path,
+            modules=spec_modules, literals=spec_literals, api_key=api_key, model=model,
+            generation_attempts=generation_attempts, guard=guard,
         )
+        proof["verifier"] = plan.summary
+        if requested_profile != "freeform":
+            # The same dict the plan keeps updating, so a run that stops inside the specification
+            # step (needs_specification) still carries its status and reason.
+            proof["regression_test"]["spec"] = plan.record
+        test_content, rationale = plan.generate(context=verifier_context, retry_feedback="")
         test_hash = sha256_text(test_content)
         proof["regression_test"] = {
             "path": test_path,
@@ -1954,24 +2405,31 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
             "attempts": [],
             "generation_attempts": generation_attempts,
         }
+        if plan.record:
+            proof["regression_test"]["spec"] = plan.record
 
         reproduction_command = adapter.regression_command(test_path)
         proof["stage"] = "verifier-reproduction"
         retry_feedback = ""
         attempted: dict[str, dict[str, Any]] = {}
-        for reproduction_attempt in range(1, 4):
-            if reproduction_attempt > 1:
+        executed_attempts = static_rejections = verifier_round = 0
+        classification = "no verifier test was executed"
+        while True:
+            verifier_round += 1
+            if plan.pending is not None:
+                # The engine recompiled the same specification (another import style, or without
+                # examples it dropped). No model call, so no investigation or generation either.
+                test_content, rationale = plan.take_pending()
+                test_hash = sha256_text(test_content)
+            elif verifier_round > 1:
                 if verifier_agent is not None:
                     proof["stage"] = "verifier-investigation"
                     verifier_context = verifier_agent.run(feedback=retry_feedback)
                     proof["stage"] = "verifier-reproduction"
-                test_content, rationale = generate_regression_with_retry(
-                    issue=issue, context=verifier_context, api_key=api_key,
-                    model=model, adapter=adapter, test_path=test_path,
-                    retry_feedback=retry_feedback,
-                    generation_attempts=generation_attempts, root=root,
-                )
+                test_content, rationale = plan.generate(context=verifier_context, retry_feedback=retry_feedback)
                 test_hash = sha256_text(test_content)
+                if plan.record:
+                    proof["regression_test"]["spec"] = plan.record
             if test_hash in attempted:
                 prior = attempted[test_hash]
                 classification = prior["classification"]
@@ -1987,6 +2445,19 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                 )
                 print(f"Verifier generation duplicated execution {prior['attempt']}; "
                       "skipping sandbox execution and using remaining retry budget.", file=sys.stderr)
+                # A resubmitted test uses the same allowance as the run it repeats.
+                if prior.get("static_rejection"):
+                    static_rejections += 1
+                else:
+                    executed_attempts += 1
+                guard.note(diagnostic_signature(classification, prior["output"]))
+                if guard.exceeded():
+                    raise PatchProofError(
+                        f"Verifier repeated the same rejected output {guard.count} times in a row "
+                        f"(last result: {classification}); stopping instead of spending more inference."
+                    )
+                if executed_attempts >= MAX_EXECUTED_ATTEMPTS or static_rejections >= MAX_STATIC_REJECTIONS:
+                    raise PatchProofError(_verifier_exhausted_message(executed_attempts, static_rejections, classification))
                 continue
             proof["regression_test"].update({
                 "sha256": test_hash, "rationale": rationale, "content": test_content,
@@ -2010,6 +2481,13 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
             reproduced, protected, classification = classify_reproduction(
                 adapter, reproduction.exit_code, reproduction_output, test_hash
             )
+            review = plan.review(reproduced=reproduced, protected=protected, classification=classification,
+                                 output=reproduction_output, test_content=test_content)
+            counts, feedback_override = True, None
+            if review is not None:
+                reproduced, classification = review.reproduced, review.classification
+                counts, feedback_override = review.counts, review.feedback
+            static = is_static_rejection(classification)
             proof["regression_test"]["attempts"].append(
                 {
                     "attempt": len(proof["regression_test"]["attempts"]) + 1,
@@ -2019,6 +2497,9 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                     "exit_code": reproduction.exit_code,
                     "protected": protected,
                     "classification": classification,
+                    # rc.30: a static rejection never ran an assertion and is not an execution attempt.
+                    "static_rejection": static,
+                    "counts_toward_limit": counts and not static,
                     "image": str(reproduction.uuid or ""),
                     "output": short_output(reproduction),
                 }
@@ -2034,7 +2515,8 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                 "reproduction_classification": classification,
             })
             print(
-                f"Verifier reproduction attempt {reproduction_attempt}: {classification}.",
+                f"Verifier reproduction attempt {verifier_round}: {classification}"
+                + (" (static gate; not counted as an execution attempt)." if static else "."),
                 file=sys.stderr,
             )
             if not protected:
@@ -2068,14 +2550,23 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                 if bounded:
                     ACTIVE_BUDGET.get().on_change()
                 break
-            retry_feedback = reproduction_feedback(
+            retry_feedback = (feedback_override if feedback_override is not None else reproduction_feedback(
                 test_content, classification, reproduction_output
-            )
-        else:
-            raise PatchProofError(
-                "Verifier retry budget exhausted without an accepted pre-fix "
-                f"assertion failure; last result: {classification}."
-            )
+            ))
+            if not counts:
+                continue  # an engine-driven step (recompiling without dropped examples), not a verifier attempt
+            if static:
+                static_rejections += 1
+            else:
+                executed_attempts += 1
+            guard.note(diagnostic_signature(classification, reproduction_output))
+            if guard.exceeded():
+                raise PatchProofError(
+                    f"Verifier repeated the same rejected output {guard.count} times in a row "
+                    f"(last result: {classification}); stopping instead of spending more inference."
+                )
+            if executed_attempts >= MAX_EXECUTED_ATTEMPTS or static_rejections >= MAX_STATIC_REJECTIONS:
+                raise PatchProofError(_verifier_exhausted_message(executed_attempts, static_rejections, classification))
 
         strategies = [
             ("minimal targeted correction", 0.15),
@@ -2329,6 +2820,36 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
     return proof
 
 
+def _error_chain(error: BaseException) -> str:
+    """Exception class names from the raised error down to its root cause, outermost first."""
+    names: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen and len(names) < 6:
+        seen.add(id(current))
+        names.append(type(current).__name__)
+        current = current.__cause__
+    return "<-".join(names)
+
+
+def finalize_proof(proof: dict[str, Any]) -> None:
+    """Add the rc.30 readiness summary and outcome bucket to the proof, never failing the write.
+
+    Both sections are derived from fields the engine already recorded. A legacy run now also
+    carries a stop_reason (earlier releases recorded one only in bounded mode), taken from the
+    bucket so a report can tell a setup problem from a verifier problem from a repair problem.
+    """
+    try:
+        proof["readiness"] = summarize_readiness(proof)
+        proof["outcome"] = classify_outcome(proof)
+        if proof.get("verdict") not in {"verified", "ready"} and not proof.get("stop_reason"):
+            reason = legacy_stop_reason(proof["outcome"])
+            if reason:
+                proof["stop_reason"] = reason
+    except Exception as error:  # noqa: BLE001 - evidence must still be written
+        proof["finalize_error"] = f"{type(error).__name__}: {error}"
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Verify an issue repair in Nebius Sandboxes"
@@ -2337,11 +2858,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--issue-number", type=int, default=0)
     parser.add_argument("--issue-title")
     parser.add_argument("--issue-body")
+    parser.add_argument(
+        "--readiness-only", action="store_true",
+        help="Stop after the baseline checks: report whether the project is ready, with no model request.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.readiness_only:
+        os.environ["PATCHPROOF_READINESS_ONLY"] = "1"
     root = args.repo.resolve()
     issue: Issue | None = None
     proof: dict[str, Any] = {
@@ -2360,15 +2887,12 @@ def main(argv: list[str] | None = None) -> int:
         }
         proof = execute(root, issue, proof)
     except Exception as error:  # noqa: BLE001 - always persist rejection evidence
-        blocked_stages = {
-            "configuration", "runtime-detection", "repository-analysis",
-            "runtime-preflight", "baseline", "baseline-source-check",
-        }
         proof["verdict"] = (
-            "blocked" if proof.get("stage") in blocked_stages or proof.get("stop_reason") in {
+            "blocked" if proof.get("stage") in BLOCKED_STAGES or proof.get("stop_reason") in {
                 "blocked_setup", "needs_specification", "budget_exhausted"} else "rejected"
         )
         proof["error"] = str(error)
+        proof["error_type"] = _error_chain(error)
         if issue:
             proof.setdefault(
                 "issue",
@@ -2377,10 +2901,11 @@ def main(argv: list[str] | None = None) -> int:
         action = "blocked evaluation" if proof["verdict"] == "blocked" else "rejected the repair"
         print(f"PatchProof {action}: {error}", file=sys.stderr)
     finally:
+        finalize_proof(proof)
         write_evidence(root, proof)
 
     print(render_report(proof))
-    return 0 if proof.get("verdict") == "verified" else 1
+    return 0 if proof.get("verdict") in {"verified", "ready"} else 1
 
 
 if __name__ == "__main__":

@@ -54,17 +54,18 @@ class LocalState:
 
 
 def run_engine(base: Path, checkout: Path, project: Path, issue: "proof.Issue", test_source: str,
-               candidate, *, mode: str = "legacy", model_json=None):
+               candidate, *, mode: str = "legacy", model_json=None, env_extra=None, model_text=None):
     """Execute proof.execute offline; returns (result_or_None, record, error_or_None)."""
     initial = {p.relative_to(project).as_posix(): p.read_bytes() for p in project.rglob("*")
                if p.is_file() and "node_modules" not in p.parts}
     reply = f"{proof.TEST_BEGIN}\n{test_source}\n{proof.TEST_END}\n{proof.RATIONALE_BEGIN}\nRegression.\n{proof.RATIONALE_END}"
     sdk = SimpleNamespace(images=SimpleNamespace(use=lambda *a, **k: object()))
     env = {"NEBIUS_API_KEY": "x", "NEBIUS_PROJECT_ID": "x", "NEBIUS_MODEL": "x", "CONTREE_IMAGE": "x",
-           "PATCHPROOF_AGENT_MODE": mode}
+           "PATCHPROOF_AGENT_MODE": mode, **(env_extra or {})}
     patches = [patch.dict(os.environ, env), patch.object(proof, "create_sandbox_client", return_value=sdk),
                patch.object(proof, "sandbox_workspace", side_effect=lambda *a, **k: LocalState(base, initial)),
-               patch.object(proof, "model_text", return_value=reply)]
+               (patch.object(proof, "model_text", side_effect=model_text) if model_text is not None
+                else patch.object(proof, "model_text", return_value=reply))]
     if mode == "bounded":
         patches.append(patch.object(proof, "model_json", side_effect=model_json))
     else:

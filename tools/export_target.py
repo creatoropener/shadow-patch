@@ -8,6 +8,7 @@ import zipfile
 
 FILES = (
     "proof.py", "runtimes.py", "scope_policy.py", "agent_budget.py", "context_tools.py", "agent_loop.py",
+    "outcomes.py", "spec_profile.py",
     "tools/pr_files.py", "requirements-patchproof.txt",
     "patchproof_runtime/static_web_check.mjs",
     "patchproof_runtime/web_streams.mjs",
@@ -54,7 +55,7 @@ def main() -> None:
             "CONTREE_IMAGE (or runtime-specific image secret) in GitHub Actions.\n"
             "For node-typescript, pin tsx and TypeScript in the target baseline and configure "
             "CONTREE_IMAGE_NODE_TYPESCRIPT with a v0.7 web-image UUID.\n"
-            "Copy every file, including agent_budget.py, context_tools.py, agent_loop.py, scope_policy.py, patchproof_runtime/known_failures.py and tools/pr_files.py.\n"
+            "Copy every file, including agent_budget.py, context_tools.py, agent_loop.py, outcomes.py, spec_profile.py, scope_policy.py, patchproof_runtime/known_failures.py and tools/pr_files.py.\n"
             "rc.27 reads the install tool from the lockfile or packageManager field (npm, pnpm, yarn), and patchproof.json may now also set root, known_failures and scope.new_file_dirs; see docs/GENERALIZATION.md.\n"
             "rc.26 adds an opt-in Node/TypeScript loop: set the repository variable PATCHPROOF_AGENT_MODE=bounded. "
             "The default legacy mode preserves the rc.25 flow. Read docs/BATCH2.md in the engine repository for budgets and limits.\n"
