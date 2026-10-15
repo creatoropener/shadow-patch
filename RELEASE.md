@@ -1,4 +1,39 @@
-# PatchProof v0.6.0-rc.32 — an unclosed specification block is closed, and the JSON error names the real cause
+# PatchProof v0.6.0-rc.33 — the model is told which examples were refused, and a table row is quoted as a row
+
+rc.33 is rc.32 plus the fix for the third live specification run (file-sharing-app-1, `verifier=spec`). The rc.32 bracket repair worked on the live blocks. The run then failed because the model quoted every table example as the header line plus its row; only e1 sat directly under the header, so six of seven examples were refused as not being one passage of the issue. The one survivor already passes on the unfixed code, so nothing reproduced. The retry prompt never listed the refusals, so the model repeated itself until the budget ran out.
+
+What changes: retry prompts list the refused examples and why; the refusal for non-adjacent lines says to quote just the row and names the issue line that holds the example's values; the prompt says the same up front; quotes and commas alone after the END marker are dropped. The grounding rule is unchanged.
+
+## Install the engine update
+
+1. Extract **shadow-patch-rc33-changed-files.zip** into the root of your **shadow-patch** repository on top of rc.32, preserving paths (none deleted; `RC33-CHANGES.json` lists the files with hashes).
+2. Commit on a review branch and run **Engine Checks**.
+3. Publish **v0.6.0-rc.33** from the reviewed commit.
+
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.33.zip** into the target root.
+
+## Next live run
+
+Repeat file-sharing-app-1 on rc.33:
+
+| Input | Value |
+| --- | --- |
+| engines | v0.6.0-rc.33 |
+| trials | 1 |
+| split | dev |
+| cases | file-sharing-app-1 |
+| agent_mode | legacy |
+| verifier | spec |
+
+Send back `proof.json` and `engine-stderr.txt`. Read `regression_test.spec`: `attempts[]` (`refused_examples`, `json_repaired`), `rejected_examples`, `pre_fix_states`, `examples`. If it verifies, run qrcrafts-1 and file-sharing-app-1 together before any held-out case.
+
+## Validation
+
+See docs/evidence/rc33-local/. No live run covers rc.33.
+
+---
+
+# PatchProof v0.6.0-rc.32 notes (superseded by rc.33 above; its install and run steps no longer apply)
 
 rc.32 is rc.31 plus the fix for the second live specification run. On rc.31, qrcrafts-1 under `verifier=spec` succeeded. file-sharing-app-1 stopped `spec_invalid`: the model's three examples were fine, but it ended the block with `], "` and the END marker, never closing the object, and sent the identical text three times because the error message talked about backslashes. The engine now closes brackets left open at the very end of a block (never adding or changing a value; every example is still grounded in the issue) and records `json_repaired`. Error messages say "not closed" when that is the problem. The manifest error for a malformed `repo` shows the value.
 

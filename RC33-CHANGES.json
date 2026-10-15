@@ -1,0 +1,67 @@
+{
+  "release": "0.6.0-rc.33",
+  "baseline_kind": "rc.32 tree as delivered 2026-10-15",
+  "deleted_files": [],
+  "files": [
+    {
+      "path": ".github/workflows/benchmark.yml",
+      "sha256": "5aa31ad626817e4ba069b2a0d4ebc744432f760a9639aef42f56b42c09e236c6",
+      "baseline_sha256": "84f37fdf79a9fe63a88f4c318dda3c87cba1880d4c75ab1a2fa8862775708a63"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "8ac592e5bc88d74a9736ed8f950839a82534d7f883f77f756b742ad147c23f41",
+      "baseline_sha256": "06eab8e5804fba788ce7d7d2d4a7c7d8d916b7f92a0986fec796885b89f632ce"
+    },
+    {
+      "path": "README.md",
+      "sha256": "fc63b8daec312ca7c5b5a853246fa164efaa06b05ca343a8d62d906feb654b10",
+      "baseline_sha256": "21d9263a11075e30381517d98be8b0482ce5cff2095a872113112049045cb733"
+    },
+    {
+      "path": "RELEASE.md",
+      "sha256": "a62b80de98dab1354327eb0d5be23e8978ef41dcbe173231198f0de1ba1921c9",
+      "baseline_sha256": "c5ee2a956921a8cc1d9736798d94eb49d3ce335d53af3fbcc5361045ecaf7eab"
+    },
+    {
+      "path": "RELEASE_FILES.sha256",
+      "sha256": "01c33c0ef34f0a8efffad9bedf70fd66a2cabbfecc3b49586f8addf96cee17a2",
+      "baseline_sha256": "ef5bdaaa81ac958c58cffa7a69dfe73e8415ae40b28785f7cf335f43284a2d3c"
+    },
+    {
+      "path": "docs/SPEC_PROFILE.md",
+      "sha256": "b4723524f8ce3357bb22e469f5fb50efb1d83dffc4030002761db57f482fc292",
+      "baseline_sha256": "4a80fde81e20614f357def1d72db3587b34ca1299ac6d01606b464a01d986216"
+    },
+    {
+      "path": "docs/evidence/rc33-local/python-tests.txt",
+      "sha256": "29fde8e5bcf33476ad295d433c166136818e15c1eddc9ac1deb0c328b65c7693",
+      "baseline_sha256": null
+    },
+    {
+      "path": "examples/action-usage/shadow-fix.yml",
+      "sha256": "8d5a3d42ae9502070bc0559c8bbe6ee63fdeb69580e947c84524aef2899b49ca",
+      "baseline_sha256": "e72bcd4ec998ca401a1f970d72011ccda12654bc7a02aac3cb5b7b9eb0aba677"
+    },
+    {
+      "path": "proof.py",
+      "sha256": "24032ed8ed98a40205f0954ca631c33735c95e943db5b1d10e9728b8b427d913",
+      "baseline_sha256": "27cc9cf6ce04f06dc58bfc19284fbed63daa8a74512d0a3d123a1bf670a9f731"
+    },
+    {
+      "path": "spec_profile.py",
+      "sha256": "90cc83293abee365d7119ee4a753e1436adba21dc67286fc0224068e5a10e8d5",
+      "baseline_sha256": "b5d6462c7ac9f6f910ee34892f42912dca0335a1e9dea72e9fd15e1ea75e57b5"
+    },
+    {
+      "path": "tests/test_rc30_spec_pipeline.py",
+      "sha256": "cea98b7e2229b0a42989cf545bb8f992c99778c99b0943caed53bc4cee13d4a5",
+      "baseline_sha256": "2314499b843b213def42ce87c98002cfecaadcda3d832180b67994612701e941"
+    },
+    {
+      "path": "tests/test_rc32_spec_evidence.py",
+      "sha256": "f8e12603c55169490eff38889454763433ac3d27e0021dff694ddff255cc523e",
+      "baseline_sha256": null
+    }
+  ]
+}

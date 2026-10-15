@@ -37,7 +37,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.32"
+APP_VERSION = "0.6.0-rc.33"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1094,8 +1094,8 @@ class VerifierPlan:
             if repairs:
                 # The block was complete except for its closing brackets; the engine closed them and
                 # nothing else. Every value is still grounded below, and the proof says it happened.
-                entry["json_repaired"] = repairs[0]
-                print(f"Specification block was not closed; the engine {repairs[0]}.", file=sys.stderr)
+                entry["json_repaired"] = "; ".join(repairs)
+                print(f"Specification block needed tidying; the engine {entry['json_repaired']}.", file=sys.stderr)
             if parsed is not None:
                 validation = spec_profile.validate_spec(parsed, issue_text=issue_text, modules=self.modules,
                                                         source_literals=self.literals, partial=True)
@@ -1119,6 +1119,7 @@ class VerifierPlan:
             self.spec = validation.spec
             self.expected = None
             self.record["status"] = "specified"
+            self.record.pop("rejected_examples", None)  # only the latest specification's refusals are current
             if validation.rejected:
                 # Examples the issue does not support are left out, never repaired into shape; the
                 # remaining examples passed every check. The proof says what was refused and why.
@@ -1137,7 +1138,8 @@ class VerifierPlan:
             self.generation_attempts.append({**entry, "status": "validated", "sha256": sha256_text(content),
                                              "spec_sha256": self.spec.sha256()})
             attempts.append({"attempt": attempt, "status": "validated",
-                             **({"json_repaired": repairs[0]} if repairs else {})})
+                             **({"json_repaired": "; ".join(repairs)} if repairs else {}),
+                             "refused_examples": len(validation.rejected)})
             return content, self._rationale()
         raise SpecUnavailable("invalid", "The model could not produce a specification the engine could ground after 3 attempts: "
                               + "; ".join(e[:200] for e in last[:3]))
@@ -1156,7 +1158,8 @@ class VerifierPlan:
                     {"to": spec_profile.IMPORT_STYLES[self.style], "after": classification})
                 self._sync_record()
                 return Review(False, classification, None)
-            return Review(False, classification, spec_profile.static_feedback(spec_json, classification, output))
+            return Review(False, classification, spec_profile.static_feedback(
+                spec_json, classification, output, refused=self.record.get("rejected_examples")))
         ids = [e.id for e in self.spec.examples]
         decision = spec_profile.decide(spec_profile.parse_example_results(output, ids), self.spec)
         states = self.record.setdefault("pre_fix_states", [])
@@ -1183,7 +1186,8 @@ class VerifierPlan:
             self._sync_record()
             return Review(False, "specification examples dropped; re-running without them", None, counts=False)
         self.failed_rounds += 1
-        feedback: str | None = spec_profile.run_feedback(spec_json, decision, output)
+        feedback: str | None = spec_profile.run_feedback(spec_json, decision, output,
+                                                         refused=self.record.get("rejected_examples"))
         if (self.requested == "auto" and self.failed_rounds >= SPEC_AUTO_FALLBACK_AFTER):
             self._fall_back(f"the specification did not reproduce the issue after {self.failed_rounds} rounds "
                             f"({decision.classification})")

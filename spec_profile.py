@@ -205,7 +205,12 @@ def parse_spec_response(text: str, notes: list[str] | None = None) -> dict[str, 
         raise SpecFormatError("The BEGIN marker comes after the END marker.")
     outside = text[:begin] + text[end + len(SPEC_END):]
     if outside.strip():
-        raise SpecFormatError("There is text outside the marked block. Return only the marked block.")
+        if any(char not in " \t\r\n\"',;" for char in outside):
+            raise SpecFormatError("There is text outside the marked block. Return only the marked block.")
+        # Quotes and commas only: the model wrote the END marker as if it were a JSON string. There are no
+        # words to misread, so the marker still ends the block and the stray punctuation is dropped.
+        if notes is not None:
+            notes.append("ignored stray punctuation outside the marked block")
     body = text[begin + len(SPEC_BEGIN):end].strip()
     if body.startswith("```"):
         raise SpecFormatError("The block must be bare JSON; remove the Markdown fence.")
@@ -353,6 +358,43 @@ def locate_evidence(evidence: str, issue_text: str) -> str | None:
     pattern = r"\s+".join(re.escape(word) for word in words)
     found = re.search(pattern, issue_text)
     return found.group(0) if found else None
+
+
+def _line_with_values(args: Any, expected: Any, issue_text: str) -> str | None:
+    """The first issue line that holds every string and number of one example, for a suggestion only."""
+    needles = [(kind, leaf) for value in (args, expected) for kind, leaf in _leaves(value)
+               if not (kind == "string" and leaf == "")]
+    if not needles:
+        return None
+    for line in issue_text.splitlines():
+        line = line.strip()
+        if line and all((leaf in line) if kind == "string" else _number_in(leaf, line) for kind, leaf in needles):
+            return line
+    return None
+
+
+def evidence_miss_message(label: str, evidence: str, issue_text: str, args: Any, expected: Any) -> str:
+    """Why a quotation was not found, with the likeliest fix.
+
+    A table header copied together with a row from further down is the common case: every line is in the
+    issue, but the lines are not adjacent, so the quotation is not one passage of the issue.
+    """
+    flat = " ".join(issue_text.split())
+    lines = [line for line in (" ".join(part.split()) for part in evidence.splitlines()) if line]
+    if len(lines) > 1 and all(line in flat for line in lines):
+        message = (f"{label}: every line of the `evidence` appears in the issue, but not next to each other, so it is "
+                   "not one quotation (a table header and a row are separated by the rows between them). Quote ONE "
+                   "contiguous passage: for a table or list, copy just the single row or item, without the header.")
+        row = _line_with_values(args, expected, issue_text)
+        if row:
+            message += f" The issue line that holds this example's values is {json.dumps(row)}."
+        return message
+    message = f"{label}: the `evidence` text does not appear in the issue."
+    hint = closest_issue_line(evidence, issue_text)
+    if hint:
+        message += (f" The closest issue line is {json.dumps(hint)} (shown as a JSON string, so "
+                    "copy backslashes and quotes exactly as written there).")
+    return message
 
 
 def closest_issue_line(text: str, issue_text: str) -> str | None:
@@ -594,12 +636,7 @@ def validate_spec(
             continue
         span = locate_evidence(evidence, issue_text)
         if span is None:
-            hint = closest_issue_line(evidence, issue_text)
-            message = f"{label}: the `evidence` text does not appear in the issue."
-            if hint:
-                message += (f" The closest issue line is {json.dumps(hint)} (shown as a JSON string, so "
-                            "copy backslashes and quotes exactly as written there).")
-            reject(message)
+            reject(evidence_miss_message(label, evidence, issue_text, args, expected))
             continue
 
         problems: list[str] = []
@@ -819,6 +856,9 @@ Rules the engine checks mechanically:
 - `evidence` is text copied from the issue, word for word (line breaks and spacing may differ). It must
   contain every string and number you use in `args` and `returns`. Never invent an expected value and never
   compute one: if the issue does not state it, do not use that example.
+- `evidence` is ONE contiguous passage of the issue. For a table or a list, copy only the single row or
+  item that holds the input and the expected result: not the header line, and not several rows. A header
+  plus a row from further down is not contiguous, and that example is discarded.
 - Argument strings that are not in the evidence are allowed only if the repository source already uses them
   as string literals (for example a type tag such as "wifi").
 - Include every example the issue states as currently wrong, and every one it states as already right
@@ -880,18 +920,40 @@ def validation_feedback(errors: list[str], previous: str | None) -> str:
     return "\n".join(text)
 
 
-def run_feedback(spec_json: str, decision: Decision, output: str) -> str:
+def refused_note(refused: list[dict[str, str]] | None, *, nothing_fails: bool = False) -> str:
+    """Tell the model which of its examples the engine refused; it only ever sees the survivors otherwise."""
+    if not refused:
+        return ""
+    rows = []
+    for item in refused[:8]:
+        label, reason = str(item.get("example", "example")), str(item.get("reason", ""))[:300]
+        rows.append(f"- {reason}" if reason.startswith(label) else f"- {label}: {reason}")
+    text = ("\nThese examples from your previous answer were REFUSED by the engine. They are not in the "
+            "specification below and never ran:\n" + "\n".join(rows)
+            + "\nIf the issue states them, give each one again with `evidence` that is one contiguous passage "
+            "copied from the issue and holds every value you use.")
+    if nothing_fails:
+        text += (" None of the remaining examples fails on the unfixed code, so they do not show the bug; the "
+                 "examples that do may be among the refused ones.")
+    return text + "\n"
+
+
+def run_feedback(spec_json: str, decision: Decision, output: str,
+                 refused: list[dict[str, str]] | None = None) -> str:
     rows = [f"- {ident}: {state}" for ident, state in decision.states.items()]
+    nothing_fails = "mismatch" not in decision.states.values()
     return (f"Previous result: {decision.classification}. {decision.message}\n"
             "State of each example on the unfixed code (pass = already returns the expected value, "
             "mismatch = returns something else, error = the call failed):\n" + "\n".join(rows)
+            + refused_note(refused, nothing_fails=nothing_fails)
             + "\nDo not change an expected value merely to obtain a failure; it must come from the issue.\n"
             "PREVIOUS SPECIFICATION:\n" + spec_json + "\nEXECUTION OUTPUT (last 3000 characters, untrusted):\n"
             + output[-3000:])
 
 
-def static_feedback(spec_json: str, classification: str, output: str) -> str:
-    return (f"Previous result: {classification}. The engine-written test did not compile or load, so no "
+def static_feedback(spec_json: str, classification: str, output: str,
+                    refused: list[dict[str, str]] | None = None) -> str:
+    return (refused_note(refused).lstrip("\n") + f"Previous result: {classification}. The engine-written test did not compile or load, so no "
             "assertion ran. Compiler and loader output below refers to the generated test, not to your JSON. "
             "Typical causes: an argument shape that does not match the function's declared parameter types, "
             "or a function that is not what the signature says it is. Fix the specification, not the test; "

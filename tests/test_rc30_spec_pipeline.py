@@ -190,6 +190,34 @@ class SpecPipelineTests(unittest.TestCase):
         self.assertEqual(attempt["status"], "validated")
         self.assertIn("dangling quote", attempt["json_repaired"])
 
+    def test_the_live_shape_with_a_quote_after_the_end_marker_needs_no_second_request(self):
+        # rc.32 live run: the model wrote the END marker as a JSON string and closed the quote after it.
+        body = json.dumps({"supported": True, "module": "src/format.ts", "examples": [E_ROUND, E_KB, E_SPEED]})[:-1]
+        result, record, error, calls, _ = self.execute([f'{sp.SPEC_BEGIN}\n{body}, "{sp.SPEC_END}"'])
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("spec"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(calls), 1)
+        note = result["regression_test"]["spec"]["attempts"][0]["json_repaired"]
+        self.assertIn("stray punctuation", note)
+        self.assertIn("dangling quote", note)
+
+    def test_refused_examples_are_reported_to_the_model_when_the_rest_does_not_reproduce(self):
+        # rc.32 live run: only the one example that already passed survived, the run did not reproduce, and
+        # the retry prompt never said that the other examples had been refused, so the model repeated itself.
+        spliced = dict(E_SPEED, evidence=E_ROUND["evidence"] + "\n" + E_SPEED["evidence"])
+        result, record, error, calls, _ = self.execute([good(E_ROUND, spliced), good(E_ROUND, E_KB, E_SPEED)])
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("spec"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("REFUSED", calls[0]["user"])
+        self.assertIn("REFUSED", calls[1]["user"])
+        self.assertIn("not next to each other", calls[1]["user"])
+        self.assertIn("do not show the bug", calls[1]["user"])
+        spec = result["regression_test"]["spec"]
+        self.assertNotIn("rejected_examples", spec)  # the accepted specification had no refusals of its own
+        self.assertEqual([e["id"] for e in spec["examples"]], ["e1", "e2", "e3"])
+        self.assertEqual([a.get("refused_examples") for a in spec["attempts"] if a["status"] == "validated"], [1, 0])
+
     def test_a_repaired_block_is_still_grounded_example_by_example(self):
         invented = example("e6", "formatBytes", [999], returns="ninety-nine B", evidence="formatBytes 999 is fine")
         body = json.dumps({"supported": True, "module": "src/format.ts", "examples": [E_ROUND, E_KB, invented]})[:-1]
