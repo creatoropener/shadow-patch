@@ -82,7 +82,7 @@
     {
       "id": "heldout-3",
       "split": "heldout",
-      "repo": "https://github.com/creatoropener/PlanMorph",
+      "repo": "creatoropener/PlanMorph",
       "base_commit": "5a912017d2c410b26e075fdce813034379698fd1",
       "issue": {
         "number": 1,
