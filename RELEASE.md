@@ -1,4 +1,38 @@
-# PatchProof v0.6.0-rc.31 — one invented example no longer sinks a specification
+# PatchProof v0.6.0-rc.32 — an unclosed specification block is closed, and the JSON error names the real cause
+
+rc.32 is rc.31 plus the fix for the second live specification run. On rc.31, qrcrafts-1 under `verifier=spec` succeeded. file-sharing-app-1 stopped `spec_invalid`: the model's three examples were fine, but it ended the block with `], "` and the END marker, never closing the object, and sent the identical text three times because the error message talked about backslashes. The engine now closes brackets left open at the very end of a block (never adding or changing a value; every example is still grounded in the issue) and records `json_repaired`. Error messages say "not closed" when that is the problem. The manifest error for a malformed `repo` shows the value.
+
+## Install the engine update
+
+1. Extract **shadow-patch-rc32-changed-files.zip** into the root of your **shadow-patch** repository on top of rc.31, preserving paths (none deleted; `RC32-CHANGES.json` lists the files with hashes).
+2. **Check `bench/manifest.json` before committing.** Engine Checks failed on your `heldout-3` edit because its `repo` is not in `owner/name` form (for example `owner/name`, not a URL or a half-typed value). The zip does not touch the manifest. Either set `heldout-3` completely or put back `"repo": "TODO/TODO"` and `"base_commit": "TODO"`.
+3. Commit on a review branch and run **Engine Checks**.
+4. Publish **v0.6.0-rc.32** from the reviewed commit.
+
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.32.zip** into the target root.
+
+## Next live run
+
+Repeat file-sharing-app-1 on rc.32:
+
+| Input | Value |
+| --- | --- |
+| engines | v0.6.0-rc.32 |
+| trials | 1 |
+| split | dev |
+| cases | file-sharing-app-1 |
+| agent_mode | legacy |
+| verifier | spec |
+
+Send back `proof.json` and `engine-stderr.txt`. Read `regression_test.spec`: `attempts[].json_repaired`, `status`, `rejected_examples`, `pre_fix_states`. Run the held-out cases only after `spec` has worked on the dev cases.
+
+## Validation
+
+See docs/evidence/rc32-local/. No live run covers rc.32.
+
+---
+
+# PatchProof v0.6.0-rc.31 notes (superseded by rc.32 above; its install and run steps no longer apply)
 
 rc.31 is rc.30 plus the fix for the first live specification run (qrcrafts-1, `verifier=spec`): the model added a third example with values the issue never gives, and that one example made the engine refuse the whole specification, including the two grounded ones. Examples are now judged one by one: an ungrounded example is left out and recorded in `regression_test.spec.rejected_examples`, and the specification stands if at least one example passes every check. The prompt now says to use only examples written in the issue, JSON parse errors show the text around the failure, and the recorded tool versions are no longer shifted by newer tsx's two-line banner. Nothing else changes; rc.30 is described below.
 

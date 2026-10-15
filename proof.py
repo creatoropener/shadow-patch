@@ -37,7 +37,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.31"
+APP_VERSION = "0.6.0-rc.32"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1084,12 +1084,18 @@ class VerifierPlan:
                 self.generation_attempts.append({**entry, "status": "inference_failed"})
                 raise
             errors: list[str]
+            repairs: list[str] = []
             try:
                 text = _strip_reasoning(raw)
-                parsed = spec_profile.parse_spec_response(text)
+                parsed = spec_profile.parse_spec_response(text, repairs)
             except (PatchProofError, spec_profile.SpecFormatError) as error:
                 errors, text, parsed = [str(error)], raw, None
                 print(f"Specification response rejected: {error} | {_raw_response_preview(raw)}", file=sys.stderr)
+            if repairs:
+                # The block was complete except for its closing brackets; the engine closed them and
+                # nothing else. Every value is still grounded below, and the proof says it happened.
+                entry["json_repaired"] = repairs[0]
+                print(f"Specification block was not closed; the engine {repairs[0]}.", file=sys.stderr)
             if parsed is not None:
                 validation = spec_profile.validate_spec(parsed, issue_text=issue_text, modules=self.modules,
                                                         source_literals=self.literals, partial=True)
@@ -1130,7 +1136,8 @@ class VerifierPlan:
                 raise PatchProofError(f"The engine-compiled specification test failed the engine's own gate: {error}") from error
             self.generation_attempts.append({**entry, "status": "validated", "sha256": sha256_text(content),
                                              "spec_sha256": self.spec.sha256()})
-            attempts.append({"attempt": attempt, "status": "validated"})
+            attempts.append({"attempt": attempt, "status": "validated",
+                             **({"json_repaired": repairs[0]} if repairs else {})})
             return content, self._rationale()
         raise SpecUnavailable("invalid", "The model could not produce a specification the engine could ground after 3 attempts: "
                               + "; ".join(e[:200] for e in last[:3]))

@@ -76,6 +76,39 @@ class ParseTests(unittest.TestCase):
             with self.subTest(name), self.assertRaises(sp.SpecFormatError):
                 sp.parse_spec_response(text)
 
+    def test_an_unclosed_object_is_closed_and_the_repair_is_reported(self):
+        # The live file-sharing-app-1 shape: examples closed, then a stray quote before the END marker.
+        notes = []
+        value = sp.parse_spec_response(self.wrap('{"supported": true, "examples": [{"id": "e1"}], "'), notes)
+        self.assertEqual(value, {"supported": True, "examples": [{"id": "e1"}]})
+        self.assertEqual(len(notes), 1)
+        self.assertIn("dangling quote", notes[0])
+        self.assertIn("closed 1 open bracket", notes[0])
+
+    def test_a_missing_close_bracket_alone_is_closed_without_changing_values(self):
+        notes = []
+        value = sp.parse_spec_response(self.wrap('{"examples": [{"id": "e1", "returns": "1.5 KB"}],'), notes)
+        self.assertEqual(value["examples"][0]["returns"], "1.5 KB")
+        self.assertIn("trailing comma", notes[0])
+
+    def test_a_valid_block_is_never_reported_as_repaired(self):
+        notes = []
+        sp.parse_spec_response(self.wrap('{"supported": false, "reason": "x"}'), notes)
+        self.assertEqual(notes, [])
+
+    def test_a_value_cut_off_in_the_middle_is_not_repaired(self):
+        for body in ('{"examples": [{"returns": "1.5 K', '{"examples": [{"id": "e1"}, {"id":', '{"a": 1}}', '{"a": [1}]'):
+            with self.subTest(body), self.assertRaises(sp.SpecFormatError):
+                sp.parse_spec_response(self.wrap(body), [])
+
+    def test_an_unclosed_block_is_explained_as_unclosed_not_as_a_backslash_problem(self):
+        with self.assertRaises(sp.SpecFormatError) as caught:
+            sp.parse_spec_response(self.wrap('{"returns": "abc'))
+        message = str(caught.exception)
+        self.assertIn("not closed", message)
+        self.assertNotIn("two backslashes", message)
+        self.assertNotIn("at at", message)
+
     def test_bad_backslash_escape_gets_the_json_hint(self):
         with self.assertRaisesRegex(sp.SpecFormatError, "two backslashes"):
             sp.parse_spec_response(self.wrap('{"returns": "a' + BS + ';b"}'))

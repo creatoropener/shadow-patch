@@ -177,6 +177,28 @@ class SpecPipelineTests(unittest.TestCase):
         self.assertIn("evidence", spec["rejected_examples"][0]["reason"])
         self.assertNotIn("ninety-nine", result["regression_test"]["content"])
 
+    def test_an_unclosed_specification_is_repaired_without_another_model_call(self):
+        # The live file-sharing-app-1 failure: the model ended `}], "` and then the END marker, and sent
+        # the same text three times. The values are all grounded, so only the closing brackets are added.
+        body = json.dumps({"supported": True, "module": "src/format.ts", "examples": [E_ROUND, E_KB, E_SPEED]})[:-1]
+        reply = f"{sp.SPEC_BEGIN}\n{body}, \"{sp.SPEC_END}"
+        result, record, error, calls, _ = self.execute([reply])
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("spec"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(calls), 1)
+        attempt = result["regression_test"]["spec"]["attempts"][0]
+        self.assertEqual(attempt["status"], "validated")
+        self.assertIn("dangling quote", attempt["json_repaired"])
+
+    def test_a_repaired_block_is_still_grounded_example_by_example(self):
+        invented = example("e6", "formatBytes", [999], returns="ninety-nine B", evidence="formatBytes 999 is fine")
+        body = json.dumps({"supported": True, "module": "src/format.ts", "examples": [E_ROUND, E_KB, invented]})[:-1]
+        result, record, error, calls, _ = self.execute([f"{sp.SPEC_BEGIN}\n{body}, \"{sp.SPEC_END}"])
+        self.assertIsNone(error)
+        spec = result["regression_test"]["spec"]
+        self.assertEqual([r["example"] for r in spec["rejected_examples"]], ["example e6"])
+        self.assertNotIn("ninety-nine", result["regression_test"]["content"])
+
     def test_a_json_backslash_mistake_comes_back_with_the_escaping_rule(self):
         bad = f'{sp.SPEC_BEGIN}\n{{"supported": true, "module": "src/format.ts", "examples": [{{"returns": "a{BS};b"}}]}}\n{sp.SPEC_END}'
         result, record, error, calls, _ = self.execute([bad, good(E_ROUND, E_KB)])

@@ -133,8 +133,67 @@ class Validation:
 # Transport
 # ---------------------------------------------------------------------------------------------
 
-def parse_spec_response(text: str) -> dict[str, Any]:
-    """The one JSON object between the spec markers, strict about everything around it."""
+def _json_hint(body: str, error: json.JSONDecodeError) -> str:
+    """The most likely fix, chosen from what is actually wrong rather than one fixed sentence."""
+    tail = body.rstrip()
+    if error.msg.startswith(("Invalid \\escape", "Invalid control", "Invalid \\u")):
+        return ("In a JSON string a backslash is written as two backslashes and a double quote as \\\"; "
+                "a lone backslash before any other character is invalid.")
+    if error.msg.startswith("Unterminated") or error.pos >= len(tail) or tail.endswith(('"', ",")):
+        return ("The block looks unfinished or not closed. Write the whole specification as ONE object: "
+                'finish the "examples" list with ] and then close the object with }, and put nothing '
+                "(no extra quote or comma) between that } and the END marker.")
+    return "Check commas, quotes and brackets; the block must be one JSON object."
+
+
+def _close_structure(body: str) -> tuple[str, str] | None:
+    """Close brackets a model left open at the very end of an otherwise complete block.
+
+    Only two things are ever touched, both at the end of the text: one dangling quote that opens a
+    string with nothing in it, and a trailing comma; then the missing ``]``/``}`` are appended. No
+    value is added or changed, and the result is parsed and grounded exactly like any other block, so a
+    repaired block cannot say more than the model wrote. Returns (text, what_was_done) or None.
+    """
+    stack: list[str] = []
+    in_string, escaped, start = False, False, -1
+    for index, char in enumerate(body):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string, start = True, index
+        elif char in "{[":
+            stack.append("}" if char == "{" else "]")
+        elif char in "}]":
+            if not stack or stack.pop() != char:
+                return None
+    done: list[str] = []
+    text = body
+    if in_string:
+        if body[start + 1:].strip():
+            return None  # a value was cut off in the middle; there is nothing safe to close
+        text = body[:start]
+        done.append("removed a dangling quote")
+    text = text.rstrip()
+    if text.endswith(","):
+        text = text[:-1].rstrip()
+        done.append("removed a trailing comma")
+    if not stack or len(stack) > 4:
+        return None
+    done.append(f"closed {len(stack)} open bracket(s)")
+    return text + "".join(reversed(stack)), ", ".join(done)
+
+
+def parse_spec_response(text: str, notes: list[str] | None = None) -> dict[str, Any]:
+    """The one JSON object between the spec markers, strict about everything around it.
+
+    ``notes`` receives a line when the block needed its closing brackets added (see _close_structure).
+    """
     for marker in (SPEC_BEGIN, SPEC_END):
         count = text.count(marker)
         if count != 1:
@@ -165,12 +224,21 @@ def parse_spec_response(text: str) -> dict[str, Any]:
     try:
         value = json.loads(body, object_pairs_hook=unique, parse_constant=constant)
     except json.JSONDecodeError as error:
-        near = body[max(0, error.pos - 70):error.pos + 30]
-        raise SpecFormatError(
-            f"The block is not valid JSON ({error.msg} at line {error.lineno}, column {error.colno}; "
-            f"near {json.dumps(near)}). "
-            "In a JSON string a backslash is written as two backslashes and a double quote as \\\"; "
-            "a lone backslash before any other character is invalid.") from error
+        closed = _close_structure(body)
+        value = None
+        if closed is not None:
+            try:
+                value = json.loads(closed[0], object_pairs_hook=unique, parse_constant=constant)
+            except (json.JSONDecodeError, SpecFormatError):
+                value = None
+            if value is not None and notes is not None:
+                notes.append(closed[1])
+        if value is None:
+            near = body[max(0, error.pos - 70):error.pos + 30]
+            raise SpecFormatError(
+                f"The block is not valid JSON ({error.msg}{'' if error.msg.endswith(' at') else ','} "
+                f"line {error.lineno} column {error.colno}; "
+                f"near {json.dumps(near)}). " + _json_hint(body, error)) from error
     if not isinstance(value, dict):
         raise SpecFormatError("The block must be one JSON object.")
     return value

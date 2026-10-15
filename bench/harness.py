@@ -142,7 +142,7 @@ def case_problems(case: Any, root: Path = ROOT, *, ready: bool) -> list[str]:
     if case.get("split") not in SPLITS:
         bad(f"split must be one of {', '.join(SPLITS)}")
     if not isinstance(case.get("repo"), str) or not REPO_NAME.match(case["repo"]):
-        bad("repo must look like owner/name")
+        bad(f"repo must look like owner/name, not {case.get('repo')!r}")
     base = case.get("base_commit")
     if not isinstance(base, str):
         bad("base_commit is missing")
