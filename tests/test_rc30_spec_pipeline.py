@@ -83,7 +83,7 @@ class SpecPipelineTests(unittest.TestCase):
         (checkout / "node_modules").symlink_to(pipeline.DEPS.resolve(), target_is_directory=True)
         return base, checkout
 
-    def execute(self, replies, *, profile="spec", fixes=True):
+    def execute(self, replies, *, profile="spec", fixes=True, issue=None):
         base, checkout = self.project()
         queue = list(replies)
         calls = []
@@ -101,7 +101,7 @@ class SpecPipelineTests(unittest.TestCase):
             return [{"path": "src/format.ts", "content": FIXED}], "one decimal"
 
         env = {} if profile is None else {"PATCHPROOF_VERIFIER": profile}
-        result, record, error = pipeline.run_engine(base, checkout, checkout, ISSUE, "unused", candidate,
+        result, record, error = pipeline.run_engine(base, checkout, checkout, issue or ISSUE, "unused", candidate,
                                                     model_text=model_text, env_extra=env)
         return result, record, error, calls, repaired
 
@@ -202,21 +202,42 @@ class SpecPipelineTests(unittest.TestCase):
         self.assertIn("dangling quote", note)
 
     def test_refused_examples_are_reported_to_the_model_when_the_rest_does_not_reproduce(self):
-        # rc.32 live run: only the one example that already passed survived, the run did not reproduce, and
+        # rc.32/rc.33 live runs: only the one example that already passed survived, the run did not reproduce, and
         # the retry prompt never said that the other examples had been refused, so the model repeated itself.
-        spliced = dict(E_SPEED, evidence=E_ROUND["evidence"] + "\n" + E_SPEED["evidence"])
-        result, record, error, calls, _ = self.execute([good(E_ROUND, spliced), good(E_ROUND, E_KB, E_SPEED)])
+        unsupported = dict(E_SPEED, evidence="formatSpeed 1536 is shown in kilobytes per second")
+        result, record, error, calls, _ = self.execute([good(E_ROUND, unsupported), good(E_ROUND, E_KB, E_SPEED)])
         self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("spec"), default=str)[:2000])
         self.assertEqual(result["verdict"], "verified")
         self.assertEqual(len(calls), 2)
         self.assertNotIn("REFUSED", calls[0]["user"])
         self.assertIn("REFUSED", calls[1]["user"])
-        self.assertIn("not next to each other", calls[1]["user"])
+        self.assertIn("does not appear in the issue", calls[1]["user"])
         self.assertIn("do not show the bug", calls[1]["user"])
         spec = result["regression_test"]["spec"]
         self.assertNotIn("rejected_examples", spec)  # the accepted specification had no refusals of its own
         self.assertEqual([e["id"] for e in spec["examples"]], ["e1", "e2", "e3"])
         self.assertEqual([a.get("refused_examples") for a in spec["attempts"] if a["status"] == "validated"], [1, 0])
+
+    def test_a_table_header_quoted_with_the_row_is_accepted_and_the_run_reproduces(self):
+        # Live file-sharing-app-1 shape: column titles plus the example's own row, for every example.
+        issue = proof.Issue(7, "formatBytes prints two decimals", "\n".join([
+            "Function Input Expected output",
+            "formatBytes 512 512 B",
+            "formatBytes 1536 1.5 KB",
+            "formatSpeed 1536 1.5 KB/s",
+        ]))
+        header = "Function Input Expected output\n"
+        e1 = example("e1", "formatBytes", [512], returns="512 B", evidence=header + "formatBytes 512 512 B")
+        e2 = example("e2", "formatBytes", [1536], returns="1.5 KB", evidence=header + "formatBytes 1536 1.5 KB")
+        e3 = example("e3", "formatSpeed", [1536], returns="1.5 KB/s", evidence=header + "formatSpeed 1536 1.5 KB/s")
+        result, record, error, calls, _ = self.execute([good(e1, e2, e3)], issue=issue)
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("spec"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(calls), 1)
+        spec = result["regression_test"]["spec"]
+        self.assertEqual([e["id"] for e in spec["examples"]], ["e1", "e2", "e3"])
+        self.assertEqual(spec["examples"][1]["issue_span"], "formatBytes 1536 1.5 KB")
+        self.assertNotIn("rejected_examples", spec)
 
     def test_a_repaired_block_is_still_grounded_example_by_example(self):
         invented = example("e6", "formatBytes", [999], returns="ninety-nine B", evidence="formatBytes 999 is fine")

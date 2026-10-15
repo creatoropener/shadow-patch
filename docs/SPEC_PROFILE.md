@@ -68,17 +68,22 @@ calls (network, DOM, timing, files, behavior described only in words).
   the proof says which were refused and why. Problems with the specification as a whole (wrong module,
   unknown top-level field, invalid JSON, nothing grounded) still fail it and go back to the model. Before
   rc.31 one invented example sank the whole specification.
-- **Table rows (rc.33).** A quotation is one contiguous passage. A table header plus a row from further down
-  is two passages and is refused; the refusal says the lines are not adjacent, asks for the single row, and
-  names the issue line that holds the example's values when one does. The engine does not rewrite evidence.
+- **Column titles in front of a row (rc.34).** A quotation is one contiguous passage, except that one or two
+  short lines (at most 120 characters) found earlier in the issue may come first, such as a table's column
+  titles. Every string and number of the example must be in the passage after them; a value that is only in
+  the titles is refused. The proof keeps what the model wrote in `evidence` and the grounding passage in
+  `issue_span`. Skipped lines inside the passage, more than two leading lines or lines out of order are still
+  refused, and the refusal names the issue line that holds the example's values when one does. rc.33 refused
+  titles plus a distant row outright and asked the model to quote the row alone; the live model did not.
 - **Refusals are fed back (rc.33).** The retry prompt lists the examples the engine refused and why, so the
   model sees what it lost and not only the survivors. The proof keeps the latest specification's refusals
   in `rejected_examples` and counts them per attempt in `refused_examples`.
 - **Unclosed blocks (rc.32).** A block that is complete except for its end (the examples are closed, then
   a stray quote or comma, then the END marker) has its closing brackets added: one dangling quote, one
   trailing comma and the open `]`/`}` only, never a value. A value cut off in the middle is not repaired.
-  The repaired block is validated like any other, and the attempt records `json_repaired`. Quote, comma
-  and semicolon characters alone outside the markers (rc.33) are dropped the same way; words are not.
+  The repaired block is validated like any other, and the attempt records `json_repaired`. JSON punctuation
+  alone (quotes, commas, semicolons, colons, braces, brackets) outside the markers (rc.33, rc.34) is dropped
+  the same way; letters, digits and fences are not.
 - **Backslashes.** The issue shows one backslash; JSON text spells it with two. A value that decodes to
   the wrong number of backslashes no longer appears in the evidence and is refused with a message
   explaining the JSON rule. Escaping was a recurring free-form failure (the useless-escape gate of
@@ -163,7 +168,7 @@ warning, because that can be the repository rather than the harness.
   example that quotes the buggy output as "expected" passes on the unfixed code and is rejected as not
   reproducing; an example that quotes a value the fix will not produce fails after the fix and costs the
   repair, not the verdict.
-- No live run covers rc.33. Live `spec` runs so far: qrcrafts-1 (verified on rc.31); file-sharing-app-1 stopped on an unclosed JSON block on rc.31 and, after rc.32 closed it, on table quotations that were not one passage (rc.33 tells the model).
+- No live run covers rc.34. Live `spec` runs so far: qrcrafts-1 (verified on rc.31); file-sharing-app-1 stopped on an unclosed JSON block on rc.31 and, after rc.32 closed it, on table quotations the model would not change (rc.33 told it and it did not comply; rc.34 accepts column titles in front of a row). rc.33 verified qrcrafts-1.
 
 ## Not built
 

@@ -205,10 +205,10 @@ def parse_spec_response(text: str, notes: list[str] | None = None) -> dict[str, 
         raise SpecFormatError("The BEGIN marker comes after the END marker.")
     outside = text[:begin] + text[end + len(SPEC_END):]
     if outside.strip():
-        if any(char not in " \t\r\n\"',;" for char in outside):
+        if any(char not in " \t\r\n\"',;:{}[]" for char in outside):
             raise SpecFormatError("There is text outside the marked block. Return only the marked block.")
-        # Quotes and commas only: the model wrote the END marker as if it were a JSON string. There are no
-        # words to misread, so the marker still ends the block and the stray punctuation is dropped.
+        # JSON punctuation only: the model wrote the END marker as if it were a JSON string (`"MARKER"}`). There
+        # are no words to misread, so the marker still ends the block and the stray punctuation is dropped.
         if notes is not None:
             notes.append("ignored stray punctuation outside the marked block")
     body = text[begin + len(SPEC_BEGIN):end].strip()
@@ -360,6 +360,44 @@ def locate_evidence(evidence: str, issue_text: str) -> str | None:
     return found.group(0) if found else None
 
 
+MAX_CONTEXT_LINES = 2
+MAX_CONTEXT_CHARS = 120
+
+
+def locate_evidence_with_context(evidence: str, issue_text: str) -> tuple[str, int] | None:
+    """Locate a quotation, allowing one or two short header lines in front of it.
+
+    Models quote a table row together with the table's column titles. The titles are real issue text but
+    sit away from the row. Everything that grounds a value is judged on the contiguous remainder only, so
+    the header lines carry no weight: a value that appears only in them is refused. Returns the exact
+    issue text of the remainder and how many leading lines were set aside, or None.
+    """
+    whole = locate_evidence(evidence, issue_text)
+    if whole is not None:
+        return whole, 0
+    lines = [line.strip() for line in evidence.splitlines() if line.strip()]
+    for count in range(1, min(MAX_CONTEXT_LINES, len(lines) - 1) + 1):
+        head, rest = lines[:count], lines[count:]
+        if any(len(line) > MAX_CONTEXT_CHARS for line in head):
+            continue
+        if len("".join("".join(rest).split())) < MIN_EVIDENCE_CHARS:
+            continue
+        pattern = r"\s+".join(re.escape(word) for word in " ".join(rest).split())
+        found = re.search(pattern, issue_text)
+        if found is None:
+            continue
+        before, position, in_order = " ".join(issue_text[:found.start()].split()), 0, True
+        for line in head:
+            index = before.find(" ".join(line.split()), position)
+            if index < 0:
+                in_order = False
+                break
+            position = index + len(" ".join(line.split()))
+        if in_order:
+            return found.group(0), count
+    return None
+
+
 def _line_with_values(args: Any, expected: Any, issue_text: str) -> str | None:
     """The first issue line that holds every string and number of one example, for a suggestion only."""
     needles = [(kind, leaf) for value in (args, expected) for kind, leaf in _leaves(value)
@@ -383,8 +421,9 @@ def evidence_miss_message(label: str, evidence: str, issue_text: str, args: Any,
     lines = [line for line in (" ".join(part.split()) for part in evidence.splitlines()) if line]
     if len(lines) > 1 and all(line in flat for line in lines):
         message = (f"{label}: every line of the `evidence` appears in the issue, but not next to each other, so it is "
-                   "not one quotation (a table header and a row are separated by the rows between them). Quote ONE "
-                   "contiguous passage: for a table or list, copy just the single row or item, without the header.")
+                   "not one quotation. One or two short header lines (a table's column titles) may come first; after "
+                   "them quote ONE contiguous passage, and do not skip lines in it. For a table or list, copy just "
+                   "the single row or item that holds the values.")
         row = _line_with_values(args, expected, issue_text)
         if row:
             message += f" The issue line that holds this example's values is {json.dumps(row)}."
@@ -519,7 +558,10 @@ def validate_spec(
 
     unknown = sorted(set(raw) - {"supported", "module", "examples", "reason"})
     if unknown:
-        error(f"Unknown top-level field(s): {', '.join(unknown)}. Allowed: supported, module, examples, reason.")
+        message = f"Unknown top-level field(s): {', '.join(unknown)}. Allowed: supported, module, examples, reason."
+        if "evidence" in unknown:
+            message += " `evidence` belongs inside each example, next to its `args` and `returns`, not at the top level."
+        error(message)
     supported = raw.get("supported")
     if supported is False:
         reason = raw.get("reason")
@@ -634,10 +676,11 @@ def validate_spec(
         if len(evidence) > MAX_EVIDENCE_CHARS:
             reject(f"{label}: `evidence` is limited to {MAX_EVIDENCE_CHARS} characters; quote only the relevant lines.")
             continue
-        span = locate_evidence(evidence, issue_text)
-        if span is None:
+        located = locate_evidence_with_context(evidence, issue_text)
+        if located is None:
             reject(evidence_miss_message(label, evidence, issue_text, args, expected))
             continue
+        span = located[0]
 
         problems: list[str] = []
         for kind, leaf in _leaves(expected):
@@ -856,9 +899,10 @@ Rules the engine checks mechanically:
 - `evidence` is text copied from the issue, word for word (line breaks and spacing may differ). It must
   contain every string and number you use in `args` and `returns`. Never invent an expected value and never
   compute one: if the issue does not state it, do not use that example.
-- `evidence` is ONE contiguous passage of the issue. For a table or a list, copy only the single row or
-  item that holds the input and the expected result: not the header line, and not several rows. A header
-  plus a row from further down is not contiguous, and that example is discarded.
+- `evidence` is ONE contiguous passage of the issue; one or two short header lines (a table's column
+  titles) may come first. For a table or a list, copy the single row or item that holds the input and the
+  expected result, not several rows, and do not skip lines inside the passage. Every string and number you
+  use must be in the passage itself; text in the header lines does not count.
 - Argument strings that are not in the evidence are allowed only if the repository source already uses them
   as string literals (for example a type tag such as "wifi").
 - Include every example the issue states as currently wrong, and every one it states as already right

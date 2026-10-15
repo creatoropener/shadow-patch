@@ -36,21 +36,46 @@ def check(raw):
 
 
 class TableEvidenceTests(unittest.TestCase):
-    def test_the_live_header_plus_row_quotation_keeps_only_the_row_next_to_the_header(self):
+    def test_the_live_header_plus_row_quotation_grounds_every_example(self):
+        # rc.32 and rc.33 live runs: the model quoted the column titles and then its own row, every time.
         result = check(spec(lambda row: HEADER + "\n" + row))
         self.assertTrue(result.ok)
-        self.assertEqual([e.id for e in result.spec.examples], ["e1"])
-        self.assertEqual([label for label, _ in result.rejected], [f"example e{i}" for i in range(2, 8)])
+        self.assertEqual([e.id for e in result.spec.examples], [f"e{i}" for i in range(1, 8)])
+        self.assertEqual(result.rejected, [])
 
-    def test_the_refusal_says_the_lines_are_not_adjacent_and_names_the_row(self):
+    def test_grounding_is_judged_on_the_row_and_the_header_is_only_context(self):
         result = check(spec(lambda row: HEADER + "\n" + row))
+        third = result.spec.examples[2]
+        self.assertEqual(third.span, "formatBytes 1536 1.5 KB")
+        self.assertTrue(third.evidence.startswith(HEADER))  # what the model wrote is kept as written
+
+    def test_a_value_that_is_only_in_the_header_lines_is_refused(self):
+        raw = spec(lambda row: row)
+        # e2 (1024 -> 1.0 KB) quotes the 512 row and then the 1536 row. The rows are not adjacent, so the first
+        # line is context only and neither 1024 nor "1.0 KB" is in the passage that grounds the example.
+        raw["examples"][1]["evidence"] = "formatBytes 512 512 B\nformatBytes 1536 1.5 KB"
+        result = check(raw)
+        self.assertIn("example e2", dict(result.rejected))
+        self.assertIn("not in the quoted evidence", dict(result.rejected)["example e2"])
+
+    def test_skipped_lines_beyond_a_short_header_are_still_refused_with_the_row_named(self):
+        rows = [row for *_, row in ROWS]
+        result = check(spec(lambda row: "\n".join([HEADER, rows[0], rows[1], row])))
         reasons = dict(result.rejected)
-        message = reasons["example e3"]
+        self.assertIn("example e7", reasons)
+        message = reasons["example e7"]
         self.assertIn("not next to each other", message)
-        self.assertIn("just the single row", message)
-        self.assertIn(json.dumps("formatBytes 1536 1.5 KB"), message)
-        self.assertNotIn("closest issue line", message)
-        self.assertIn(json.dumps("formatSpeed 1536 1.5 KB/s"), reasons["example e7"])
+        self.assertIn("One or two short header lines", message)
+        self.assertIn(json.dumps("formatSpeed 1536 1.5 KB/s"), message)
+
+    def test_a_long_header_is_not_context(self):
+        long_line = "Function Input Expected output " + "x" * 120
+        issue = long_line + "\nformatBytes 512 512 B\nformatBytes 1536 1.5 KB\n"
+        self.assertIsNone(sp.locate_evidence_with_context(long_line + "\nformatBytes 1536 1.5 KB", issue))
+
+    def test_a_header_must_come_before_the_row_in_the_issue(self):
+        reversed_quote = "formatBytes 1536 1.5 KB\n" + HEADER
+        self.assertIsNone(sp.locate_evidence_with_context(reversed_quote, ISSUE))
 
     def test_one_row_per_example_grounds_every_example(self):
         result = check(spec(lambda row: row))
@@ -67,15 +92,24 @@ class TableEvidenceTests(unittest.TestCase):
         self.assertNotIn("not next to each other", message)
 
     def test_a_row_is_only_suggested_when_one_line_holds_all_the_values(self):
-        raw = spec(lambda row: HEADER + "\n" + row)
-        raw["examples"][2]["returns"] = "9.9 KB"
-        message = dict(check(raw).rejected)["example e3"]
+        rows = [row for *_, row in ROWS]
+        raw = spec(lambda row: "\n".join([HEADER, rows[0], rows[1], row]))
+        raw["examples"][6]["returns"] = "9.9 KB/s"
+        message = dict(check(raw).rejected)["example e7"]
         self.assertIn("not next to each other", message)
         self.assertNotIn("The issue line that holds", message)
 
-    def test_the_prompt_asks_for_one_row_without_the_header(self):
+    def test_the_prompt_asks_for_the_row_and_allows_column_titles(self):
         self.assertIn("ONE contiguous passage", sp.SYSTEM_PROMPT)
-        self.assertIn("not the header line", sp.SYSTEM_PROMPT)
+        self.assertIn("column\n  titles", sp.SYSTEM_PROMPT)
+        self.assertIn("text in the header lines does not count", sp.SYSTEM_PROMPT)
+
+    def test_a_top_level_evidence_field_is_told_where_it_belongs(self):
+        raw = spec(lambda row: row)
+        raw["evidence"] = HEADER
+        result = check(raw)
+        self.assertFalse(result.ok)
+        self.assertIn("belongs inside each example", result.errors[0])
 
 
 class StrayPunctuationTests(unittest.TestCase):
@@ -92,8 +126,16 @@ class StrayPunctuationTests(unittest.TestCase):
         self.assertIn("stray punctuation", notes[0])
         self.assertIn("closed 1 open bracket", notes[1])
 
+    def test_the_end_marker_written_as_a_json_string_with_a_closing_brace_is_accepted(self):
+        # rc.33 live shape: ...}], "<<<END>>>"}
+        notes = []
+        text = f'{sp.SPEC_BEGIN}\n{{"supported": true, "examples": [{{"id": "e1"}}], "{sp.SPEC_END}"}}'
+        value = sp.parse_spec_response(text, notes)
+        self.assertEqual(value, {"supported": True, "examples": [{"id": "e1"}]})
+        self.assertIn("stray punctuation", notes[0])
+
     def test_words_outside_the_block_are_still_refused(self):
-        for tail in (" thanks", " \"done\"", "\n```", " }"):
+        for tail in (" thanks", " \"done\"", "\n```", " }."):
             with self.subTest(tail), self.assertRaises(sp.SpecFormatError):
                 sp.parse_spec_response(self.wrap('{"a": 1}', tail))
         with self.assertRaises(sp.SpecFormatError):

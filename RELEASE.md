@@ -1,4 +1,37 @@
-# PatchProof v0.6.0-rc.33 — the model is told which examples were refused, and a table row is quoted as a row
+# PatchProof v0.6.0-rc.34 — a table's column titles in front of a row are accepted, and refused specifications are logged
+
+rc.34 is rc.33 plus the fix for the fourth live specification run. qrcrafts-1 verified on `spec`. file-sharing-app-1 failed again: the rc.33 feedback named the exact row to quote and the model quoted column titles plus the row anyway, then moved `evidence` to the top level three times. The engine now accepts one or two short title lines in front of a row and grounds every value on the row alone, drops JSON punctuation after the END marker, explains a top-level `evidence`, and logs the model's text for every refused specification.
+
+## Install the engine update
+
+1. Extract **shadow-patch-rc34-changed-files.zip** into the root of your **shadow-patch** repository on top of rc.33, preserving paths (none deleted; `RC34-CHANGES.json` lists the files with hashes).
+2. Commit on a review branch and run **Engine Checks**.
+3. Publish **v0.6.0-rc.34** from the reviewed commit.
+
+For targets that copy engine files, extract **patchproof-target-v0.6.0-rc.34.zip** into the target root.
+
+## Next live run
+
+Repeat file-sharing-app-1 on rc.34:
+
+| Input | Value |
+| --- | --- |
+| engines | v0.6.0-rc.34 |
+| trials | 1 |
+| split | dev |
+| cases | file-sharing-app-1 |
+| agent_mode | legacy |
+| verifier | spec |
+
+Send back `proof.json` and `engine-stderr.txt`. Read `regression_test.spec`: `examples[]` (`evidence` against `issue_span`), `pre_fix_states`, `rejected_examples`. If it verifies, run qrcrafts-1 and file-sharing-app-1 together before any held-out case.
+
+## Validation
+
+See docs/evidence/rc34-local/. No live run covers rc.34.
+
+---
+
+# PatchProof v0.6.0-rc.33 notes (superseded by rc.34 above; its install and run steps no longer apply)
 
 rc.33 is rc.32 plus the fix for the third live specification run (file-sharing-app-1, `verifier=spec`). The rc.32 bracket repair worked on the live blocks. The run then failed because the model quoted every table example as the header line plus its row; only e1 sat directly under the header, so six of seven examples were refused as not being one passage of the issue. The one survivor already passes on the unfixed code, so nothing reproduced. The retry prompt never listed the refusals, so the model repeated itself until the budget ran out.
 

@@ -37,7 +37,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.33"
+APP_VERSION = "0.6.0-rc.34"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1114,6 +1114,8 @@ class VerifierPlan:
                     raise SpecUnavailable("invalid", f"The model repeated the same rejected specification {self.guard.count} times "
                                                      f"({diagnostic[:200]}).")
                 feedback = spec_profile.validation_feedback(errors, text[:3000])
+                if parsed is not None:  # a parse failure was already logged with the raw text above
+                    print(f"Specification response rejected: {diagnostic[:300]} | {_raw_response_preview(raw)}", file=sys.stderr)
                 print(f"Specification rejected: {diagnostic[:200]}; retrying ({attempt + 1}/3).", file=sys.stderr)
                 continue
             self.spec = validation.spec
