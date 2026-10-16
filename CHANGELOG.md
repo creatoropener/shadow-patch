@@ -1,5 +1,13 @@
 # Changelog
 
+## After v0.6.0-rc.34 — example workflow: `agent-mode` is `legacy` again (no engine change, no new tag)
+
+`examples/action-usage/shadow-fix.yml` had shipped with `agent-mode: bounded` switched on since rc.26, under the comment "Enable only for the Node/TypeScript Batch 2 profile". A repository that copied the file ran bounded mode without choosing it. PlanMorph issue #2 did: the bounded verifier read `server.js` lines 116-120 four times in a row (steps 5-8 of its 8-step allocation) and stopped with `budget_exhausted` before writing any test; only 52,029 of 250,000 tokens were used. Bounded mode has never completed a live run, and every verified run so far used legacy mode.
+
+- The example now sets `agent-mode: legacy` and carries a commented `# verifier-profile: spec` line. It still pins rc.34.
+- The same run showed two limits that are not engine faults. The Node/TypeScript adapter does not list `.html` as source, so `public/index.html`, where the reported `post()` helper lives, was not in the repository map (10 files, no `public/`). And PlanMorph's `npm test` is `node --import tsx --test`, which found 0 tests on Node 20, so ordinary CI would not have discovered a `.ts` regression either.
+- Not changed: the engine, the bounded verifier's repeated-read behaviour, and the adapter's file types.
+
 ## After v0.6.0-rc.34 — manifest only, no new tag: file-sharing-app-1 is pinned to a commit whose own `npm test` discovers a TypeScript regression
 
 The fifth live specification run (rc.34, `verifier=spec`) stopped file-sharing-app-1 at the ordinary-CI discovery gate, not at the specification. The specification stage worked: seven examples were grounded in the issue's table, six of them failed on the unfixed code, and the reproduction was accepted. The run then stopped with `readiness_blocked` / `blocked_setup`, "Ordinary project CI did not reproduce the frozen regression", because at the pinned base `4f8b912` the project's `npm test` is `node --test --test-reporter=tap tests/*.test.mjs`. The node-typescript adapter writes a `.ts` regression, and with no `.ts` file in `tests/` it writes it at the repository root, so `npm test` never runs it. The gate was added in rc.25. The mismatch was written down in docs/BATCH2.md since rc.26 and was not raised when the case was re-run on later releases. The recorded v0.5.5 run did not hit it because it used the `node-package` runtime with a root-level `.mjs` regression and predates the gate.

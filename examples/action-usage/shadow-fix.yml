@@ -29,8 +29,13 @@ jobs:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           nebius-project-id: ${{ secrets.NEBIUS_PROJECT_ID }}
           nebius-model: ${{ vars.NEBIUS_MODEL || secrets.NEBIUS_MODEL }}
-          # Enable only for the Node/TypeScript Batch 2 profile:
-          agent-mode: bounded
+          # legacy is the path every verified run so far used. bounded is experimental and
+          # node-typescript only: it has never completed a live run, so leave it off unless you
+          # are testing it on purpose.
+          agent-mode: legacy
+          # Optional, node-typescript only: the model writes a specification quoted from the issue
+          # and the engine compiles the test. It stops with needs_specification when it cannot.
+          # verifier-profile: spec
           # Pass only the image(s) your repository's adapter needs:
           image-node-typescript: ${{ secrets.CONTREE_IMAGE_NODE_TYPESCRIPT }}
           # sandbox-image: ${{ secrets.CONTREE_IMAGE }}
