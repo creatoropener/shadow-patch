@@ -83,7 +83,7 @@
       "id": "heldout-3",
       "split": "heldout",
       "repo": "creatoropener/PlanMorph",
-      "base_commit": "5a912017d2c410b26e075fdce813034379698fd1",
+      "base_commit": "b610642efe6623ba108171d24ec8e7aa35e2eb6d",
       "issue": {
         "number": 1,
         "title": "No application authentication or subscription ownership checks",
@@ -96,7 +96,7 @@
       "id": "heldout-4",
       "split": "heldout",
       "repo": "creatoropener/PlanMorph",
-      "base_commit": "5a912017d2c410b26e075fdce813034379698fd1",
+      "base_commit": "b610642efe6623ba108171d24ec8e7aa35e2eb6d",
       "issue": {
         "number": 2,
         "title": "Cancellation failure is reported as success",
