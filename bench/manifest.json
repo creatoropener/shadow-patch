@@ -18,7 +18,7 @@
       "id": "file-sharing-app-1",
       "split": "dev",
       "repo": "creatoropener/file-sharing-app",
-      "base_commit": "4f8b91276c8339e84097b33ea6ec85dbf13c4d67",
+      "base_commit": "bf939812d176434f0b11dcdd9df4260dbd80dc8f",
       "issue": {
         "number": 1,
         "title": "File sizes and transfer speeds display JavaScript text instead of readable units",
@@ -38,7 +38,7 @@
         }
       },
       "oracle": null,
-      "note": "Base commit is the head of the recorded run in docs/evidence/github-run-35464615209.json. The commit's own patchproof.json pins node-package, which cannot edit lib/utils/format.ts (TypeScript), so no repair can be evaluated under it; the harness replaces that file with patchproof_config before each trial. Trials recorded before this override (rc.20 t1-t3, rc.21 smoke) used the old pin and are not comparable."
+      "note": "Pinned to bf93981, the last commit before the issue #3 repair was merged. It still has the formatting bug (lib/utils/format.ts is byte-identical to the v0.5.5 run commit 4f8b912) and, unlike 4f8b912, its own npm test is tsx --test tests/*.test.ts with tsx 4.23.15 and typescript 5.6.3 in the lockfile and tests/format-baseline.test.ts, so ordinary CI discovers a .ts regression written to tests/. At 4f8b912 npm test only ran tests/*.test.mjs, which made the ordinary-CI discovery gate (rc.25) block this case before any repair. The recorded v0.5.5 run in docs/evidence/github-run-35464615209.json is at 4f8b912; rc.20/rc.21 trials and earlier were taken at 4f8b912 under the old pin and are not comparable. The harness writes patchproof_config over the checkout patchproof.json before each trial."
     },
     {
       "id": "dev-3",
@@ -82,11 +82,11 @@
     {
       "id": "heldout-3",
       "split": "heldout",
-      "repo": "creatoropener/PlanMorph",
-      "base_commit": "5a912017d2c410b26e075fdce813034379698fd1",
+      "repo": "TODO/TODO",
+      "base_commit": "TODO",
       "issue": {
         "number": 1,
-        "title": "No application authentication or subscription ownership checks",
+        "title": "TODO: unseen pilot case",
         "body_file": "bench/issues/heldout-3.md"
       },
       "oracle": null,

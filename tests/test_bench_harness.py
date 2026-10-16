@@ -62,11 +62,20 @@ class ManifestTests(unittest.TestCase):
         splits = {c["split"] for c in manifest["cases"]}
         self.assertEqual(splits, {"dev", "heldout"})
 
-    def test_pinned_recorded_base_commit_matches_the_evidence_file(self):
+    def test_file_sharing_base_is_the_ts_discoverable_commit_not_the_v055_run_commit(self):
+        # The recorded v0.5.5 run is at 4f8b912, where the repository's own `npm test` runs only
+        # tests/*.test.mjs. The ordinary-CI discovery gate (rc.25) therefore blocked every run of this
+        # case before any repair, because a node-typescript regression is a .ts file. The case is
+        # pinned to bf93981 instead: same buggy lib/utils/format.ts, but `npm test` runs
+        # tsx --test tests/*.test.ts. The recorded evidence stays at 4f8b912 and is not rewritten.
         evidence = json.loads((ROOT / "docs/evidence/github-run-35464615209.json").read_text(encoding="utf-8"))
         case = next(c for c in h.load_manifest()["cases"] if c["id"] == "file-sharing-app-1")
-        self.assertEqual(case["base_commit"], evidence["head_sha"])
+        self.assertEqual(evidence["head_sha"], "4f8b91276c8339e84097b33ea6ec85dbf13c4d67")
+        self.assertEqual(case["base_commit"], "bf939812d176434f0b11dcdd9df4260dbd80dc8f")
+        self.assertNotEqual(case["base_commit"], evidence["head_sha"])
         self.assertEqual(case["issue"]["title"], evidence["display_title"])
+        self.assertEqual(case["patchproof_config"]["runtime"], "node-typescript")
+        self.assertIn("tests/*.test.ts", case["note"])
 
     def test_ready_case_passes_and_placeholders_fail(self):
         with tempfile.TemporaryDirectory() as directory:

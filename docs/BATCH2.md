@@ -6,7 +6,7 @@ rc.26 adds an opt-in investigation and repair loop around the existing verificat
 
 For a CLI or copied-engine installation, set `PATCHPROOF_AGENT_MODE=bounded`. The copied workflow reads a repository variable with that name. For the composite Action, pass `agent-mode: bounded`. Without this setting, `legacy` retains the previous generation flow. Bounded mode explicitly rejects runtimes other than `node-typescript`.
 
-The first controlled benchmark is one `qrcrafts-1` development trial with the rc.26 engine, `agent_mode=bounded`, one solver session, and the existing model/token limit. The workflow defaults to this case only. Complete file-sharing's normal-CI TypeScript setup and pin its new unfixed base before including `file-sharing-app-1`; changing the engine does not fix that target's discovery mismatch.
+The first controlled benchmark is one `qrcrafts-1` development trial with the rc.26 engine, `agent_mode=bounded`, one solver session, and the existing model/token limit. The workflow defaults to this case only. `file-sharing-app-1` is now pinned to `bf93981` (after rc.34), whose own `npm test` runs `tsx --test tests/*.test.ts`; at the earlier pin `4f8b912` the project's `npm test` ran only `tests/*.test.mjs`, so the ordinary-CI discovery gate blocked every run before a repair was attempted. Later stages (candidate repair, regression, replay) have not been exercised on the new pin; it can be added to the smoke after `qrcrafts-1` passes.
 
 ## What the loop does
 

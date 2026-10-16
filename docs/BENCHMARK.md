@@ -70,6 +70,8 @@ one can name a runtime that cannot do the job. `file-sharing-app` at 4f8b912 pin
 `lib/utils/format.ts`. Under that pin the engine verified the bug but rejected every
 candidate for touching a "protected or unknown file", whichever engine version ran.
 
+The same commit has a second problem: its `npm test` runs only `tests/*.test.mjs`, so a `.ts` regression is never discovered by ordinary CI and the discovery gate (rc.25) blocks the run before any repair. `file-sharing-app-1` is therefore pinned to `bf93981` instead (same buggy `lib/utils/format.ts`; `npm test` is `tsx --test tests/*.test.ts`). The recorded v0.5.5 evidence stays at `4f8b912`.
+
 Add a `patchproof_config` object to the case and the harness writes it over the
 checkout's `patchproof.json` just before each trial:
 
@@ -213,7 +215,7 @@ The engine was not changed after the held-out cases were written.
 
 ## rc.26 bounded profile
 
-Use the workflow's `agent_mode` input (`bounded` or `legacy`). Bounded mode requires rc.26 and the Node/TypeScript adapter. The first smoke defaults to `qrcrafts-1`, one trial and one solver session; file-sharing needs the separate CI setup/base pin documented in its rc.25 review. Preserve the active manifest and historical protocol snapshots.
+Use the workflow's `agent_mode` input (`bounded` or `legacy`). Bounded mode requires rc.26 and the Node/TypeScript adapter. The first smoke defaults to `qrcrafts-1`, one trial and one solver session; file-sharing-app-1 is pinned to `bf93981`, whose `npm test` discovers `.ts` regressions; its later stages have not been run on that pin. Preserve the active manifest and historical protocol snapshots.
 
 Meta records the requested mode and configured limits; proof records actual mode, shared usage, role histories and stop reasons. Reports reject mixed modes/model budgets for the same engine. Budget exhaustion and missing-specification stops are counted as unsuccessful attempts, not excluded infrastructure failures. Compare the same model, cases and explicitly recorded budgets; legacy three-proposal runs and bounded one-session runs are different execution policies.
 

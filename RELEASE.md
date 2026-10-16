@@ -1,3 +1,30 @@
+# After rc.34 — manifest update, no new tag: file-sharing-app-1 gets a base whose `npm test` discovers a TypeScript test
+
+The rc.34 engine is unchanged and stays current. This update changes `bench/manifest.json` (the pin for `file-sharing-app-1`), one test, three docs and the checksum list. The benchmark workflow takes its manifest from the ref it is started on and its engine from the tag, so **no new tag is needed**.
+
+Why: the rc.34 run of file-sharing-app-1 passed the specification stage and stopped at the ordinary-CI discovery gate. At the old pin (`4f8b912`) the project's `npm test` runs only `tests/*.test.mjs`, so a `.ts` regression is never run by ordinary CI. The new pin (`bf93981`) has the same buggy `lib/utils/format.ts` and an `npm test` of `tsx --test tests/*.test.ts`. A local simulation under Node 20.19.2 showed the gate's check passing there (6 expected failures, with markers, from `npm test`) and a corrected function turning all 10 tests green. No live run has covered it yet.
+
+## Upload
+
+1. Extract **shadow-patch-manifest-pin-changed-files.zip** into the root of **shadow-patch**, preserving paths. Files: `bench/manifest.json`, `tests/test_bench_harness.py`, `docs/BATCH2.md`, `docs/BENCHMARK.md`, `CHANGELOG.md`, `RELEASE.md`, `RELEASE_FILES.sha256`.
+2. Commit to `main` (or a branch, then run **Engine Checks**).
+3. Before running anything, check `bench/manifest.json` on GitHub: the `file-sharing-app-1` case must show `"base_commit": "bf939812d176434f0b11dcdd9df4260dbd80dc8f"`, and `heldout-3` must either be complete (`"repo": "owner/name"`, not a URL) or back to `"TODO/TODO"` / `"TODO"`. The zip ships the manifest as it is in this working tree; if you edited `heldout-3` on GitHub after rc.34, merge that edit by hand instead of overwriting the file.
+
+## Next live run
+
+| Input | Value |
+| --- | --- |
+| engines | v0.6.0-rc.34 |
+| trials | 1 |
+| split | dev |
+| cases | file-sharing-app-1 |
+| agent_mode | legacy |
+| verifier | spec |
+
+Send back `proof.json` and `engine-stderr.txt`. If the discovery gate passes, the run goes on to candidate repair for the first time since rc.25, so a failure there is new information, not a regression of the specification stage. If it verifies, run qrcrafts-1 and file-sharing-app-1 together before any held-out case.
+
+---
+
 # PatchProof v0.6.0-rc.34 — a table's column titles in front of a row are accepted, and refused specifications are logged
 
 rc.34 is rc.33 plus the fix for the fourth live specification run. qrcrafts-1 verified on `spec`. file-sharing-app-1 failed again: the rc.33 feedback named the exact row to quote and the model quoted column titles plus the row anyway, then moved `evidence` to the top level three times. The engine now accepts one or two short title lines in front of a row and grounds every value on the row alone, drops JSON punctuation after the END marker, explains a top-level `evidence`, and logs the model's text for every refused specification.
