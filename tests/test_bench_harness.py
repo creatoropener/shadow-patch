@@ -738,7 +738,13 @@ class CliTests(unittest.TestCase):
 
     def test_validate_and_unready_plan_exit_codes(self):
         self.assertEqual(self.run_main("validate")[0], 0)
-        self.assertEqual(self.run_main("validate", "--ready")[0], 1)  # unseen placeholders remain unselected
+        # Whether the shipped manifest is fully ready depends on whether its held-out cases are
+        # still placeholders. The expectation follows the file instead of assuming it: it is
+        # 1 only while some case still carries a TODO or << placeholder, and 0 once the fresh
+        # cases are filled in (the temporary manifest below covers the placeholder case alone).
+        shipped = h.load_manifest()
+        unfinished = any("TODO" in json.dumps(case) or "<<" in json.dumps(case) for case in shipped["cases"])
+        self.assertEqual(self.run_main("validate", "--ready")[0], 1 if unfinished else 0)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = {"schema": 1, "cases": [write_case_files(root, ready=False)]}
