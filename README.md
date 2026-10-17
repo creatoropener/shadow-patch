@@ -102,7 +102,9 @@ python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.34.zip
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
 sandbox image; commit the workflows to the default branch; then apply the issue
-label. Repository-specific test setup is described in [SETUP.md](docs/SETUP.md).
+label. Before you label an issue, read [docs/RUN_GUIDE.md](docs/RUN_GUIDE.md): it says which
+issues and repositories fit and lists the failures you get when they do not. Repository-specific test
+setup is described in [SETUP.md](docs/SETUP.md).
 The file-sharing example uses the explicit `node-typescript` adapter, a repository
 baseline executed with pinned `tsx`, and engine-owned Web Streams test plumbing.
 The setup files are included under `examples/file-sharing-setup/`.

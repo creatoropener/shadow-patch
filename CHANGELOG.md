@@ -1,5 +1,13 @@
 # Changelog
 
+## After v0.6.0-rc.34 — `docs/RUN_GUIDE.md`: the run instructions are now specific to what the engine supports (no engine change, no new tag)
+
+The Tabloop #1 and PlanMorph #1/#2 runs were set up from `docs/ACTION.md`, whose "Prepare the target repository" step was five lines. It did not say that the project must type-check, that `npm test` must run a test the engine adds, that the sandbox's Node 20 does not expand quoted globs, that the code under test must run offline, that `patchproof.json` must name the runtime the repository really uses, or that an older sandbox image has no `typescript`. Each of those produced a run that stopped before saying anything about the engine: Tabloop at `baseline-source-check` (`"checkJs": flase`), PlanMorph at `verifier_invalid` (image without `typescript`, readiness still "ready") and then `no_reproduction` (every test died on a live Anthropic API call).
+
+- **`docs/RUN_GUIDE.md`** (new): a fit table for the issue (which runtime, which verifier, what evidence exists), an eight-item repository checklist with the failure each item prevents, a pre-run command block (Node 20, `tsc`, `npm test`, `tools/preflight_base.py`), an issue template matching the spec profile's grounding rules, workflow and image settings, a symptom-to-fix table keyed on `outcome.bucket`/`stage`/`error`, and the three failed setups with what a fitting one looks like.
+- **`docs/ACTION.md`** step 4 now points to it and carries the short version. **`README.md`** links it from the install section.
+- Not changed: the engine, the example workflow, the readiness check. Readiness still reports "ready" on an image without `typescript`; that gap is documented, not fixed.
+
 ## After v0.6.0-rc.34 — fresh-set tooling and the first fresh case (no engine change, no new tag)
 
 - **`tools/preflight_base.py`.** Checks a base commit before a run is spent on it, under Node 20 (the benchmark image's Node; it refuses another major unless told otherwise): runtime detection, the project's own baseline (green and non-empty), the ordinary-CI discovery gate with a planted failing probe, and an import probe that imports the target export the way the compiled examples do. It would have flagged the file-sharing-app-1 pin problem in rc.26, and it flags cases that discover tests but cannot load the module (ipregistry-javascript).

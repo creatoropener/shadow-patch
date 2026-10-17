@@ -35,10 +35,16 @@ and save the printed UUID as the matching secret. `node-typescript` needs the
 
 ## 4. Prepare the target repository
 
-- Your normal baseline test command must already pass.
-- `node-typescript` is detected only when both `package.json` and `tsconfig.json`
-  exist at the root; pin `tsx` and `typescript` in `devDependencies`.
-- Add `patchproof.json` (`{"runtime": "node-typescript"}`) if detection is ambiguous.
+Follow [RUN_GUIDE.md](RUN_GUIDE.md) before you label an issue. It says which issues fit, and what must
+be true of the repository, the issue and the image. The short version for `node-typescript`:
+
+- `npx tsc -p . --noEmit` exits 0, and `CI=1 npm test` passes and reports at least one test.
+- `npm test` must run a new `*.test.ts` placed in `tests/` (when `tests/` already holds one) or at the
+  repository root, using a glob the shell expands, because the sandbox runs Node 20.
+- The issue's target is a function that runs offline and returns a value, with example values in the issue.
+- `patchproof.json` names a runtime only when detection is ambiguous, and only the one the repository uses.
+- The image is the newest **Prepare Sandbox Image** output; an older one has no `typescript` and every
+  generated test is refused.
 
 ## 5. Trigger
 
