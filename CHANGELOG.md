@@ -1,5 +1,13 @@
 # Changelog
 
+## After v0.6.0-rc.34 — fresh-set tooling and the first fresh case (no engine change, no new tag)
+
+- **`tools/preflight_base.py`.** Checks a base commit before a run is spent on it, under Node 20 (the benchmark image's Node; it refuses another major unless told otherwise): runtime detection, the project's own baseline (green and non-empty), the ordinary-CI discovery gate with a planted failing probe, and an import probe that imports the target export the way the compiled examples do. It would have flagged the file-sharing-app-1 pin problem in rc.26, and it flags cases that discover tests but cannot load the module (ipregistry-javascript).
+- **`tools/verify_case_spec.py`.** Offline oracle check with no model: validates a hand-written specification against the issue with the engine's own validator, compiles the test, and runs it on the base (reproduction) and on the upstream fixed commit (must pass).
+- **`bench/manifest.json`: `fresh-overlaykit-1`** (Hailong-am/openapi-overlaykit, external, held-out split, base `553a949`, `test_directory: test`). Verified with both tools under Node 20.19.2. The protocol is still `development`; freezing is a separate step once the case list is final.
+- **`docs/FRESH_SET.md`** records the selection checks, the tools, and the candidates already ruled out and why. Only this one external case passed every check so far.
+- No engine file changed; the engine stays v0.6.0-rc.34.
+
 ## After v0.6.0-rc.34 — example workflow: `agent-mode` is `legacy` again (no engine change, no new tag)
 
 `examples/action-usage/shadow-fix.yml` had shipped with `agent-mode: bounded` switched on since rc.26, under the comment "Enable only for the Node/TypeScript Batch 2 profile". A repository that copied the file ran bounded mode without choosing it. PlanMorph issue #2 did: the bounded verifier read `server.js` lines 116-120 four times in a row (steps 5-8 of its 8-step allocation) and stopped with `budget_exhausted` before writing any test; only 52,029 of 250,000 tokens were used. Bounded mode has never completed a live run, and every verified run so far used legacy mode.

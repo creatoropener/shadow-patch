@@ -104,6 +104,23 @@
       },
       "oracle": null,
       "note": "Unselected placeholder. Keep it; it does not block selected development cases."
+    },
+    {
+      "id": "fresh-overlaykit-1",
+      "split": "heldout",
+      "repo": "Hailong-am/openapi-overlaykit",
+      "base_commit": "553a949eb5dcada18101550d6f832412485a08fb",
+      "issue": {
+        "number": 2,
+        "title": "Overlay update on an array target replaces the array with an object",
+        "body_file": "bench/issues/fresh-overlaykit-1.md"
+      },
+      "patchproof_config": {
+        "runtime": "node-typescript",
+        "test_directory": "test"
+      },
+      "oracle": null,
+      "note": "Fresh external case, never used to tune the engine. Base is the parent of upstream commit 7e89106 (merged 2026-10-16, PR #2 'append to array targets instead of index-merging'); that PR is the only upstream text, so the issue body is written for this benchmark and its expected values were taken by running the maintainers' fix. Verified offline with tools/verify_case_spec.py under Node 20.19.2: 3 of 4 examples fail on the base, all 4 pass at 7e89106. tools/preflight_base.py: suitable (npm test = node --import tsx --test test/*.test.ts, so test_directory test is needed for the generated test to be discovered). Not run through the engine yet."
     }
   ],
   "protocol_id": "2026-10-08-dev-v2",
