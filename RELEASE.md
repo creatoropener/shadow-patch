@@ -1,10 +1,26 @@
-# PatchProof v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
+# PatchProof v0.6.0-rc.37 — a test that cannot fail on the unfixed page is refused and explained
+
+The Tabloop #2 run on rc.36 (`bec7431b-proof.json`) is the first static-web run that got everything right on the setup side: jsdom 24.1.3 loaded on Node v20.19.2 (`baseline.jsdom_probe`), the baseline was green, the probe test was found, and the generated tests ran. It ended `no_reproduction` because every test created the page at `https://patchproof.invalid/`. At the host root a root-absolute action (`/thank-you.html`) and a relative one (`thank-you.html`) resolve to the same address, so no assertion on the resolved action can fail on the unfixed page. That was the engine's doing: the adapter's prompt said to set `url: 'https://patchproof.invalid/'`. On rc.34 the model had happened to use `/Tabloop/` and got a sound test. The retry feedback also told the model to use `doesNotReject`, which means nothing for a DOM test, and it repeated the same test.
+
+rc.37 changes only static-web:
+
+- the prompt no longer prescribes the root URL and says the path in the url matters when the issue is about where the page is served;
+- a test that creates the page at the root, for an issue that mentions a subpath, staging, base path or deploy path, is refused before it runs, with the fix, and retried;
+- the feedback for "passed on the unfixed revision" on a static page now explains this instead of the `doesNotReject` advice.
+
+No live run covers rc.37. **A new tag is needed.** Upload and tag steps are unchanged from the rc.36 section below, with `RC37-CHANGES.json` and `v0.6.0-rc.37`. Nothing needs to change in Tabloop.
+
+**Your issue text matters here.** The rules above are triggered by words in the issue (subpath, sub-directory, base path/URL, deploy path, staging, GitHub Pages). If Tabloop #2's text does not contain one, only the prompt change applies. Add the path the form should resolve under (for example `/Tabloop/`) to the issue; see `docs/RUN_GUIDE.md` item 7.
+
+---
+
+## (superseded by rc.37 above) PatchProof v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
 
 The Tabloop #2 run on rc.35 (`eef15ec1-proof.json`) got further than any static-web run before it: tests discovered, baseline green, three generated tests. Then all three died inside the project's own jsdom. The lockfile had resolved **jsdom 30**, whose `undici` 8 dependency reads `zlib.createZstdDecompress` when it loads; the sandbox runs Node 20, which does not have it. The run spent three model requests on a failure that no test could have avoided. The setup instructions in `docs/RUN_GUIDE.md` and this file said `npm install --save-dev jsdom`, which installs the newest jsdom, so the cause was partly the guide. rc.36 fixes the engine and the guide. No live run covers rc.36. **A new tag is needed.** rc.35 stays as published; do not move it.
 
 ## Upload
 
-1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative (fresh-set tooling, run guide, rc.35 and rc.36) and replaces the earlier zips. `RC36-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
+1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative (fresh-set tooling, run guide, rc.35 and rc.36) and replaces the earlier zips. `RC37-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
 2. Commit to `main`, let **Engine Checks** finish, then publish the tag `v0.6.0-rc.36`, and use `creatoropener/shadow-patch@v0.6.0-rc.36` in the workflow.
 
 ## For Tabloop, right now (works with the rc.35 tag too)

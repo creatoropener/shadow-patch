@@ -264,6 +264,22 @@ def commonjs_globals_used(content: str) -> list[str]:
     return found
 
 
+_SERVED_PATH_ISSUE = re.compile(
+    r"sub[-\s]?(?:path|director(?:y|ies)|folder)|base[-\s](?:path|url|href)|path[-\s]prefix|"
+    r"deploy(?:ed|ment|s)?\s+(?:path|under|to\s+a|at\s+a)|\bstaging\b|\bGitHub Pages\b", re.I)
+_ROOT_JSDOM_URL = re.compile(r"""\burl\s*:\s*['"`]https?://[^/'"`\s]+/?['"`]""")
+
+
+def root_url_for_served_path_issue(content: str, issue_text: str) -> bool:
+    """True when the issue is about where a page is served but the test serves it from the root.
+
+    From the root, a root-absolute link (`/thank-you.html`) and a relative one (`thank-you.html`)
+    resolve to the same address, so no assertion on the resolved value can fail on the unfixed page.
+    The first Tabloop rc.36 run built three tests that way and none could reproduce the issue.
+    """
+    return bool(_SERVED_PATH_ISSUE.search(issue_text) and _ROOT_JSDOM_URL.search(content))
+
+
 def static_web_project_problems(root: Path) -> list[str]:
     """Why a static site cannot take a delivered regression, from its package.json alone.
 
@@ -1090,6 +1106,15 @@ class RuntimeAdapter:
         """
         if self.test_runtime != "node-test":
             return
+        if self.id == "static-web" and root_url_for_served_path_issue(content, issue_text):
+            raise ValueError(
+                "The issue is about where the page is served (a subpath, staging or base path), but this test "
+                "creates the page at the root of the host. From the root, a root-absolute link such as "
+                "'/thank-you.html' and a relative one such as 'thank-you.html' resolve to the same address, so "
+                "the test cannot fail on the unfixed page. Give JSDOM a url that includes the path from the "
+                "issue, for example url: 'https://patchproof.invalid/site/', and assert the address the issue "
+                "says is correct for that path."
+            )
         try:
             pinned = ungrounded_message_pins(content, issue_text)
         except Exception as error:  # noqa: BLE001 - unavailable evidence is not a pass
@@ -1868,8 +1893,12 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "(the path is relative to the test file and the engine adds the helper beside it; "
                 "never import 'jsdom' by name and never write a path inside the sandbox image). "
                 "Load the actual HTML from disk and exercise its functions/events. Set "
-                "url: 'https://patchproof.invalid/' to enable localStorage without an opaque origin; "
-                "this URL does not require a network request. Use runScripts: 'outside-only' "
+                "url to an address on patchproof.invalid to enable localStorage without an opaque origin; "
+                "no network request is made. The path in that url matters: when the issue is about where the "
+                "page is served (a subpath or staging deploy, a base path, a query string, a hash), put that "
+                "path in the url, for example 'https://patchproof.invalid/site/'; from the host root a "
+                "root-absolute link and a relative link resolve to the same address, so such a test cannot "
+                "fail. Use runScripts: 'outside-only' "
                 "and window.eval for relevant actual inline scripts. Do not enable external resources, "
                 "network access, install packages, catch/swallow assertion failures, call process.exit, "
                 "or modify the test/application files. Select UI modes through actual DOM events; "

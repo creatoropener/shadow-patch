@@ -1,4 +1,4 @@
-"""rc.35 and rc.36: the static-web adapter can complete a run.
+"""rc.35 to rc.37: the static-web adapter can complete a run.
 
 Before rc.35 every static-web run died the same way. The adapter's prompt told the model to load jsdom from
 a path inside the sandbox image, and `support_files` then refused any test containing that path (a plain
@@ -236,6 +236,23 @@ UNDICI_ON_NODE20 = ("const zlib = require('node:zlib');"
                     "const table = { zstd: zlib.createZstdDecompress.bind(null, {}) };")
 
 
+# The second test the live model wrote on rc.36 (bec7431b-proof.json), unchanged. jsdom loaded and the test ran,
+# but the page was created at the host root, where '/thank-you.html' and 'thank-you.html' resolve alike.
+RC36_ROOT_URL_TEST = """import test from 'node:test';
+import assert from 'node:assert/strict';
+import { JSDOM } from './patchproof_helpers/jsdom.mjs';
+import fs from 'node:fs';
+
+test('contact form action resolves correctly relative to base URL', async () => {
+  const html = fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const dom = new JSDOM(html, { url: 'https://patchproof.invalid/', runScripts: 'outside-only' });
+  const form = dom.window.document.querySelector('form[name="tabloop-contact"]');
+  assert.strictEqual(form.action, 'https://patchproof.invalid/thank-you.html');
+});
+"""
+SERVED_PATH_ISSUE = ISSUE.title + "\n" + ISSUE.body
+
+
 def fake_project(*, version: str | None, index_js: str | None) -> Path:
     folder = Path(tempfile.mkdtemp(prefix="fakejsdom-"))
     if version is not None:
@@ -244,6 +261,41 @@ def fake_project(*, version: str | None, index_js: str | None) -> Path:
             json.dumps({"name": "jsdom", "version": version, "main": "index.js"}))
         (folder / "node_modules/jsdom/index.js").write_text(index_js or "")
     return folder
+
+
+class ServedPathTests(unittest.TestCase):
+    def test_the_live_rc36_test_is_flagged_for_this_issue(self):
+        self.assertTrue(runtimes.root_url_for_served_path_issue(RC36_ROOT_URL_TEST, SERVED_PATH_ISSUE))
+
+    def test_a_subpath_url_is_accepted(self):
+        self.assertFalse(runtimes.root_url_for_served_path_issue(PORTABLE_MODEL_TEST, SERVED_PATH_ISSUE))
+
+    def test_an_issue_that_is_not_about_the_served_path_is_left_alone(self):
+        self.assertFalse(runtimes.root_url_for_served_path_issue(RC36_ROOT_URL_TEST, "The menu does not close on Escape."))
+
+    def test_a_root_url_with_a_trailing_variation_is_still_flagged(self):
+        for url in ("https://patchproof.invalid", "http://patchproof.invalid/", "https://patchproof.invalid/"):
+            test = RC36_ROOT_URL_TEST.replace("https://patchproof.invalid/'", url + "'", 1)
+            self.assertTrue(runtimes.root_url_for_served_path_issue(test, SERVED_PATH_ISSUE), url)
+
+    def test_the_pins_gate_refuses_it_with_the_fix(self):
+        adapter = detect_runtime(site(GOOD))
+        with self.assertRaises(ValueError) as caught:
+            adapter.validate_generated_pins(RC36_ROOT_URL_TEST, SERVED_PATH_ISSUE)
+        self.assertIn("url: 'https://patchproof.invalid/site/'", str(caught.exception))
+        adapter.validate_generated_pins(PORTABLE_MODEL_TEST, SERVED_PATH_ISSUE)
+
+    def test_the_prompt_no_longer_tells_the_model_to_use_the_root(self):
+        guidance = detect_runtime(site(GOOD)).verifier_guidance
+        self.assertNotIn("url: 'https://patchproof.invalid/' to enable", guidance)
+        self.assertIn("subpath", guidance)
+
+    def test_a_test_that_passes_on_the_unfixed_page_gets_dom_advice_not_the_throw_advice(self):
+        feedback = proof.reproduction_feedback(RC36_ROOT_URL_TEST, "test passed on the unfixed revision", "ok 1", "static-web")
+        self.assertIn("static page", feedback)
+        self.assertIn("https://patchproof.invalid/site/", feedback)
+        other = proof.reproduction_feedback("t", "test passed on the unfixed revision", "ok 1", "node-package")
+        self.assertNotIn("static page", other)
 
 
 @unittest.skipUnless(NODE, "requires node")
@@ -450,6 +502,27 @@ class NativePipelineTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "verified")
         self.assertEqual(len(seen), 2)
         self.assertIn("__dirname", json.dumps(seen[1], default=str))
+
+    def test_a_root_url_test_is_sent_back_before_it_runs_and_the_retry_verifies(self):
+        # The Tabloop rc.36 run: a root-URL test cannot fail on the unfixed page. The engine now refuses it
+        # without a sandbox run and tells the model why; the second reply uses the deploy path.
+        replies = iter([RC36_ROOT_URL_TEST, PORTABLE_MODEL_TEST])
+        base, checkout = self.project(GOOD)
+        seen = []
+
+        def model_text(**kwargs):
+            seen.append(kwargs)
+            body = next(replies)
+            return (f"{proof.TEST_BEGIN}\n{body}\n{proof.TEST_END}\n"
+                    f"{proof.RATIONALE_BEGIN}\nThe form action must resolve under the deploy path.\n{proof.RATIONALE_END}")
+
+        candidate = lambda **k: ([{"path": "index.html", "content": INDEX_AFTER}], "relative form action")
+        result, record, error = pipeline.run_engine(base, checkout, checkout, ISSUE, "unused", candidate, model_text=model_text)
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("attempts"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(seen), 2)
+        self.assertIn("where the page is served", json.dumps(seen[1], default=str))
+        self.assertIn("/Tabloop/", result["regression_test"]["content"])
 
     def test_a_test_that_passes_on_the_unfixed_page_is_still_not_reproduction(self):
         passing = PORTABLE_MODEL_TEST.replace("`${baseUrl}thank-you.html`", "'https://patchproof.invalid/thank-you.html'")

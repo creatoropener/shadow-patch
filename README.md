@@ -7,7 +7,7 @@ regression before asking a solver for a patch, evaluates repairs
 in isolated Nebius Token Factory sandbox branches, and replays the winner from a
 clean base image before opening a pull request. A human decides whether to merge.
 
-**Engine: v0.6.0-rc.36 (readiness report, stricter verifier gate, opt-in specification-compiled tests; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
+**Engine: v0.6.0-rc.37 (readiness report, stricter verifier gate, opt-in specification-compiled tests; local validation only) · Recorded repairs: three, on two repositories · Track: Coding and Agentic Engineering**
 
 [Setup](docs/SETUP.md) · [Compatibility](docs/COMPATIBILITY.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Recorded evidence](docs/EVIDENCE.md) · [Demo script](docs/DEMO.md) ·
@@ -86,8 +86,8 @@ because its issue text names a helper that does not exist at its base commit.
 ## Use as a GitHub Action (beta)
 
 The lightest way to try it: add one workflow file that calls
-`creatoropener/shadow-patch@v0.6.0-rc.36` and pass your Nebius secrets and sandbox
-image. Publish the reviewed rc.36 tag before using that pin. No engine files are copied into your repository. See
+`creatoropener/shadow-patch@v0.6.0-rc.37` and pass your Nebius secrets and sandbox
+image. Publish the reviewed rc.37 tag before using that pin. No engine files are copied into your repository. See
 [docs/ACTION.md](docs/ACTION.md) and
 [examples/action-usage/shadow-fix.yml](examples/action-usage/shadow-fix.yml). The
 copy-install route below remains supported.
@@ -97,7 +97,7 @@ copy-install route below remains supported.
 Export the installation files, then copy their contents into the target repository:
 
 ```bash
-python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.36.zip
+python3 tools/export_target.py --output ../patchproof-target-v0.6.0-rc.37.zip
 ```
 
 Configure `NEBIUS_API_KEY`, `NEBIUS_PROJECT_ID`, `NEBIUS_MODEL`, and a compatible
@@ -120,7 +120,7 @@ of this MVP.
 | `node-typescript` | Package baseline + pinned tsx + semantic lint + TypeScript checker + Node test runner | Recorded: file-sharing-app #3 and QRcrafts #1; benchmark dev 6/6; held-out 0/3 on one unseen repository |
 | `node-package` | JavaScript package baseline + Node test runner | Recorded for the v0.5.5 repair only; no v0.6 live evidence |
 | `python-pytest` | Python + pytest | Adapter included; no current-release live evidence bundled |
-| `static-web` | Syntax check + Node/jsdom regression, run by the project's own `node --test` script | Experimental. rc.35 and rc.36 fix defects that stopped every run (see CHANGELOG); validated offline only, the one live run on rc.35 stopped on a jsdom/Node mismatch that rc.36 now checks for. Held-out 0/3 on one unseen site, measured before rc.35 |
+| `static-web` | Syntax check + Node/jsdom regression, run by the project's own `node --test` script | Experimental. rc.35 to rc.37 fix defects that stopped every run (see CHANGELOG); validated offline only, the live runs so far stopped on a jsdom/Node mismatch (rc.35, checked since rc.36) and on tests that could not fail (rc.36, checked since rc.37). Held-out 0/3 on one unseen site, measured before rc.35 |
 | `web-playwright` | Python pytest + Playwright | Adapter included; no live evidence bundled |
 | `java-junit` | javac + standalone JUnit | Adapter included; no live evidence bundled |
 | `java-maven` | Maven + JUnit reports | Adapter included; no live evidence bundled |

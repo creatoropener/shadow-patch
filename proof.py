@@ -38,7 +38,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.36"
+APP_VERSION = "0.6.0-rc.37"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1278,7 +1278,7 @@ def module_not_found_feedback(found: dict[str, str]) -> str:
     return text
 
 
-def reproduction_feedback(content: str, classification: str, output: str) -> str:
+def reproduction_feedback(content: str, classification: str, output: str, runtime_id: str = "") -> str:
     feedback = (
         f"Previous result: {classification}. Repair only test setup/import/execution errors. "
         "Preserve the issue's expected behavior; do not change expected values just to get a failure. "
@@ -1292,6 +1292,20 @@ def reproduction_feedback(content: str, classification: str, output: str) -> str
             "repair and green afterward. If an operation should succeed but currently throws "
             "or rejects, use the runtime's does-not-throw/doesNotReject assertion and then "
             "assert the expected result; do not use rejects merely to confirm the bug."
+        )
+    if classification == "test passed on the unfixed revision" and runtime_id == "static-web":
+        # rc.37: the generic diagnosis above says to rewrite the assertion with doesNotReject, which
+        # means nothing for a DOM test. For a page the usual cause is a JSDOM url that does not
+        # create the condition in the issue (Tabloop #2: the root url hides a root-absolute link).
+        feedback += (
+            "\nENGINE DIAGNOSIS (static page): the test ran and passed on the unfixed page, so it never "
+            "reached the defect. Ignore the advice about doesNotReject: there is no thrown error here. The "
+            "usual cause is a JSDOM url that does not create the condition in the issue. If the issue is about "
+            "where the page is served (a subpath, staging or base path), set url to an address that includes "
+            "that path, for example 'https://patchproof.invalid/site/', and assert the address the issue "
+            "says is correct for it; at the host root a root-absolute and a relative link resolve alike. "
+            "Otherwise, re-read the issue for the exact input or event that triggers the defect and "
+            "reproduce that. Resubmitting the same assertion fails again."
         )
     not_found = missing_module(output)
     if not_found is not None:
@@ -2543,7 +2557,7 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                 generation_attempts[-1].update({"status": "duplicate",
                                                "reused_from_attempt": prior["attempt"]})
                 retry_feedback = reproduction_feedback(
-                    prior["content"], classification, prior["output"]
+                    prior["content"], classification, prior["output"], adapter.id
                 ) + (
                     "\nENGINE DIAGNOSIS: This test file is identical to a previously rejected "
                     "test. Its result was reused without another sandbox execution. Correct "
@@ -2658,7 +2672,7 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                     ACTIVE_BUDGET.get().on_change()
                 break
             retry_feedback = (feedback_override if feedback_override is not None else reproduction_feedback(
-                test_content, classification, reproduction_output
+                test_content, classification, reproduction_output, adapter.id
             ))
             if not counts:
                 continue  # an engine-driven step (recompiling without dropped examples), not a verifier attempt

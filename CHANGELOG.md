@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.0-rc.37 — a static-web test that cannot fail is refused and explained
+
+The Tabloop #2 run on rc.36 (`bec7431b-proof.json`) confirmed rc.36: jsdom 24.1.3 loaded on Node v20.19.2, baseline `# tests 1`, discovery probe found, `__dirname` no longer used. All attempts then ended `test passed on the unfixed revision`.
+
+- **Cause.** All three tests created the page with `url: 'https://patchproof.invalid/'` and asserted `form.action === 'https://patchproof.invalid/thank-you.html'`. At the host root a root-absolute action and a relative one resolve to that same string, so the unfixed page passes. The bug (a form posting to `/thank-you.html` when the site is served under a subpath) only exists under a path such as `/Tabloop/`. The adapter's own prompt said "Set url: 'https://patchproof.invalid/'", so this was the engine pushing the model into it. The rc.34 live test, which used `/Tabloop/`, was sound; rc.35 and rc.36 tests all used the root.
+- **Wrong advice on retry.** The feedback for "passed on the unfixed revision" told the model to rewrite the assertion with `doesNotReject`, which has no meaning for a DOM test. The model resubmitted identical content (attempt 3 was a duplicate of attempt 2) and the run stopped on repeated output.
+- **Prompt.** The static-web prompt now asks for an address on `patchproof.invalid` and says the path matters: when the issue is about where the page is served, put that path in the url.
+- **New validator rule** (`runtimes.py`, `root_url_for_served_path_issue`, in `validate_generated_pins`): if the issue text mentions a subpath, sub-directory or folder, base path/URL/href, path prefix, deploy path, staging or GitHub Pages, and the test's JSDOM `url` has no path, the test is refused before any sandbox run with the replacement advice and retried. It is a heuristic on the issue's wording: a bug that needs a path but never says so is not caught, and a test that legitimately needs the root for such an issue gets a retry it does not need (three attempts in all).
+- **Static-page feedback** (`proof.py`, `reproduction_feedback(..., runtime_id)`): for `static-web` the "passed on the unfixed revision" feedback now says the test never reached the defect, points at the JSDOM url or event, and drops the `doesNotReject` advice. Other runtimes are unchanged.
+- **Version.** `APP_VERSION`, the example workflow pin, the benchmark default engine and the README are 0.6.0-rc.37. rc.35 and rc.36 stay as published.
+
+**Checked.** `tests/test_static_web.py`: 33 → 55 tests. The exact test the live model wrote on rc.36 is flagged for this issue; a subpath test and an unrelated issue are not; a native pipeline run where the root-URL reply is refused before executing, the model sees the reason, and the second reply (subpath) verifies. Full suite: 502 tests pass on the Node 20 CI toolchain.
+
+**Not covered.** No live run on rc.37. This does not make the model write a correct test; it removes one way the engine itself steered it wrong and one refusal that taught it nothing. The valid-test rate on static pages is still unmeasured.
+
 ## v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
 
 The first live `static-web` run on rc.35 (Tabloop #2, `eef15ec1-proof.json`) passed everything rc.35 added (runtime detected, `npm ci`, baseline `# tests 1`, discovery probe found) and ended `no_reproduction` after three identical failures. Every generated test died at load time, inside the project's jsdom:
