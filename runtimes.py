@@ -213,10 +213,63 @@ def imports_bare_jsdom(content: str) -> bool:
     ))
 
 
-_JSDOM_LOADER = (
-    "import { createRequire } from 'node:module'; "
-    "const { JSDOM } = createRequire('/opt/patchproof/node/package.json')('jsdom');"
+# rc.35: a generated static-web test used to be told to load jsdom from a path inside the sandbox
+# image, and the engine then refused any test containing that path as "sandbox-only". Every
+# static-web test was refused before it ran. The test now imports the engine's portable loader,
+# which ships with the test (like the Web Streams helper) and uses the repository's own jsdom.
+JSDOM_HELPER = "./patchproof_helpers/jsdom.mjs"
+_JSDOM_LOADER = f"import {{ JSDOM }} from '{JSDOM_HELPER}';"
+
+# The exact loader line the pre-rc.35 prompt required (any spacing, with or without the semicolon).
+_LEGACY_JSDOM_LOADER = re.compile(
+    r"""\bconst\s*\{\s*JSDOM\s*\}\s*=\s*createRequire\(\s*['"]/opt/patchproof/node/package\.json['"]\s*\)"""
+    r"""\(\s*['"]jsdom['"]\s*\)\s*;?"""
 )
+
+
+def canonicalize_static_web_test(content: str) -> str:
+    """Rewrite the legacy sandbox-path jsdom loader to the portable helper import.
+
+    Only that one statement is touched. Whatever else the test imports stays as written, and an
+    unused `createRequire` import left behind is harmless.
+    """
+    return _LEGACY_JSDOM_LOADER.sub(_JSDOM_LOADER, content)
+
+
+def mentions_sandbox_path(content: str) -> bool:
+    """True when a test names a location inside the sandbox image."""
+    return "/opt/patchproof/" in content or "/patchproof/" in content
+
+
+def static_web_project_problems(root: Path) -> list[str]:
+    """Why a static site cannot take a delivered regression, from its package.json alone.
+
+    The regression is a `.test.mjs` file that imports jsdom. For ordinary CI to run it, and for it
+    to pass anywhere but the sandbox, the project must have a `test` script and must declare jsdom.
+    A missing test script or a missing jsdom declaration would deliver a test nothing runs, or one
+    that fails on the first checkout. Whether the script really runs a new test file is checked
+    separately, in the sandbox, with a planted probe.
+    """
+    manifest = root / "package.json"
+    if not manifest.is_file():
+        return ["there is no package.json: add one with a `test` script that runs the generated "
+                "tests, for example \"test\": \"node --test\" (it finds *.test.mjs files by itself), and jsdom as a devDependency"]
+    try:
+        package = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        return [f"package.json cannot be read: {error}"]
+    package = package if isinstance(package, dict) else {}
+    problems: list[str] = []
+    scripts = package.get("scripts")
+    if not (isinstance(scripts, dict) and isinstance(scripts.get("test"), str) and scripts["test"].strip()):
+        problems.append("package.json has no `test` script, so ordinary CI would never run the generated test; "
+                        "add \"test\": \"node --test\", which finds *.test.mjs files by itself and passes while there are none")
+    declared = any(isinstance(package.get(section), dict) and "jsdom" in package[section]
+                   for section in ("dependencies", "devDependencies", "optionalDependencies"))
+    if not declared:
+        problems.append("jsdom is not declared in package.json, so the delivered test would fail on a fresh "
+                        "checkout; add it with `npm install --save-dev jsdom`")
+    return problems
 
 
 # --------------------------------------------------------------------------- #
@@ -980,9 +1033,16 @@ class RuntimeAdapter:
                 )
             if self.id == "static-web" and imports_bare_jsdom(content):
                 problems.append(
-                    "jsdom is not installed in the repository, so importing it by name "
-                    "fails with ERR_MODULE_NOT_FOUND. Load the preinstalled copy exactly "
-                    "like this instead: " + _JSDOM_LOADER
+                    "Importing jsdom by name can fail with ERR_MODULE_NOT_FOUND where the "
+                    "repository's dependencies are not installed. Load it through the portable "
+                    "helper exactly like this instead: " + _JSDOM_LOADER
+                )
+            elif self.id == "static-web" and mentions_sandbox_path(content):
+                # Before rc.35 the prompt asked for a sandbox path and the run ended on it.
+                # A model that still writes one gets the replacement line and a retry.
+                problems.append(
+                    "The test names a path inside the sandbox image, which does not exist in the "
+                    "repository. Remove it and load jsdom exactly like this instead: " + _JSDOM_LOADER
                 )
             if problems:
                 raise ValueError(" ".join(problems))
@@ -1736,6 +1796,20 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
 
     if requested in (None, "static-web") and has_html:
         entry = "index.html" if (root / "index.html").is_file() else "src/index.html"
+        # rc.35: the syntax check never runs a test file, so on its own it can never satisfy the
+        # ordinary-CI discovery gate. When the project has a test script, that script is part of
+        # the baseline (as for node-package), and its dependencies are installed first.
+        baseline = f"node /patchproof/static_web_check.mjs {entry}"
+        bootstrap = "true"
+        manager = None
+        if (root / "package.json").is_file():
+            try:
+                scripts = (json.loads((root / "package.json").read_text(encoding="utf-8")) or {}).get("scripts")
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                scripts = None
+            if isinstance(scripts, dict) and isinstance(scripts.get("test"), str):
+                project_baseline, bootstrap, manager = _node_baseline(root)
+                baseline = f"{baseline} && {project_baseline}"
         return RuntimeAdapter(
             id="static-web",
             display_name="Static HTML / CSS / JavaScript",
@@ -1745,16 +1819,20 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             context_extensions=frozenset({".html", ".css", ".js", ".mjs", ".cjs"}),
             context_names=frozenset(),
             test_suffix=".test.mjs",
-            baseline_command=f"node /patchproof/static_web_check.mjs {entry}",
-            bootstrap_command="true",
+            baseline_command=baseline,
+            bootstrap_command=bootstrap,
             preflight_command="node --version && node -e \"require('/opt/patchproof/node/node_modules/jsdom')\"",
+            **({"package_manager": manager.name, "package_manager_version": manager.version,
+                "package_manager_notes": manager.notes} if manager else {}),
             verifier_guidance=(
                 "Return one offline node:test regression using node:assert/strict for this static web app. "
                 "The assertion must exercise observable behavior in actual repository code and must fail "
                 "on the supplied unfixed revision. Do not merely inspect source text or copy/reimplement "
                 "the application algorithm inside the test. Use "
-                "the real DOM via preinstalled jsdom: import {createRequire} from 'node:module'; "
-                "const {JSDOM} = createRequire('/opt/patchproof/node/package.json')('jsdom'); "
+                "the real DOM via jsdom, loaded only through the portable helper: "
+                "import { JSDOM } from './patchproof_helpers/jsdom.mjs'; "
+                "(the path is relative to the test file and the engine adds the helper beside it; "
+                "never import 'jsdom' by name and never write a path inside the sandbox image). "
                 "Load the actual HTML from disk and exercise its functions/events. Set "
                 "url: 'https://patchproof.invalid/' to enable localStorage without an opaque origin; "
                 "this URL does not require a network request. Use runScripts: 'outside-only' "

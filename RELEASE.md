@@ -1,3 +1,33 @@
+# PatchProof v0.6.0-rc.35 — the static-web adapter can complete a run
+
+rc.35 is rc.34 plus one fix, for one adapter. Tabloop #2 showed that `static-web` could never finish a run: its prompt required a sandbox-only jsdom path and the engine refused any test containing it, and its baseline never ran a test. Details and the offline evidence are in `CHANGELOG.md`. No live run covers rc.35. **A new tag is needed** (the engine changed), and it is the one the fresh-set run should record.
+
+## Upload
+
+1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative: it contains the fresh-set tooling, the run guide and the rc.35 change, so it replaces the earlier zips. `RC35-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
+2. Commit to `main`, let **Engine Checks** finish (it now also installs jsdom and exposes it at `/opt/patchproof/node`), then publish the tag `v0.6.0-rc.35`.
+3. Nothing changes for `node-typescript` repositories except the version in the workflow pin: `creatoropener/shadow-patch@v0.6.0-rc.35`.
+
+## To run a static site (Tabloop)
+
+The repository needs four things, all small. `docs/RUN_GUIDE.md` has the reasoning.
+
+| Where | Change |
+| --- | --- |
+| `patchproof.json` | `{"runtime": "static-web"}` |
+| `package.json` | `"scripts": {"test": "node --test"}` (not `node --test *.test.mjs`: on Node 20 that fails while no test file exists) |
+| `package.json` | `npm install --save-dev jsdom`, and commit `package.json` and `package-lock.json` |
+| `tsconfig.json` | delete it, or keep it correct: `"checkJs": flase` made `tsc` fail in the first Tabloop run, and with `static-web` selected explicitly nothing needs it |
+| workflow | add `image-static-web: ${{ secrets.CONTREE_IMAGE_STATIC_WEB }}` under `uses:`, with a `CONTREE_IMAGE_STATIC_WEB` secret from **Prepare Sandbox Image** (profile `web` or `all`) |
+
+Before labeling the issue, run `CI=1 npm test` under Node 20: it should pass and report `# tests 0`. The engine checks the same thing in the sandbox and stops with `readiness_blocked` before any model request if it fails.
+
+## What to send back
+
+`proof.json` and `engine-stderr.txt`. If it verifies, the pull request contains the fix, `test_patchproof_issue_<n>.test.mjs` and `patchproof_helpers/jsdom.mjs`. If it stops before inference, `outcome.detail` names what to change. If the model writes a test that does not reproduce, that is new information about the model, not about this fix.
+
+---
+
 # After rc.34 — manifest update, no new tag: file-sharing-app-1 gets a base whose `npm test` discovers a TypeScript test
 
 The rc.34 engine is unchanged and stays current. This update changes `bench/manifest.json` (the pin for `file-sharing-app-1`), one test, three docs and the checksum list. The benchmark workflow takes its manifest from the ref it is started on and its engine from the tag, so **no new tag is needed**.

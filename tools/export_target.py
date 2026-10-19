@@ -13,6 +13,7 @@ FILES = (
     "patchproof_runtime/static_web_check.mjs",
     "patchproof_runtime/web_streams.mjs",
     "patchproof_runtime/web_streams.d.mts",
+    "patchproof_runtime/jsdom.mjs",
     "patchproof_runtime/typescript_config.py",
     "patchproof_runtime/pytest_check.py",
     "patchproof_runtime/candidate_policy.mjs",

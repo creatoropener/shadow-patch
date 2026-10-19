@@ -25,7 +25,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from runtimes import (
-    RuntimeAdapter, RuntimeDetectionError, detect_runtime, missing_node_test_imports, resolve_project_root,
+    JSDOM_HELPER, RuntimeAdapter, RuntimeDetectionError, canonicalize_static_web_test, detect_runtime,
+    missing_node_test_imports, resolve_project_root, static_web_project_problems,
 )
 from scope_policy import CONFIG_ROOT, load_scope, check_paths, node_payload
 from agent_budget import ACTIVE_BUDGET, COMPLETION_CAP, AgentStop, BudgetExhausted, BudgetedState, Limits, RunBudget, SessionStalled, integer
@@ -37,10 +38,14 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.34"
+APP_VERSION = "0.6.0-rc.35"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
+# rc.35: planted in a static-web project before any inference to prove its own test command runs a new test file.
+STATIC_WEB_PROBE_MARKER = "PATCHPROOF_DISCOVERY_PROBE_FAILS"
+STATIC_WEB_PROBE = ("import test from 'node:test';\n"
+                    f"test('{STATIC_WEB_PROBE_MARKER}', () => {{ throw new Error('{STATIC_WEB_PROBE_MARKER}'); }});\n")
 REPORT_MARKDOWN = "verification-report.md"
 MAX_CONTEXT_CHARS = 200_000
 MAX_FILE_CHARS = 120_000
@@ -712,6 +717,9 @@ Do not use Markdown fences."""
         raise
     # Canonicalize legacy helper imports before validation and before hashing.
     test_content = test_content.replace("file:///patchproof/web_streams.mjs", "./patchproof_helpers/web_streams.mjs")
+    if adapter.id == "static-web":
+        # rc.35: the loader line the pre-rc.35 prompt asked for becomes the portable helper import.
+        test_content = canonicalize_static_web_test(test_content)
     try:
         adapter.validate_generated_test(test_content, test_path)
         # rc.24: reject a test that matches error wording the issue never states.
@@ -1680,12 +1688,15 @@ def run_candidate_source_check(
 def support_files(test_path: str, content: str) -> list[dict[str, str]]:
     if "/patchproof/" in content or "/opt/patchproof/" in content:
         raise PatchProofError("Regression uses a sandbox-only dependency; use repository dependencies and portable relative imports.")
-    if "./patchproof_helpers/web_streams.mjs" not in content:
-        return []
+    names: list[str] = []
+    if "./patchproof_helpers/web_streams.mjs" in content:
+        names += ["web_streams.mjs", "web_streams.d.mts"]
+    if JSDOM_HELPER in content:
+        names.append("jsdom.mjs")
     helper_root = Path(__file__).resolve().parent / "patchproof_runtime"
     return [{"path": (Path(test_path).parent / "patchproof_helpers" / name).as_posix(),
              "content": (helper_root / name).read_text(encoding="utf-8")}
-            for name in ("web_streams.mjs", "web_streams.d.mts")]
+            for name in names]
 
 
 def candidate_policy_check(state: Any, root: Path, changes: list[dict], scope: dict) -> dict:
@@ -2243,6 +2254,12 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
         adapter = detect_runtime(root)
     except RuntimeDetectionError as error:
         raise PatchProofError(str(error)) from error
+    if adapter.id == "static-web":
+        # rc.35: stop before any sandbox or model cost when the project cannot take a delivered test.
+        problems = static_web_project_problems(root)
+        if problems:
+            raise PatchProofError("A static-web project needs a test command and jsdom before Shadow Patch can "
+                                  "deliver a regression: " + "; ".join(problems) + ".")
     bounded = proof["agent_mode"] == "bounded"
     if bounded and adapter.id != "node-typescript":
         raise AgentStop("blocked_setup", "The bounded profile currently requires node-typescript; choose legacy for another runtime.")
@@ -2379,6 +2396,26 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                                      "baseline_output": short_output(project_result)}
             if not source_check_enabled:
                 raise PatchProofError(f"Required baseline TypeScript check is {status}.")
+
+        if adapter.id == "static-web":
+            # rc.35: the project's own test command must run a test file the engine adds. Plant one that
+            # always fails and require its marker, before any inference is spent. (The generated test
+            # gets the same check later, but by then a model request has been paid for.)
+            proof["stage"] = "baseline"
+            probe_path = (Path(test_path).parent / "test_patchproof_probe.test.mjs").as_posix()
+            probed = apply_contents(baseline_suite, [{"path": probe_path, "content": STATIC_WEB_PROBE}]).run(
+                shell=adapter.baseline_command, cwd="/workspace/repo", timeout=600, disposable=False,
+            ).wait()
+            found = probed.exit_code != 0 and STATIC_WEB_PROBE_MARKER in text_output(probed)
+            proof["baseline"]["discovery_probe"] = {"path": probe_path, "discovered": found,
+                                                     "exit_code": probed.exit_code}
+            if not found:
+                raise PatchProofError(
+                    f"The project's test command (`{adapter.baseline_command}`) did not run a test file placed at "
+                    f"{probe_path}, so ordinary CI would never run the generated regression. Make the `test` script "
+                    "run `*.test.mjs` files in that folder, for example \"test\": \"node --test\" (it finds them by itself; "
+                    "a quoted or unmatched glob such as \"node --test *.test.mjs\" fails on Node 20 while no test file exists)."
+                )
 
         if os.environ.get("PATCHPROOF_READINESS_ONLY", "").strip().lower() in {"1", "true", "yes"}:
             # rc.30: report readiness without a model request. Everything above (runtime, install,

@@ -194,13 +194,15 @@ class RecordedHeldout2TestsMissImports(unittest.TestCase):
                 content = (FIX / name).read_text(encoding="utf-8")
                 with self.assertRaises(ValueError) as caught:
                     adapter.validate_generated_test(content, "test_patchproof_issue_2.test.mjs")
-                self.assertIn(
-                    "createRequire('/opt/patchproof/node/package.json')('jsdom')", str(caught.exception))
+                # rc.35: the replacement is the portable helper, not a path inside the sandbox image.
+                self.assertIn("import { JSDOM } from './patchproof_helpers/jsdom.mjs';", str(caught.exception))
+                self.assertNotIn("/opt/patchproof", str(caught.exception))
 
     def test_the_same_test_with_its_imports_added_is_accepted(self):
         adapter = static_adapter()
         content = (FIX / "rc24_heldout2_t1_a3.test.mjs").read_text(encoding="utf-8")
-        fixed = "import { it } from 'node:test';\n" + content
+        # Generation canonicalizes the legacy sandbox-path jsdom loader (rc.35) before validating.
+        fixed = runtimes.canonicalize_static_web_test("import { it } from 'node:test';\n" + content)
         adapter.validate_generated_test(fixed, "test_patchproof_issue_2.test.mjs")
         adapter.validate_generated_pins(fixed, HELDOUT_2_ISSUE)
 

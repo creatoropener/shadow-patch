@@ -15,7 +15,7 @@ Start with section 1. If the issue does not fit, nothing in sections 2 to 4 will
 | A TypeScript function that returns a wrong value for given inputs | `node-typescript` | `spec` | Best fit. Recorded on the engine's two development repositories. |
 | TypeScript/Node behavior across several modules, testable offline with `node:test` | `node-typescript` | `freeform` (default) | Recorded on development cases. The verifier is the weak point on unseen repositories. |
 | A plain JavaScript Node package (no `tsconfig.json`) | `node-package` | `freeform` | Recorded for the v0.5.5 repair only. |
-| JavaScript behavior of a static site (menu toggle, form, storage) | `static-web` | `freeform` | Experimental. Uses jsdom. Needs a project-owned test command first. |
+| JavaScript or HTML behavior of a static site (menu toggle, form action, storage) | `static-web` | `freeform` | Works from rc.35 when the project meets the checklist in section 2 (a `node --test` script and jsdom declared). Validated offline only; no live Nebius run covers it, and it never completed one on rc.34 or earlier. Uses jsdom, so it cannot see layout. |
 | CSS, layout, responsive or visual behavior | `web-playwright` (real browser) | `freeform` | Adapter exists, no live evidence. `static-web` cannot see layout: jsdom does not evaluate media queries. |
 | Python, Go, Rust, Java | their own adapters | `freeform` | Experimental. |
 | "Add authentication", "redesign X", or anything with no concrete input and output | none | none | Stops `needs_specification` under `spec`; under `freeform` the model writes tests that mock the code under test. |
@@ -79,6 +79,30 @@ python3 tools/preflight_base.py --path . --module src/foo.ts --export fooFn
 stops before the first model request, but it is a command-line flag only: the Action does not expose it, and
 it does not check that the image contains `typescript` (section 4).
 
+### Static site (`static-web`, rc.35 or newer)
+
+A plain HTML/CSS/JS site is tested in jsdom with `node:test`. The engine delivers the regression as a
+`.test.mjs` file plus a small helper, so the project has to be able to run it:
+
+1. **`patchproof.json` says `{"runtime": "static-web"}`.** A project with a `package.json` is otherwise
+   detected as `node-package`. Delete any `tsconfig.json` you only added to get a runtime.
+2. **`package.json` has `"test": "node --test"`.** Plain `node --test` finds `*.test.mjs` files by itself and
+   passes while there are none. `node --test *.test.mjs` does not: with no matching file, Node 20 receives
+   the literal pattern and fails, so the baseline fails before any model call. A script that only reads
+   another folder is caught too (item 4).
+3. **jsdom is declared:** `npm install --save-dev jsdom`, and commit `package.json` and the lockfile. The
+   delivered test imports jsdom through `patchproof_helpers/jsdom.mjs`, which uses the project's own copy.
+   Without a declaration the test would pass in the sandbox and fail on a fresh checkout, so the run stops
+   first.
+4. **A new `*.test.mjs` in the repository root (or `test_directory`) is run by `npm test`.** The engine plants
+   an always-failing probe test there before any model request and requires `npm test` to run it. A stub
+   such as `echo ok` fails this check.
+5. **Pass the image.** The example workflow passes only the TypeScript image. Add
+   `image-static-web: ${{ secrets.CONTREE_IMAGE_STATIC_WEB }}` (or use `sandbox-image`), built with
+   **Prepare Sandbox Image** profile `web` or `all`.
+6. **The issue is about behavior jsdom can show:** an attribute, a DOM change after an event, text, storage.
+   Not layout, media queries, scrolling or visual state.
+
 ## 3. Write the issue the verifier can test
 
 Say what happens, what should happen, in which file and function, and what must **not** change. Then give
@@ -137,6 +161,9 @@ Open `proof.json` and read `outcome.bucket`, `outcome.stage` and `error` before 
 | `readiness_blocked`, "Ordinary project CI did not reproduce the frozen regression" | `npm test` does not run the file the engine placed, or does not fail on it. | Item 4: glob, `tests/` convention, or `test_directory`. |
 | `compatibility_coverage` warning, "did not report a passed-test count" | The baseline runs no tests. | Item 3. |
 | `verifier_invalid`, "TypeScript lint tooling unavailable" | The sandbox image has no `typescript`. | Section 4: rebuild the image, update the secret. |
+| `readiness_blocked`, stage `runtime-detection`, "A static-web project needs a test command and jsdom" | No `test` script, no `package.json`, or jsdom not declared. | Static-web checklist items 2 and 3. |
+| `readiness_blocked`, stage `baseline`, "did not run a test file placed at" | `npm test` does not run a new `*.test.mjs` in that folder (a stub, or a script that reads another folder). | Static-web checklist items 2 and 4. |
+| `verifier_invalid`, "Regression uses a sandbox-only dependency" | rc.34 or earlier on `static-web`: the adapter's own prompt required a sandbox path and the engine refused it. | Use rc.35 or newer. On rc.35 a model that still writes a sandbox path gets a retryable message, not a stop. |
 | `verifier_invalid`, other messages | The generated test was refused before it ran; `generation_attempts[].diagnostic` says why. | Read it; usually the issue is too vague. |
 | `no_reproduction`, test output shows an `error:` and no assertion | The test hit the network, a missing secret or an import it cannot load. | Item 6 or 7: aim at a pure, importable function. |
 | `needs_specification` | The issue states no expected values for calls. | Section 3. |
@@ -152,6 +179,7 @@ the one thing the table names before you re-run; re-running unchanged repeats th
 | Repository | What was wrong | What a fitting setup would look like |
 | --- | --- | --- |
 | Tabloop #1 (mobile "Back Home" link) | `"checkJs": flase` in `tsconfig.json`; no `.ts` files; `npm test` is `echo ... && exit 0`; `patchproof.json` forces `node-typescript`; the bug is a CSS layout problem. | Not a candidate for `node-typescript` or `static-web`. A layout bug needs `web-playwright` (unproven), a real test command and no `tsconfig.json`. |
+| Tabloop #2 (root-absolute form action) | The repository was fine for the runtime. On rc.34 the model wrote a sound jsdom test, exactly as the adapter's prompt asked, and the engine refused it before it ran because it contained `/opt/patchproof/`. | Fixed in the engine in rc.35 (replayed offline, see the changelog). To run it: rc.35 pin, `"test": "node --test"`, `npm install --save-dev jsdom`, and `image-static-web` in the workflow. |
 | PlanMorph #1 (ownership checks) | No concrete inputs and outputs; the first image lacked `typescript`. | Not a candidate until the issue states inputs and expected results. |
 | PlanMorph #2 (eligibility) | The model tested `chat()`, which calls the Anthropic API, so every test died on `invalid x-api-key`; it also asserted a sentence that appears nowhere in the code. | Issue aimed at the pure functions in `policy.js`, with calls and expected values written out. |
 
