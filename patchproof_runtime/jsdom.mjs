@@ -29,7 +29,7 @@ function load() {
     if (!notFound(error)) throw error;
   }
   throw new Error(
-    'jsdom is required by this test but is not installed. Add it to the project: npm install --save-dev jsdom',
+    'jsdom is required by this test but is not installed. Add it to the project: npm install --save-dev jsdom@24.1.3',
   );
 }
 

@@ -38,12 +38,29 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.35"
+APP_VERSION = "0.6.0-rc.36"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
 # rc.35: planted in a static-web project before any inference to prove its own test command runs a new test file.
 STATIC_WEB_PROBE_MARKER = "PATCHPROOF_DISCOVERY_PROBE_FAILS"
+# rc.36: the project's own jsdom has to load under the sandbox's Node before any inference is spent.
+# On Tabloop (rc.35 run) the lockfile had resolved jsdom 30, whose undici 8 does not load on Node 20,
+# so every generated test died on `createZstdDecompress.bind` before it asserted anything and the
+# run was spent on three attempts with identical output.
+STATIC_WEB_JSDOM_OK = "PATCHPROOF_JSDOM_OK"
+STATIC_WEB_JSDOM_FAIL = "PATCHPROOF_JSDOM_FAIL"
+STATIC_WEB_JSDOM_PROBE = (
+    "node -e '"
+    "const fs=require(\"fs\"),path=require(\"path\");"
+    "let v=\"unknown\";"
+    "try{v=JSON.parse(fs.readFileSync(path.join(process.cwd(),\"node_modules\",\"jsdom\",\"package.json\"),\"utf8\")).version}catch(e){}"
+    "try{const {JSDOM}=require(\"jsdom\");new JSDOM(\"<p>x</p>\");"
+    f"console.log(\"{STATIC_WEB_JSDOM_OK} \"+v+\" \"+process.version)}}"
+    "catch(e){"
+    f"console.log(\"{STATIC_WEB_JSDOM_FAIL} \"+v+\" \"+process.version+\" \"+(e&&e.code||\"-\")+\" \"+String(e&&e.message||e).split(\"\\n\")[0].slice(0,160));"
+    "process.exit(3)}'"
+)
 STATIC_WEB_PROBE = ("import test from 'node:test';\n"
                     f"test('{STATIC_WEB_PROBE_MARKER}', () => {{ throw new Error('{STATIC_WEB_PROBE_MARKER}'); }});\n")
 REPORT_MARKDOWN = "verification-report.md"
@@ -2398,6 +2415,36 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                 raise PatchProofError(f"Required baseline TypeScript check is {status}.")
 
         if adapter.id == "static-web":
+            # rc.36: the jsdom the project installed must load under the sandbox's Node.
+            proof["stage"] = "baseline"
+            jsdom_run = baseline_suite.run(shell=STATIC_WEB_JSDOM_PROBE, cwd="/workspace/repo", timeout=120,
+                                           disposable=False).wait()
+            jsdom_text = text_output(jsdom_run)
+            jsdom_line = next((line.strip() for line in jsdom_text.splitlines()
+                               if line.strip().startswith((STATIC_WEB_JSDOM_OK, STATIC_WEB_JSDOM_FAIL))), "")
+            jsdom_loaded = jsdom_run.exit_code == 0 and jsdom_line.startswith(STATIC_WEB_JSDOM_OK)
+            fields = jsdom_line.split(None, 4)
+            proof["baseline"]["jsdom_probe"] = {
+                "loaded": jsdom_loaded,
+                "jsdom_version": fields[1] if len(fields) > 1 else None,
+                "node_version": fields[2] if len(fields) > 2 else None,
+                "detail": jsdom_line or short_output(jsdom_run),
+            }
+            if not jsdom_loaded:
+                version = fields[1] if len(fields) > 1 else "unknown"
+                node_version = fields[2] if len(fields) > 2 else "the sandbox's Node"
+                reason = fields[4] if len(fields) > 4 else (jsdom_line or "no output")
+                if "MODULE_NOT_FOUND" in jsdom_line:
+                    raise PatchProofError(
+                        "jsdom is declared in package.json but was not installed by `npm ci`, so a generated test "
+                        "would fail on a fresh checkout. Run `npm install --save-dev jsdom@24.1.3` and commit "
+                        "package.json and package-lock.json.")
+                raise PatchProofError(
+                    f"The jsdom installed in the project ({version}) cannot be loaded by Node {node_version} in the "
+                    f"sandbox ({reason}). Any generated test would stop on that error before it asserts anything, so "
+                    "no model request was made. jsdom 30 and newer need Node 22; pin a version that loads on Node 20 "
+                    "and commit the lockfile: `npm install --save-dev jsdom@24.1.3`.")
+
             # rc.35: the project's own test command must run a test file the engine adds. Plant one that
             # always fails and require its marker, before any inference is spent. (The generated test
             # gets the same check later, but by then a model request has been paid for.)

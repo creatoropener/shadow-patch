@@ -1,4 +1,4 @@
-"""rc.35: the static-web adapter can complete a run.
+"""rc.35 and rc.36: the static-web adapter can complete a run.
 
 Before rc.35 every static-web run died the same way. The adapter's prompt told the model to load jsdom from
 a path inside the sandbox image, and `support_files` then refused any test containing that path (a plain
@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 
 import proof
 import runtimes
@@ -217,7 +218,7 @@ class HelperResolutionTests(unittest.TestCase):
         source = (ROOT / "patchproof_runtime/jsdom.mjs").read_text(encoding="utf-8").replace(
             "/opt/patchproof/node/package.json", "/nonexistent/package.json")
         out = self.run_helper(Path(tempfile.mkdtemp()), source)
-        self.assertIn("npm install --save-dev jsdom", out)
+        self.assertIn("npm install --save-dev jsdom@24.1.3", out)
 
     def test_an_unrelated_error_is_not_swallowed_as_not_installed(self):
         folder = Path(tempfile.mkdtemp())
@@ -225,6 +226,90 @@ class HelperResolutionTests(unittest.TestCase):
         (folder / "node_modules/jsdom/package.json").write_text('{"name":"jsdom","main":"index.js"}')
         (folder / "node_modules/jsdom/index.js").write_text("throw new Error('broken install');")
         self.assertIn("broken install", self.run_helper(folder))
+
+
+NODE = __import__("shutil").which("node")
+
+# The error the live Tabloop run died on (eef15ec1-proof.json, rc.35): jsdom 30 depends on undici 8, which
+# reads `zlib.createZstdDecompress` when it loads, and Node 20 does not have it.
+UNDICI_ON_NODE20 = ("const zlib = require('node:zlib');"
+                    "const table = { zstd: zlib.createZstdDecompress.bind(null, {}) };")
+
+
+def fake_project(*, version: str | None, index_js: str | None) -> Path:
+    folder = Path(tempfile.mkdtemp(prefix="fakejsdom-"))
+    if version is not None:
+        (folder / "node_modules/jsdom").mkdir(parents=True)
+        (folder / "node_modules/jsdom/package.json").write_text(
+            json.dumps({"name": "jsdom", "version": version, "main": "index.js"}))
+        (folder / "node_modules/jsdom/index.js").write_text(index_js or "")
+    return folder
+
+
+@unittest.skipUnless(NODE, "requires node")
+class JsdomLoadProbeTests(unittest.TestCase):
+    """The command the engine runs in the sandbox, before any model request, against real Node."""
+
+    def probe(self, folder: Path):
+        run = subprocess.run(proof.STATIC_WEB_JSDOM_PROBE, shell=True, cwd=folder, capture_output=True, text=True)
+        line = next((l for l in run.stdout.splitlines() if l.startswith("PATCHPROOF_JSDOM_")), "")
+        return run.returncode, line
+
+    def test_a_jsdom_that_loads_is_reported_with_its_version(self):
+        code, line = self.probe(fake_project(version="24.1.3", index_js="exports.JSDOM = class { constructor() {} };"))
+        self.assertEqual(code, 0)
+        self.assertTrue(line.startswith("PATCHPROOF_JSDOM_OK 24.1.3 v"), line)
+
+    def test_the_tabloop_crash_is_caught(self):
+        code, line = self.probe(fake_project(version="30.1.3", index_js=UNDICI_ON_NODE20))
+        self.assertNotEqual(code, 0)
+        self.assertTrue(line.startswith("PATCHPROOF_JSDOM_FAIL 30.1.3 v"), line)
+
+    def test_a_missing_jsdom_is_caught(self):
+        code, line = self.probe(fake_project(version=None, index_js=None))
+        self.assertNotEqual(code, 0)
+        self.assertIn("MODULE_NOT_FOUND", line)
+
+    def test_a_constructor_that_throws_is_caught(self):
+        code, line = self.probe(fake_project(version="1.0.0", index_js="exports.JSDOM = class { constructor() { throw new Error('boom'); } };"))
+        self.assertNotEqual(code, 0)
+        self.assertIn("boom", line)
+
+
+class GeneratedTestGlobalsTests(unittest.TestCase):
+    """A .mjs test that uses CommonJS-only names stops with a ReferenceError before it asserts anything."""
+
+    DIRNAME_TEST = PORTABLE_MODEL_TEST.replace("join(process.cwd(), 'index.html')", "join(__dirname, 'index.html')")
+
+    def test_dirname_in_an_es_module_is_found(self):
+        self.assertEqual(runtimes.commonjs_globals_used(self.DIRNAME_TEST), ["__dirname"])
+
+    def test_the_live_rc35_test_is_found(self):
+        live = ("import path from 'node:path';\nconst root = path.resolve(__dirname, '..');\n"
+                "const f = path.join(__filename);\nconst x = require('fs');\n")
+        self.assertEqual(runtimes.commonjs_globals_used(live), ["__dirname", "__filename", "require"])
+
+    def test_a_test_that_defines_them_is_not_flagged(self):
+        defined = ("import { fileURLToPath } from 'node:url';\nimport path from 'node:path';\n"
+                   "const __dirname = path.dirname(fileURLToPath(import.meta.url));\n"
+                   "import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\n"
+                   "const x = require('fs'); path.join(__dirname, 'x');\n")
+        self.assertEqual(runtimes.commonjs_globals_used(defined), [])
+
+    def test_the_portable_test_is_not_flagged(self):
+        self.assertEqual(runtimes.commonjs_globals_used(PORTABLE_MODEL_TEST), [])
+        self.assertEqual(runtimes.commonjs_globals_used("const a = obj.require('x'); myrequire('y'); import.meta.dirname;"), [])
+
+    def test_the_validator_asks_the_model_to_retry_with_the_replacement(self):
+        adapter = detect_runtime(site(GOOD))
+        with self.assertRaises(ValueError) as caught:
+            adapter.validate_generated_test(self.DIRNAME_TEST, "test_patchproof_issue_2.test.mjs")
+        message = str(caught.exception)
+        self.assertIn("`__dirname`", message)
+        self.assertIn("new URL('./index.html', import.meta.url)", message)
+
+    def test_the_prompt_says_it_up_front(self):
+        self.assertIn("__dirname", detect_runtime(site(GOOD)).verifier_guidance)
 
 
 @unittest.skipUnless(pipeline.available() and SANDBOX_JSDOM.is_dir(),
@@ -315,6 +400,56 @@ class NativePipelineTests(unittest.TestCase):
         proof.finalize_proof(record)
         self.assertEqual(record["outcome"]["bucket"], "readiness_blocked")
         self.assertTrue(record["readiness"]["before_inference"])
+
+    def test_a_jsdom_that_cannot_load_stops_before_any_model_request(self):
+        # The Tabloop rc.35 run: tests discovered, baseline green, then every generated test died inside jsdom.
+        broken = fake_project(version="30.1.3", index_js=UNDICI_ON_NODE20)
+        with unittest.mock.patch.object(proof, "STATIC_WEB_JSDOM_PROBE", f"cd {broken} && {proof.STATIC_WEB_JSDOM_PROBE}"):
+            result, record, error, calls = self.run_site(GOOD, PORTABLE_MODEL_TEST)
+        self.assertIsNone(result)
+        self.assertIn("jsdom installed in the project (30.1.3)", str(error))
+        self.assertIn("jsdom@24.1.3", str(error))
+        self.assertEqual(calls, [])
+        self.assertFalse(record["baseline"]["jsdom_probe"]["loaded"])
+        self.assertEqual(record["baseline"]["jsdom_probe"]["jsdom_version"], "30.1.3")
+        record["error"] = str(error)
+        proof.finalize_proof(record)
+        self.assertEqual(record["outcome"]["bucket"], "readiness_blocked")
+        self.assertTrue(record["readiness"]["before_inference"])
+
+    def test_a_declared_but_missing_jsdom_stops_before_any_model_request(self):
+        missing = fake_project(version=None, index_js=None)
+        with unittest.mock.patch.object(proof, "STATIC_WEB_JSDOM_PROBE", f"cd {missing} && {proof.STATIC_WEB_JSDOM_PROBE}"):
+            result, record, error, calls = self.run_site(GOOD, PORTABLE_MODEL_TEST)
+        self.assertIn("was not installed by `npm ci`", str(error))
+        self.assertEqual(calls, [])
+
+    def test_a_working_jsdom_is_recorded(self):
+        result, record, error, calls = self.run_site(GOOD, PORTABLE_MODEL_TEST)
+        self.assertIsNone(error)
+        probe = result["baseline"]["jsdom_probe"]
+        self.assertTrue(probe["loaded"])
+        self.assertTrue(probe["node_version"].startswith("v"))
+
+    def test_a_dirname_test_gets_a_retry_with_the_fix_instead_of_a_wasted_run(self):
+        # The live rc.35 test used path.resolve(__dirname, '..'); the second reply is the corrected one.
+        bad = PORTABLE_MODEL_TEST.replace("join(process.cwd(), 'index.html')", "join(__dirname, '..', 'index.html')")
+        replies = iter([bad, PORTABLE_MODEL_TEST])
+        base, checkout = self.project(GOOD)
+        seen = []
+
+        def model_text(**kwargs):
+            seen.append(kwargs)
+            body = next(replies)
+            return (f"{proof.TEST_BEGIN}\n{body}\n{proof.TEST_END}\n"
+                    f"{proof.RATIONALE_BEGIN}\nThe form action must resolve under the deploy path.\n{proof.RATIONALE_END}")
+
+        candidate = lambda **k: ([{"path": "index.html", "content": INDEX_AFTER}], "relative form action")
+        result, record, error = pipeline.run_engine(base, checkout, checkout, ISSUE, "unused", candidate, model_text=model_text)
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("attempts"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(seen), 2)
+        self.assertIn("__dirname", json.dumps(seen[1], default=str))
 
     def test_a_test_that_passes_on_the_unfixed_page_is_still_not_reproduction(self):
         passing = PORTABLE_MODEL_TEST.replace("`${baseUrl}thank-you.html`", "'https://patchproof.invalid/thank-you.html'")

@@ -241,6 +241,29 @@ def mentions_sandbox_path(content: str) -> bool:
     return "/opt/patchproof/" in content or "/patchproof/" in content
 
 
+_ESM_GLOBALS = ("__dirname", "__filename")
+
+
+def commonjs_globals_used(content: str) -> list[str]:
+    """Names a generated `.mjs` test uses that only exist in CommonJS, and never defines itself.
+
+    In an ES module `__dirname`, `__filename` and `require` are not defined. A test that reads the
+    page with `path.resolve(__dirname, ...)` dies with a ReferenceError before it asserts anything,
+    which the engine can only report as "failed without accepted assertion evidence".
+    """
+    found: list[str] = []
+    for name in _ESM_GLOBALS:
+        used = re.search(rf"(?<![\w$.]){name}\b", content)
+        defined = re.search(rf"\b(?:const|let|var|function)\s+{name}\b", content)
+        if used and not defined:
+            found.append(name)
+    if (re.search(r"(?<![\w$.])require\s*\(", content)
+            and "createRequire" not in content
+            and not re.search(r"\b(?:const|let|var|function)\s+require\b", content)):
+        found.append("require")
+    return found
+
+
 def static_web_project_problems(root: Path) -> list[str]:
     """Why a static site cannot take a delivered regression, from its package.json alone.
 
@@ -268,7 +291,8 @@ def static_web_project_problems(root: Path) -> list[str]:
                    for section in ("dependencies", "devDependencies", "optionalDependencies"))
     if not declared:
         problems.append("jsdom is not declared in package.json, so the delivered test would fail on a fresh "
-                        "checkout; add it with `npm install --save-dev jsdom`")
+                        "checkout; add it with `npm install --save-dev jsdom@24.1.3` (a version that loads on the "
+                        "sandbox's Node 20; jsdom 30 and newer need Node 22)")
     return problems
 
 
@@ -1044,6 +1068,16 @@ class RuntimeAdapter:
                     "The test names a path inside the sandbox image, which does not exist in the "
                     "repository. Remove it and load jsdom exactly like this instead: " + _JSDOM_LOADER
                 )
+            if self.id == "static-web":
+                missing_globals = commonjs_globals_used(content)
+                if missing_globals:
+                    problems.append(
+                        "The test is an ES module (.mjs), where " + ", ".join(f"`{n}`" for n in missing_globals)
+                        + " is not defined, so it would stop with a ReferenceError before asserting anything. "
+                        "Read the page with fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8'); the "
+                        "test file is saved in the repository root, next to index.html (use './src/index.html' "
+                        "when the page lives in src/). Do not use path.resolve(__dirname, ...)."
+                    )
             if problems:
                 raise ValueError(" ".join(problems))
 
@@ -1841,6 +1875,9 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "or modify the test/application files. Select UI modes through actual DOM events; "
                 "top-level let/const bindings are not window properties. Stub only unavailable external "
                 "APIs, never the application behavior under test. "
+                "The test file is an ES module saved in the repository root next to index.html: __dirname, __filename "
+                "and require are not defined, so read files with "
+                "fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8'). "
                 "jsdom is not a real browser: layout/canvas/visual behavior requires Playwright."
             ),
             solver_guidance=(

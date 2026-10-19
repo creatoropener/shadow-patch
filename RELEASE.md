@@ -1,12 +1,40 @@
-# PatchProof v0.6.0-rc.35 — the static-web adapter can complete a run
+# PatchProof v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
+
+The Tabloop #2 run on rc.35 (`eef15ec1-proof.json`) got further than any static-web run before it: tests discovered, baseline green, three generated tests. Then all three died inside the project's own jsdom. The lockfile had resolved **jsdom 30**, whose `undici` 8 dependency reads `zlib.createZstdDecompress` when it loads; the sandbox runs Node 20, which does not have it. The run spent three model requests on a failure that no test could have avoided. The setup instructions in `docs/RUN_GUIDE.md` and this file said `npm install --save-dev jsdom`, which installs the newest jsdom, so the cause was partly the guide. rc.36 fixes the engine and the guide. No live run covers rc.36. **A new tag is needed.** rc.35 stays as published; do not move it.
+
+## Upload
+
+1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative (fresh-set tooling, run guide, rc.35 and rc.36) and replaces the earlier zips. `RC36-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
+2. Commit to `main`, let **Engine Checks** finish, then publish the tag `v0.6.0-rc.36`, and use `creatoropener/shadow-patch@v0.6.0-rc.36` in the workflow.
+
+## For Tabloop, right now (works with the rc.35 tag too)
+
+The run does not depend on the new engine to get past this crash. Pin the project's jsdom:
+
+```
+npm install --save-dev jsdom@24.1.3
+git add package.json package-lock.json && git commit -m "Pin jsdom to a version that loads on Node 20"
+```
+
+Check under Node 20 that `node -e "require('jsdom')"` prints nothing, and that `CI=1 npm test` still passes. With rc.36 the engine runs the same check in the sandbox before the model is called and says what to change if it fails.
+
+What rc.36 also changes: a generated test that uses `__dirname`, `__filename` or `require` (all three live tests did) is sent back to the model once with the replacement (`new URL('./index.html', import.meta.url)`), and the prompt now says so up front. Without this a correctly pinned run would still have stopped on `ReferenceError: __dirname is not defined`.
+
+## What to send back
+
+`proof.json` and `engine-stderr.txt`. `baseline.jsdom_probe` in the proof records the jsdom and Node versions the engine saw.
+
+---
+
+## (superseded by rc.36 above) PatchProof v0.6.0-rc.35 — the static-web adapter can complete a run
 
 rc.35 is rc.34 plus one fix, for one adapter. Tabloop #2 showed that `static-web` could never finish a run: its prompt required a sandbox-only jsdom path and the engine refused any test containing it, and its baseline never ran a test. Details and the offline evidence are in `CHANGELOG.md`. No live run covers rc.35. **A new tag is needed** (the engine changed), and it is the one the fresh-set run should record.
 
 ## Upload
 
 1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative: it contains the fresh-set tooling, the run guide and the rc.35 change, so it replaces the earlier zips. `RC35-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
-2. Commit to `main`, let **Engine Checks** finish (it now also installs jsdom and exposes it at `/opt/patchproof/node`), then publish the tag `v0.6.0-rc.35`.
-3. Nothing changes for `node-typescript` repositories except the version in the workflow pin: `creatoropener/shadow-patch@v0.6.0-rc.35`.
+2. Commit to `main`, let **Engine Checks** finish (it now also installs jsdom and exposes it at `/opt/patchproof/node`), then publish the tag `v0.6.0-rc.36`.
+3. Nothing changes for `node-typescript` repositories except the version in the workflow pin: `creatoropener/shadow-patch@v0.6.0-rc.36`.
 
 ## To run a static site (Tabloop)
 
@@ -16,7 +44,7 @@ The repository needs four things, all small. `docs/RUN_GUIDE.md` has the reasoni
 | --- | --- |
 | `patchproof.json` | `{"runtime": "static-web"}` |
 | `package.json` | `"scripts": {"test": "node --test"}` (not `node --test *.test.mjs`: on Node 20 that fails while no test file exists) |
-| `package.json` | `npm install --save-dev jsdom`, and commit `package.json` and `package-lock.json` |
+| `package.json` | `npm install --save-dev jsdom@24.1.3` (not a bare `npm install --save-dev jsdom`: jsdom 30 and newer need Node 22), and commit `package.json` and `package-lock.json` |
 | `tsconfig.json` | delete it, or keep it correct: `"checkJs": flase` made `tsc` fail in the first Tabloop run, and with `static-web` selected explicitly nothing needs it |
 | workflow | add `image-static-web: ${{ secrets.CONTREE_IMAGE_STATIC_WEB }}` under `uses:`, with a `CONTREE_IMAGE_STATIC_WEB` secret from **Prepare Sandbox Image** (profile `web` or `all`) |
 

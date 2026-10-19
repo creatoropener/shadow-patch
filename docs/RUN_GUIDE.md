@@ -15,7 +15,7 @@ Start with section 1. If the issue does not fit, nothing in sections 2 to 4 will
 | A TypeScript function that returns a wrong value for given inputs | `node-typescript` | `spec` | Best fit. Recorded on the engine's two development repositories. |
 | TypeScript/Node behavior across several modules, testable offline with `node:test` | `node-typescript` | `freeform` (default) | Recorded on development cases. The verifier is the weak point on unseen repositories. |
 | A plain JavaScript Node package (no `tsconfig.json`) | `node-package` | `freeform` | Recorded for the v0.5.5 repair only. |
-| JavaScript or HTML behavior of a static site (menu toggle, form action, storage) | `static-web` | `freeform` | Works from rc.35 when the project meets the checklist in section 2 (a `node --test` script and jsdom declared). Validated offline only; no live Nebius run covers it, and it never completed one on rc.34 or earlier. Uses jsdom, so it cannot see layout. |
+| JavaScript or HTML behavior of a static site (menu toggle, form action, storage) | `static-web` | `freeform` | Works from rc.36 when the project meets the checklist in section 2 (a `node --test` script and jsdom declared). Validated offline only; no live Nebius run covers it, and it never completed one on rc.34 or earlier. Uses jsdom, so it cannot see layout. |
 | CSS, layout, responsive or visual behavior | `web-playwright` (real browser) | `freeform` | Adapter exists, no live evidence. `static-web` cannot see layout: jsdom does not evaluate media queries. |
 | Python, Go, Rust, Java | their own adapters | `freeform` | Experimental. |
 | "Add authentication", "redesign X", or anything with no concrete input and output | none | none | Stops `needs_specification` under `spec`; under `freeform` the model writes tests that mock the code under test. |
@@ -79,7 +79,7 @@ python3 tools/preflight_base.py --path . --module src/foo.ts --export fooFn
 stops before the first model request, but it is a command-line flag only: the Action does not expose it, and
 it does not check that the image contains `typescript` (section 4).
 
-### Static site (`static-web`, rc.35 or newer)
+### Static site (`static-web`, rc.36 or newer)
 
 A plain HTML/CSS/JS site is tested in jsdom with `node:test`. The engine delivers the regression as a
 `.test.mjs` file plus a small helper, so the project has to be able to run it:
@@ -90,10 +90,15 @@ A plain HTML/CSS/JS site is tested in jsdom with `node:test`. The engine deliver
    passes while there are none. `node --test *.test.mjs` does not: with no matching file, Node 20 receives
    the literal pattern and fails, so the baseline fails before any model call. A script that only reads
    another folder is caught too (item 4).
-3. **jsdom is declared:** `npm install --save-dev jsdom`, and commit `package.json` and the lockfile. The
-   delivered test imports jsdom through `patchproof_helpers/jsdom.mjs`, which uses the project's own copy.
-   Without a declaration the test would pass in the sandbox and fail on a fresh checkout, so the run stops
-   first.
+3. **jsdom is declared, and pinned to a version that loads on Node 20:**
+   `npm install --save-dev jsdom@24.1.3`, and commit `package.json` and the lockfile. **Do not run a bare
+   `npm install --save-dev jsdom`**: it installs the newest jsdom, and jsdom 30 and newer need Node 22.
+   Under the sandbox's Node 20 they crash while loading (`createZstdDecompress.bind`, from their `undici`
+   dependency), so every generated test dies before it asserts anything. That is what stopped the
+   Tabloop rc.35 run; rc.36 checks for it before any model request. The delivered test imports jsdom through
+   `patchproof_helpers/jsdom.mjs`, which uses the project's own copy. Without a declaration the test would pass
+   in the sandbox and fail on a fresh checkout, so the run stops first.
+   You can check it yourself: under Node 20, `node -e "require('jsdom')"` must print nothing.
 4. **A new `*.test.mjs` in the repository root (or `test_directory`) is run by `npm test`.** The engine plants
    an always-failing probe test there before any model request and requires `npm test` to run it. A stub
    such as `echo ok` fails this check.
@@ -163,7 +168,10 @@ Open `proof.json` and read `outcome.bucket`, `outcome.stage` and `error` before 
 | `verifier_invalid`, "TypeScript lint tooling unavailable" | The sandbox image has no `typescript`. | Section 4: rebuild the image, update the secret. |
 | `readiness_blocked`, stage `runtime-detection`, "A static-web project needs a test command and jsdom" | No `test` script, no `package.json`, or jsdom not declared. | Static-web checklist items 2 and 3. |
 | `readiness_blocked`, stage `baseline`, "did not run a test file placed at" | `npm test` does not run a new `*.test.mjs` in that folder (a stub, or a script that reads another folder). | Static-web checklist items 2 and 4. |
-| `verifier_invalid`, "Regression uses a sandbox-only dependency" | rc.34 or earlier on `static-web`: the adapter's own prompt required a sandbox path and the engine refused it. | Use rc.35 or newer. On rc.35 a model that still writes a sandbox path gets a retryable message, not a stop. |
+| `readiness_blocked`, stage `baseline`, "The jsdom installed in the project (...) cannot be loaded by Node ..." | The lockfile resolved a jsdom that needs a newer Node than the sandbox's Node 20 (jsdom 30 and newer). | Static-web checklist item 3: `npm install --save-dev jsdom@24.1.3`, commit the lockfile. |
+| `readiness_blocked`, stage `baseline`, "was not installed by `npm ci`" | jsdom is declared (for example as an optional dependency) but is not in `node_modules` after the install. | Same command; commit both files. |
+| `verifier_invalid`, "The test is an ES module (.mjs), where `__dirname` is not defined" | The model wrote a CommonJS idiom. The engine sends the replacement and retries; this only stops a run if all three attempts repeat it. | Nothing to change in the repository. |
+| `verifier_invalid`, "Regression uses a sandbox-only dependency" | rc.34 or earlier on `static-web`: the adapter's own prompt required a sandbox path and the engine refused it. | Use rc.35 or newer. On rc.35 and newer a model that still writes a sandbox path gets a retryable message, not a stop. |
 | `verifier_invalid`, other messages | The generated test was refused before it ran; `generation_attempts[].diagnostic` says why. | Read it; usually the issue is too vague. |
 | `no_reproduction`, test output shows an `error:` and no assertion | The test hit the network, a missing secret or an import it cannot load. | Item 6 or 7: aim at a pure, importable function. |
 | `needs_specification` | The issue states no expected values for calls. | Section 3. |
@@ -179,7 +187,7 @@ the one thing the table names before you re-run; re-running unchanged repeats th
 | Repository | What was wrong | What a fitting setup would look like |
 | --- | --- | --- |
 | Tabloop #1 (mobile "Back Home" link) | `"checkJs": flase` in `tsconfig.json`; no `.ts` files; `npm test` is `echo ... && exit 0`; `patchproof.json` forces `node-typescript`; the bug is a CSS layout problem. | Not a candidate for `node-typescript` or `static-web`. A layout bug needs `web-playwright` (unproven), a real test command and no `tsconfig.json`. |
-| Tabloop #2 (root-absolute form action) | The repository was fine for the runtime. On rc.34 the model wrote a sound jsdom test, exactly as the adapter's prompt asked, and the engine refused it before it ran because it contained `/opt/patchproof/`. | Fixed in the engine in rc.35 (replayed offline, see the changelog). To run it: rc.35 pin, `"test": "node --test"`, `npm install --save-dev jsdom`, and `image-static-web` in the workflow. |
+| Tabloop #2 (root-absolute form action) | Two runs, two different engine defects. **rc.34:** the model wrote a sound jsdom test, exactly as the adapter's prompt asked, and the engine refused it because it contained `/opt/patchproof/`. **rc.35:** the setup passed (baseline green, discovery probe found) but the lockfile had resolved jsdom 30, which crashes on load under Node 20, so all three generated tests died on `createZstdDecompress.bind`; the tests also used `__dirname`, which does not exist in an ES module. The unpinned `npm install --save-dev jsdom` in this guide caused the first of those. | Fixed in rc.36: jsdom load is checked before any model request, the guide pins `jsdom@24.1.3`, and a test that uses `__dirname` is sent back with the replacement. To run it: rc.36 pin, `"test": "node --test"`, `npm install --save-dev jsdom@24.1.3`, and `image-static-web` in the workflow. Replayed offline only; no live run covers rc.36. |
 | PlanMorph #1 (ownership checks) | No concrete inputs and outputs; the first image lacked `typescript`. | Not a candidate until the issue states inputs and expected results. |
 | PlanMorph #2 (eligibility) | The model tested `chat()`, which calls the Anthropic API, so every test died on `invalid x-api-key`; it also asserted a sentence that appears nowhere in the code. | Issue aimed at the pure functions in `policy.js`, with calls and expected values written out. |
 

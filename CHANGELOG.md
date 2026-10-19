@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
+
+The first live `static-web` run on rc.35 (Tabloop #2, `eef15ec1-proof.json`) passed everything rc.35 added (runtime detected, `npm ci`, baseline `# tests 1`, discovery probe found) and ended `no_reproduction` after three identical failures. Every generated test died at load time, inside the project's jsdom:
+
+```
+node_modules/undici/lib/interceptor/decompress.js:78
+  zstd: createZstdDecompress.bind(null, ...)
+TypeError: Cannot read properties of undefined (reading 'bind')
+```
+
+- **Cause, reproduced.** The project's lockfile had resolved jsdom 30, which depends on undici 8; undici 8 reads `zlib.createZstdDecompress` on load, and Node 20.19.2 (the sandbox's Node) has no such function. Reproduced here with a clean `npm install jsdom@30.1.3` under Node 20.19.2: same stack, same line. jsdom 24.1.3, 25, 26, 27, 28.1.0 and 29.1.1 load on Node 20; 30.0.0 and 30.1.3 do not (jsdom 30 declares Node `^22.22.2 || ^24.15.0 || >=26`). I could not reproduce it with any undici 7.x.
+- **The guide caused it.** `docs/RUN_GUIDE.md`, `RELEASE.md` and the validator messages said `npm install --save-dev jsdom`, which installs the newest jsdom. rc.35 testing used jsdom 24.1.3 only (the sandbox copy), so the replay never met the version a real project would resolve. That was the gap.
+- **A second defect hid behind it.** All three generated tests read the page with `path.resolve(__dirname, '..')`. In an ES module `__dirname` is not defined, and `..` from the repository root is the wrong folder anyway. With a loadable jsdom the run would have stopped on `ReferenceError`, again reported only as "failed without accepted assertion evidence".
+- **New check before inference** (`proof.py`, `STATIC_WEB_JSDOM_PROBE`): in the sandbox, from the repository, load `jsdom` and construct a `JSDOM`. On failure the run stops with `readiness_blocked` (stage `baseline`, `before_inference` true) and a message naming the installed jsdom version, the Node version and the fix (`npm install --save-dev jsdom@24.1.3`). A jsdom that is declared but missing after `npm ci` is reported separately; this closes the "declared but never installed" limit listed under rc.35. The result is recorded in `baseline.jsdom_probe` (`loaded`, `jsdom_version`, `node_version`, `detail`).
+- **No silent fallback.** The helper (`patchproof_runtime/jsdom.mjs`) still uses the sandbox copy only when the project has no jsdom at all, and still lets a broken project jsdom fail loudly. Falling back would make the sandbox pass on a jsdom that a Node 20 CI cannot load, which is exactly the sandbox/checkout difference the helper exists to remove.
+- **ES-module globals** (`runtimes.py`, `commonjs_globals_used`): a static-web test that uses `__dirname`, `__filename` or `require` without defining them is refused by the validator with the replacement (`fs.readFileSync(new URL('./index.html', import.meta.url), 'utf8')`) and retried; the prompt says so up front. All three live tests are caught by it.
+- **Guidance pinned.** Every instruction, message and doc now says `npm install --save-dev jsdom@24.1.3`.
+- **Version.** `APP_VERSION`, the example workflow pin, the benchmark default engine and the README are 0.6.0-rc.36. rc.35 stays as published.
+
+**Checked.** `tests/test_static_web.py` grows from 33 to 47 tests: the probe command against a fake jsdom that throws the exact undici error, a working one, a missing one and a throwing constructor, run under real Node; native pipeline runs where a broken jsdom stops before the first model request and buckets as `readiness_blocked`, where a working jsdom is recorded, and where a `__dirname` test gets a retry and then verifies. The probe command was also run on real installs under Node 20.19.2 (30.1.3 fails; 24.1.3 and 28.1.0 pass).
+
+**Not covered.** No live Nebius run on rc.36. The sandbox's Node 20.19.2 is taken from the Tabloop proof (`preflight_output`); if the image changes, the probe reports whatever Node it finds. jsdom 24.1.3 was tested against the Tabloop page only. The model can still write a test that is wrong in other ways; this release only removes two failures that were not the model's.
+
 ## v0.6.0-rc.35 — the static-web adapter can complete a run (and nothing else changes)
 
 Tabloop #2 on rc.34 was the first `static-web` run with a correct setup, and it showed that the adapter could never complete one. The model followed the adapter's own prompt, which required `createRequire('/opt/patchproof/node/package.json')('jsdom')`, and `support_files` in `proof.py` then raised `Regression uses a sandbox-only dependency` for any test containing `/opt/patchproof/`. That error is a plain `PatchProofError`, outside the retry loop, so the run ended with `attempts: []` and the test never executed. Behind it was a second defect: the adapter's baseline, `node /patchproof/static_web_check.mjs index.html`, is a syntax check that runs no test file, so the ordinary-CI discovery gate (rc.25) had nothing that could run and fail the frozen test. The earlier "held-out 0/3 on static-web" result is consistent with this, but those runs were not re-read.
