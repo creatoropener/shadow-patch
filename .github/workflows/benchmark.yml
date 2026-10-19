@@ -9,7 +9,7 @@ on:
       engines:
         description: 'Engine tag(s) to benchmark, comma-separated, e.g. v0.6.0-rc.20 or v0.6.0-rc.19,v0.6.0-rc.20'
         required: true
-        default: v0.6.0-rc.36
+        default: v0.6.0-rc.37
       trials:
         description: 'Trials per case and engine (1 to 5)'
         required: true
