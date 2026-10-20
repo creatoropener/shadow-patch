@@ -267,6 +267,11 @@ def commonjs_globals_used(content: str) -> list[str]:
 _SERVED_PATH_ISSUE = re.compile(
     r"sub[-\s]?(?:path|director(?:y|ies)|folder)|base[-\s](?:path|url|href)|path[-\s]prefix|"
     r"deploy(?:ed|ment|s)?\s+(?:path|under|to\s+a|at\s+a)|\bstaging\b|\bGitHub Pages\b", re.I)
+# rc.38: the root url only hides the bug when the assertion reads a *resolved* address (`form.action`,
+# `a.href`, `location.href`). A test that reads the raw attribute (`getAttribute('action')`) can fail at the
+# root, and the live Tabloop rc.36 run verified exactly such a test, so refusing it would have been wrong.
+_RESOLVED_ADDRESS_READ = re.compile(
+    r"\.(?:action|href|src|formAction)\b(?!\s*=(?!=))|\blocation\.(?:href|pathname)\b")
 _ROOT_JSDOM_URL = re.compile(r"""\burl\s*:\s*['"`]https?://[^/'"`\s]+/?['"`]""")
 
 
@@ -275,9 +280,11 @@ def root_url_for_served_path_issue(content: str, issue_text: str) -> bool:
 
     From the root, a root-absolute link (`/thank-you.html`) and a relative one (`thank-you.html`)
     resolve to the same address, so no assertion on the resolved value can fail on the unfixed page.
-    The first Tabloop rc.36 run built three tests that way and none could reproduce the issue.
+    The first Tabloop rc.36 run built two tests that way and neither could reproduce the issue. A test that
+    reads the raw attribute instead (`getAttribute('action')`) is not refused: it can fail at the root.
     """
-    return bool(_SERVED_PATH_ISSUE.search(issue_text) and _ROOT_JSDOM_URL.search(content))
+    return bool(_SERVED_PATH_ISSUE.search(issue_text) and _ROOT_JSDOM_URL.search(content)
+                and _RESOLVED_ADDRESS_READ.search(content))
 
 
 def static_web_project_problems(root: Path) -> list[str]:

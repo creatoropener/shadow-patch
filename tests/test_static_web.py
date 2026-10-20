@@ -1,4 +1,4 @@
-"""rc.35 to rc.37: the static-web adapter can complete a run.
+"""rc.35 to rc.38: the static-web adapter can complete a run.
 
 Before rc.35 every static-web run died the same way. The adapter's prompt told the model to load jsdom from
 a path inside the sandbox image, and `support_files` then refused any test containing that path (a plain
@@ -250,6 +250,20 @@ test('contact form action resolves correctly relative to base URL', async () => 
   assert.strictEqual(form.action, 'https://patchproof.invalid/thank-you.html');
 });
 """
+# The test that verified on the live rc.36 run (1b9026a3-proof_tabloop__2_.json), unchanged: root url, but it
+# reads the raw attribute, so it fails on the unfixed page. It pins the literal 'thank-you.html'.
+RC36_ATTRIBUTE_TEST = """import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { JSDOM } from './patchproof_helpers/jsdom.mjs';
+import { readFileSync } from 'node:fs';
+
+test('contact form submission targets correct relative path', async () => {
+  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+  const dom = new JSDOM(html, { url: 'https://patchproof.invalid/', runScripts: 'outside-only' });
+  const form = dom.window.document.querySelector('form[name="tabloop-contact"]');
+  assert.strictEqual(form.getAttribute('action'), 'thank-you.html');
+});
+"""
 SERVED_PATH_ISSUE = ISSUE.title + "\n" + ISSUE.body
 
 
@@ -266,6 +280,15 @@ def fake_project(*, version: str | None, index_js: str | None) -> Path:
 class ServedPathTests(unittest.TestCase):
     def test_the_live_rc36_test_is_flagged_for_this_issue(self):
         self.assertTrue(runtimes.root_url_for_served_path_issue(RC36_ROOT_URL_TEST, SERVED_PATH_ISSUE))
+
+    def test_the_test_that_verified_live_on_rc36_is_not_refused(self):
+        # It reads the raw attribute, so a root url does not hide the bug from it.
+        self.assertFalse(runtimes.root_url_for_served_path_issue(RC36_ATTRIBUTE_TEST, SERVED_PATH_ISSUE))
+        detect_runtime(site(GOOD)).validate_generated_pins(RC36_ATTRIBUTE_TEST, SERVED_PATH_ISSUE)
+
+    def test_assigning_to_a_property_is_not_reading_a_resolved_address(self):
+        assigned = RC36_ATTRIBUTE_TEST.replace("form.getAttribute('action')", "(form.action = 'x', form.getAttribute('action'))")
+        self.assertFalse(runtimes.root_url_for_served_path_issue(assigned, SERVED_PATH_ISSUE))
 
     def test_a_subpath_url_is_accepted(self):
         self.assertFalse(runtimes.root_url_for_served_path_issue(PORTABLE_MODEL_TEST, SERVED_PATH_ISSUE))
@@ -523,6 +546,12 @@ class NativePipelineTests(unittest.TestCase):
         self.assertEqual(len(seen), 2)
         self.assertIn("where the page is served", json.dumps(seen[1], default=str))
         self.assertIn("/Tabloop/", result["regression_test"]["content"])
+
+    def test_the_live_rc36_attribute_test_verifies_through_the_whole_engine(self):
+        result, record, error, calls = self.run_site(GOOD, RC36_ATTRIBUTE_TEST)
+        self.assertIsNone(error, json.dumps(record.get("regression_test", {}).get("attempts"), default=str)[:2000])
+        self.assertEqual(result["verdict"], "verified")
+        self.assertEqual(len(calls), 1)
 
     def test_a_test_that_passes_on_the_unfixed_page_is_still_not_reproduction(self):
         passing = PORTABLE_MODEL_TEST.replace("`${baseUrl}thank-you.html`", "'https://patchproof.invalid/thank-you.html'")

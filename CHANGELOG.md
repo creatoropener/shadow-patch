@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6.0-rc.38 — the root-URL refusal only applies to tests that read a resolved address
+
+Two live runs verified after rc.37 was cut. **Tabloop #2 on rc.36** (static-web, first live success): attempts 1 and 2 read `form.action` at `https://patchproof.invalid/` and passed on the unfixed page; the model then switched to `form.getAttribute('action') === 'thank-you.html'`, which fails on the unfixed page, and all three candidates (action `/thank-you.html` to `thank-you.html`) passed clean replay. **Aegisscan #3 on rc.37** (node-typescript): one test, three candidates widening the Axios version regex to accept `0.19.2`, clean replay passed.
+
+- **Defect in rc.37's rule.** Replaying the Tabloop success through rc.37 showed that `root_url_for_served_path_issue` would have refused it (root url, issue mentions a subpath), costing retries or the run. The root URL only hides the bug from an assertion on a *resolved* address. rc.38 refuses only when the test also reads one (`.action`, `.href`, `.src`, `.formAction`, `location.href`, `location.pathname`, ignoring assignments). Both tests that failed on rc.36 read `form.action` and are still refused; the success reads `getAttribute('action')` and is not.
+- **Version.** 0.6.0-rc.38 (`APP_VERSION`, example pin, benchmark default, README). Static-web only; `node-typescript` behavior is unchanged.
+
+**Checked.** `tests/test_static_web.py` 55 → 58 tests, including the exact rc.36 success test through the whole engine (verified, one model request) and through the validator (not refused). Full suite: 505 tests pass on the Node 20 CI toolchain.
+
+**What the two successes are, and are not.**
+- The Tabloop test pins the literal `thank-you.html`. The issue asks for "a relative path that matches the rest of the project", so a correct fix such as `./thank-you.html` would fail it. It verifies the issue's stated fix, not behavior under a subpath.
+- The Aegisscan test also asserts `severity === 'HIGH'` and `cvssScore === 7.4`. The issue states neither; they presumably come from the existing rule's metadata, which the repair does not touch. A reviewer should confirm.
+- Both are the author's own repositories, and both are development cases now: Tabloop #2 was run four times across three engine releases written from its failures, and Aegisscan was used for tuning in rc.22–rc.29. Neither counts toward the unseen-repository evidence the fresh set is meant to produce.
+- The Tabloop success was on rc.36, not the current engine; rc.37/38 have not been run live on static-web.
+
 ## v0.6.0-rc.37 — a static-web test that cannot fail is refused and explained
 
 The Tabloop #2 run on rc.36 (`bec7431b-proof.json`) confirmed rc.36: jsdom 24.1.3 loaded on Node v20.19.2, baseline `# tests 1`, discovery probe found, `__dirname` no longer used. All attempts then ended `test passed on the unfixed revision`.

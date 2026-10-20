@@ -38,7 +38,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.37"
+APP_VERSION = "0.6.0-rc.38"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"

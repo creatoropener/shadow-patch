@@ -1,4 +1,12 @@
-# PatchProof v0.6.0-rc.37 — a test that cannot fail on the unfixed page is refused and explained
+# PatchProof v0.6.0-rc.38 — the rc.37 root-URL refusal no longer refuses a test that can fail
+
+Two live runs verified: Tabloop #2 on **rc.36** (`1b9026a3-proof_tabloop__2_.json`, the first live `static-web` success) and Aegisscan #3 on rc.37 (`8cf46a25-proof_Aegis.json`, `node-typescript`, so unaffected by rc.37's static-web changes). Replaying the Tabloop test through rc.37 showed a false positive in the rule rc.37 added: it refused any root-URL test for an issue that mentions a subpath, including the test that verified on rc.36. That test reads the raw attribute (`form.getAttribute('action')`), which fails at the root without any URL path. rc.38 limits the refusal to tests that read a *resolved* address (`.action`, `.href`, `.src`, `location.href`), the only kind a root URL hides. The two tests that failed on rc.36 (`form.action` at the root) are still refused.
+
+Upload and tag steps are as in the sections below, with `RC38-CHANGES.json` and the tag `v0.6.0-rc.38`. Nothing changes for `node-typescript` runs except the version string. **Freeze the engine at rc.38 for the fresh-set run** and record it.
+
+---
+
+## (superseded by rc.38 above) PatchProof v0.6.0-rc.37 — a test that cannot fail on the unfixed page is refused and explained
 
 The Tabloop #2 run on rc.36 (`bec7431b-proof.json`) is the first static-web run that got everything right on the setup side: jsdom 24.1.3 loaded on Node v20.19.2 (`baseline.jsdom_probe`), the baseline was green, the probe test was found, and the generated tests ran. It ended `no_reproduction` because every test created the page at `https://patchproof.invalid/`. At the host root a root-absolute action (`/thank-you.html`) and a relative one (`thank-you.html`) resolve to the same address, so no assertion on the resolved action can fail on the unfixed page. That was the engine's doing: the adapter's prompt said to set `url: 'https://patchproof.invalid/'`. On rc.34 the model had happened to use `/Tabloop/` and got a sound test. The retry feedback also told the model to use `doesNotReject`, which means nothing for a DOM test, and it repeated the same test.
 
@@ -20,7 +28,7 @@ The Tabloop #2 run on rc.35 (`eef15ec1-proof.json`) got further than any static-
 
 ## Upload
 
-1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative (fresh-set tooling, run guide, rc.35 and rc.36) and replaces the earlier zips. `RC37-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
+1. Extract **shadow-patch-fresh-set-and-run-guide.zip** into the root of **shadow-patch**, preserving paths. It is cumulative (fresh-set tooling, run guide, rc.35 and rc.36) and replaces the earlier zips. `RC38-CHANGES.json` lists every file with its hash and its hash in the uploaded rc.34 tree.
 2. Commit to `main`, let **Engine Checks** finish, then publish the tag `v0.6.0-rc.36`, and use `creatoropener/shadow-patch@v0.6.0-rc.36` in the workflow.
 
 ## For Tabloop, right now (works with the rc.35 tag too)
