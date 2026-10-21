@@ -1,3 +1,16 @@
+# PatchProof v0.6.0-rc.39 — a transient Sandbox API failure is retried and is not reported as a readiness block
+
+A file-sharing-app run on rc.38 stopped at `runtime-preflight` with `ApiStatusCodeError ... GET /sandboxes/v1/files/<sha> ... status=500`: the Nebius Sandbox API failed while the engine uploaded its helper files. Nothing was wrong with the repository, the issue or the engine's logic, but the engine had no retry and the outcome said `readiness_blocked`.
+
+rc.39 changes two things and nothing else:
+
+- the three setup steps (workspace upload, dependency install, toolchain preflight) are retried twice, after 5 s and 15 s, when the Sandbox API answers 5xx, 408 or 429 or times out. Ordinary errors, 4xx answers and failed commands are not retried;
+- a run that still ends on such an error is bucketed `infrastructure_error`, not `readiness_blocked` or a failed repair, so it does not count against the repository in a report.
+
+Not covered: later steps (candidate evaluation, clean replay) are not retried, and a Sandbox API error there is still recorded as it was. **A new tag is needed**; the workflow pin is `creatoropener/shadow-patch@v0.6.0-rc.39`. If rc.38 is already published and a relabel works, rc.39 is optional resilience, not a fix for any other result.
+
+---
+
 # PatchProof v0.6.0-rc.38 — the rc.37 root-URL refusal no longer refuses a test that can fail
 
 Two live runs verified: Tabloop #2 on **rc.36** (`1b9026a3-proof_tabloop__2_.json`, the first live `static-web` success) and Aegisscan #3 on rc.37 (`8cf46a25-proof_Aegis.json`, `node-typescript`, so unaffected by rc.37's static-web changes). Replaying the Tabloop test through rc.37 showed a false positive in the rule rc.37 added: it refused any root-URL test for an issue that mentions a subpath, including the test that verified on rc.36. That test reads the raw attribute (`form.getAttribute('action')`), which fails at the root without any URL path. rc.38 limits the refusal to tests that read a *resolved* address (`.action`, `.href`, `.src`, `location.href`), the only kind a root URL hides. The two tests that failed on rc.36 (`form.action` at the root) are still refused.

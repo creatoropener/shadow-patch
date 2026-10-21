@@ -38,7 +38,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.38"
+APP_VERSION = "0.6.0-rc.39"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1790,6 +1790,41 @@ def short_output(state: Any, limit: int = 4_000) -> str:
     return value if len(value) <= limit else value[-limit:]
 
 
+SANDBOX_RETRY_DELAYS = (5.0, 15.0)
+
+
+def sandbox_error_is_transient(error: BaseException) -> bool:
+    """A server-side or transport failure of the Sandbox API itself (rc.39).
+
+    Says nothing about the repository, the test or the repair. Matched by attribute and class
+    name so it does not depend on importing the SDK.
+    """
+    status = getattr(error, "status", None)
+    if isinstance(status, int) and (status >= 500 or status in (408, 429)):
+        return True
+    names = {cls.__name__ for cls in type(error).__mro__}
+    return bool(names & {"ApiTimeoutError", "ContreeTransportError"})
+
+
+def sandbox_retry(action, label: str):
+    """Run one idempotent Sandbox step, retrying transient API failures twice (5 s, then 15 s).
+
+    A step builds a new immutable state from the previous one, so repeating it has no side effect.
+    The Tabloop-style `GET /v1/files/<sha>` HTTP 500 during workspace setup ended a demo run on the
+    first failure before this existed.
+    """
+    for attempt in range(len(SANDBOX_RETRY_DELAYS) + 1):
+        try:
+            return action()
+        except Exception as error:  # noqa: BLE001 - only the Sandbox API's own transient failures are retried
+            if attempt >= len(SANDBOX_RETRY_DELAYS) or not sandbox_error_is_transient(error):
+                raise
+            delay = SANDBOX_RETRY_DELAYS[attempt]
+            print(f"Sandbox API failure during {label} ({type(error).__name__}, status {getattr(error, 'status', None)}); "
+                  f"retrying in {delay:.0f}s ({attempt + 1}/{len(SANDBOX_RETRY_DELAYS)}).", file=sys.stderr)
+            time.sleep(delay)
+
+
 def sandbox_workspace(
     base_image: Any, archive_path: Path, adapter: RuntimeAdapter, root: Path
 ) -> Any:
@@ -1803,7 +1838,7 @@ def sandbox_workspace(
     for helper in helpers.values():
         if not helper.is_file():
             raise PatchProofError(f"Incomplete PatchProof installation: missing {helper.name}")
-    state = base_image.run(
+    state = sandbox_retry(lambda: base_image.run(
         shell="set -eu; mkdir -p /workspace/repo /patchproof; tar -xzf /repo.tar.gz -C /workspace/repo",
         files={
             "/repo.tar.gz": archive_path,
@@ -1811,28 +1846,28 @@ def sandbox_workspace(
         },
         timeout=180,
         disposable=False,
-    ).wait()
+    ).wait(), "workspace upload")
     if state.exit_code != 0:
         raise PatchProofError(f"Sandbox workspace setup failed:\n{short_output(state)}")
 
-    prepared = state.run(
+    prepared = sandbox_retry(lambda: state.run(
         shell=f"set -eu; {adapter.bootstrap_command}",
         cwd="/workspace/repo",
         timeout=900,
         disposable=False,
-    ).wait()
+    ).wait(), "dependency install")
     if prepared.exit_code != 0:
         raise PatchProofError(
             f"Runtime dependency preparation failed for {adapter.id}:\n"
             f"{short_output(prepared)}"
         )
 
-    checked = prepared.run(
+    checked = sandbox_retry(lambda: prepared.run(
         shell=f"set -eu; {adapter.preflight_command}",
         cwd="/workspace/repo",
         timeout=180,
         disposable=False,
-    ).wait()
+    ).wait(), "toolchain preflight")
     if checked.exit_code != 0:
         raise PatchProofError(
             f"Runtime preflight failed for {adapter.id}:\n{short_output(checked)}"

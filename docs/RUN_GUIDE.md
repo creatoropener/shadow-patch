@@ -167,6 +167,7 @@ Open `proof.json` and read `outcome.bucket`, `outcome.stage` and `error` before 
 | What you see | Cause | Fix |
 | --- | --- | --- |
 | `readiness_blocked`, stage `baseline-source-check`, "Required baseline TypeScript check is failed" | The project does not type-check. `source_check.baseline_output` names the compiler line. | Fix `tsconfig.json` or the code (item 2). |
+| `readiness_blocked`, stage `baseline-source-check`, `source_check.baseline_output` shows `Cannot find module 'file:///patchproof/web_streams.mjs'` in a `test_patchproof_issue_<n>.test.ts` | A regression delivered by an engine before rc.25 is merged in your repository and imports a path that exists only in the sandbox. It is outside `tests/`, so `npm test` never ran it, but `tsc` includes it. Seen on file-sharing-app after the merged issue #3 repair. | Copy `patchproof_runtime/web_streams.mjs` and `web_streams.d.mts` to `patchproof_helpers/` beside that test, change the import to `./patchproof_helpers/web_streams.mjs`, or delete the file. Check `npx tsc -p . --noEmit`. |
 | `readiness_blocked`, "Ordinary project CI did not reproduce the frozen regression" | `npm test` does not run the file the engine placed, or does not fail on it. | Item 4: glob, `tests/` convention, or `test_directory`. |
 | `compatibility_coverage` warning, "did not report a passed-test count" | The baseline runs no tests. | Item 3. |
 | `verifier_invalid`, "TypeScript lint tooling unavailable" | The sandbox image has no `typescript`. | Section 4: rebuild the image, update the secret. |

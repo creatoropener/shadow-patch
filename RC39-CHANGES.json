@@ -1,0 +1,122 @@
+{
+  "release": "0.6.0-rc.39",
+  "baseline_kind": "rc.34 tree plus the manifest pin, as uploaded 2026-10-17 (shadow-patch-main.zip); cumulative, includes rc.35 to rc.38",
+  "deleted_files": [],
+  "files": [
+    {
+      "path": ".github/workflows/benchmark.yml",
+      "sha256": "7bb99415875b98c2298296ccf8f71618a8e1c4f1f08b45fcd9c476def3fc457c",
+      "baseline_sha256": "8ba4670450884028b7eef4fc60a56a8c08ae5362b5fcbd7ba557eec886610b1b"
+    },
+    {
+      "path": ".github/workflows/engine-checks.yml",
+      "sha256": "93a12de8e4f88b0345e874bae4cbe2dfe3f6f017d9f5c5da80372a677b9d716b",
+      "baseline_sha256": "e2f2ac2c29a8b0432419733c370f86837fee605a6823b898e7beba2acfb39ccf"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "3a188a640ca080ba8c24e3c409ff8196f70bdabb3ad9ecf48aa74212fda5d0a6",
+      "baseline_sha256": "a397478ba52a805333158ec8a33a391a05d85acdf9d737646c9826e260ac7905"
+    },
+    {
+      "path": "README.md",
+      "sha256": "d0f4c4f6f3135ad6fee44e848875bf0e541f91d57fa36e267cf51c3a814a68f9",
+      "baseline_sha256": "cb55cc2d3f8e8b1129995dfcab4cd80951941cbff7098c0e5e2d9656fc1d6ebf"
+    },
+    {
+      "path": "RELEASE.md",
+      "sha256": "1ae87a58db01e12b29ece844daf374e9ba1d654946bd29ecefe0d8f9cd634a69",
+      "baseline_sha256": "f4452df80ea6fa6244ae199b0efe80707ab843c681b3044741ed9036eda51f7b"
+    },
+    {
+      "path": "bench/issues/fresh-overlaykit-1.md",
+      "sha256": "c2c8f442aaf2f66b9e8b07ceb4b56572c0b40a0ea6c4d3f6d401dc6452abd44d",
+      "baseline_sha256": null
+    },
+    {
+      "path": "bench/manifest.json",
+      "sha256": "b863b7d222219279d824dbfe5be44297b7a9b177882df3752008f068b5e5922d",
+      "baseline_sha256": "4007875521d92bccfe000b7773f15d9e39669a687ea90645345abb6bbcdfaa74"
+    },
+    {
+      "path": "docs/ACTION.md",
+      "sha256": "8c295bee5638a665e1c495609a43e5e89cc0602d6f9e5fed185ffdf7d0699ace",
+      "baseline_sha256": "e268f872e9a35b62320d4afad183cb5e23b43a306e6d34fbac568444cac1177d"
+    },
+    {
+      "path": "docs/COMPATIBILITY.md",
+      "sha256": "4ce866dfeb7c51d10534e35facaeff0ff03491bd9c5f380f827027ccc1ca7954",
+      "baseline_sha256": "287fbe193aa72ee846e269e7e0e78fdb09de9ba7270d12be0c3f4f9471d8b317"
+    },
+    {
+      "path": "docs/FRESH_SET.md",
+      "sha256": "f397ed5bb07c8c920666b17552ecf136030306bc595dc5285bfb922fb6a4119f",
+      "baseline_sha256": null
+    },
+    {
+      "path": "docs/RUN_GUIDE.md",
+      "sha256": "c0a4f4fed31d3a5fb913edfdd0df4599aaadbb709f67774d38e83b716f08c93c",
+      "baseline_sha256": null
+    },
+    {
+      "path": "examples/action-usage/shadow-fix.yml",
+      "sha256": "45693d2fe283ee8dadf78a9ca0c40c4b3d246a8afd8ffd6285b5368b6009f68a",
+      "baseline_sha256": "8032e98b2b31c86ae85cc18b920e6ff0b5ece34e381c28f3cac6787260561027"
+    },
+    {
+      "path": "outcomes.py",
+      "sha256": "c9dd87d99827335cb1c747bd48d6c60fc22aee836259060048f3e830583b695d",
+      "baseline_sha256": "b00f64acd9b3753a02f759b714d3d8173e09e007c4260700907f4ab27d90f32e"
+    },
+    {
+      "path": "patchproof_runtime/jsdom.mjs",
+      "sha256": "1463a216dffb05dfa8e428b51bf012479d3521ae92336814dd509c41ebc8ef4c",
+      "baseline_sha256": null
+    },
+    {
+      "path": "proof.py",
+      "sha256": "bf4bf6b304d51c13fd7e13f37de81bf97fc965cfb4b309815e55301a86e7465a",
+      "baseline_sha256": "464f33988131a11acbf41802d784ae1b08275252c98aaec5360c2d5749943fb6"
+    },
+    {
+      "path": "runtimes.py",
+      "sha256": "172fbd0100d84ff4dfe0aca436289f2def3b5a8937d0913c294d1f6a135dabce",
+      "baseline_sha256": "bf2bb267ac0adc4b62ff6393806dfd3b726a7e9cf1b7f9b0e90bd4216338a0c6"
+    },
+    {
+      "path": "tests/test_fresh_set_tools.py",
+      "sha256": "a9a03babe33dc7eb4d46da9d91c1f76087eefdb21912a2b4c89f0868bd7aa1df",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_rc24_evidence.py",
+      "sha256": "dc5d26dd3cada97d301b12793885043eefe07c1923874f7a9282effb1b42bff2",
+      "baseline_sha256": "50a57b82f566404c2fcee91cd6b4c2760c1369283ff4fdcf3edfc7293caef494"
+    },
+    {
+      "path": "tests/test_sandbox_retry.py",
+      "sha256": "b40222dc2cf29eeb97a327168a532c6e30a39ae16f53c20e4931eb3e7516c8f5",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tests/test_static_web.py",
+      "sha256": "6dab2fce694f9c074ac7e819e09437c46b6756efb4672d05c79c00016d764a62",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tools/export_target.py",
+      "sha256": "f3251dbf036fcf3ec6e8318f223d94699e4c87b210dc866874302fd32d50bed9",
+      "baseline_sha256": "bc1cc99693eb558c791588d283e5cb0bad503ed8fdd19ae1f074097ac227cc76"
+    },
+    {
+      "path": "tools/preflight_base.py",
+      "sha256": "6f6e58898bd491a9bbf14bde1fb6bd986e67ff247ed40e9119903739f953ad0f",
+      "baseline_sha256": null
+    },
+    {
+      "path": "tools/verify_case_spec.py",
+      "sha256": "58d767cb3ff3526d1d2327b5dcab999207b948f3413f142de361e34d6936577b",
+      "baseline_sha256": null
+    }
+  ]
+}

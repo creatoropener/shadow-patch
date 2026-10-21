@@ -282,6 +282,10 @@ def _generation_statuses(proof: dict[str, Any]) -> list[str]:
     return [str(item.get("status", "")) for item in regression.get("generation_attempts") or []]
 
 
+_SANDBOX_API_FAILURE = re.compile(
+    r"ApiStatusCodeError\(.*?status=(?:5\d\d|408|429)\b|ApiTimeoutError\(|ContreeTransportError\(", re.S)
+
+
 def classify_outcome(proof: dict[str, Any]) -> dict[str, Any]:
     """One bucket per run, derived from the recorded stage and evidence.
 
@@ -306,6 +310,10 @@ def classify_outcome(proof: dict[str, Any]) -> dict[str, Any]:
         return result(VERIFIED, "repair verified and replayed")
     if verdict == "ready":
         return result(UNCLASSIFIED, "readiness check only; no repair was attempted")
+    if _SANDBOX_API_FAILURE.search(error):
+        # rc.39: the Sandbox API itself failed (HTTP 5xx, 408, 429, timeout). That is not a statement
+        # about the repository, the test or the repair, so it is not a readiness block or a failed repair.
+        return result(INFRASTRUCTURE_ERROR, error)
     if stop == "needs_specification":
         return result(SPEC_INVALID if spec.get("status") == "invalid" else NEEDS_SPECIFICATION, error)
     if stop == "budget_exhausted":

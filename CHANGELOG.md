@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.0-rc.39 — a transient Sandbox API failure is retried and classified as infrastructure
+
+A file-sharing-app run on rc.38 ended with `Stage: runtime-preflight` and `ApiStatusCodeError(... GET .../sandboxes/v1/files/a26c0dde..., status=500, error='Internal Server Error')`. The file is one of the engine's own helpers (`pytest_check.py`): the SDK looks a file up by hash before uploading it, and that lookup failed on the server.
+
+- **No retry.** `sandbox_workspace` ran its three steps once, so one transient 500 ended the run. Each step builds a new state from the previous one, so repeating it has no side effect. `sandbox_retry` now retries them twice (5 s, 15 s) when the failure is the Sandbox API's own: an `ApiStatusCodeError` with `status` 5xx, 408 or 429, or an `ApiTimeoutError` or `ContreeTransportError`. A command that fails inside the sandbox, a 4xx answer and any other exception are raised at once.
+- **Wrong bucket.** `stage in BLOCKED_STAGES` made it `readiness_blocked`, which says "fix your repository". `classify_outcome` now matches the SDK's own error text (`ApiStatusCodeError(... status=5xx|408|429`, `ApiTimeoutError(`, `ContreeTransportError(`) first and records `infrastructure_error`, at any stage.
+- **Version.** 0.6.0-rc.39 (`APP_VERSION`, example pin, benchmark default, README).
+
+**Checked.** Full suite: 520 tests pass on the Node 20 CI toolchain. `tests/test_sandbox_retry.py` (15 tests): the transient predicate against the real SDK classes and look-alikes, two failures then success (delays 5 s, 15 s), three failures re-raised, 404 and bugs not retried, the whole `sandbox_workspace` surviving one 500 and stopping on three, and the live error text classified as `infrastructure_error` while a real setup error and a 403 stay `readiness_blocked`.
+
+**Not covered.** Candidate evaluation and clean replay are not retried; a Sandbox API error inside a candidate is still recorded as that candidate failing (the run isolates candidate exceptions). No live run.
+
 ## v0.6.0-rc.38 — the root-URL refusal only applies to tests that read a resolved address
 
 Two live runs verified after rc.37 was cut. **Tabloop #2 on rc.36** (static-web, first live success): attempts 1 and 2 read `form.action` at `https://patchproof.invalid/` and passed on the unfixed page; the model then switched to `form.getAttribute('action') === 'thank-you.html'`, which fails on the unfixed page, and all three candidates (action `/thank-you.html` to `thank-you.html`) passed clean replay. **Aegisscan #3 on rc.37** (node-typescript): one test, three candidates widening the Axios version regex to accept `0.19.2`, clean replay passed.
