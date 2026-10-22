@@ -19,7 +19,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-patchproof.txt
 
-      - name: Install PatchProof dependencies
+      - name: Install Shadow Patch dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt pyyaml==6.0.3 pytest==8.3.5
 
       - uses: actions/setup-node@v4

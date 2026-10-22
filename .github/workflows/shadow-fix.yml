@@ -1,4 +1,4 @@
-name: Shadow Fix
+name: Shadow Patch
 
 on:
   issues:
@@ -57,7 +57,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: "🤖 **Shadow Engineer** received the `shadow-fix` label. PatchProof is generating an independent regression test and evaluating isolated candidate repairs."
+              body: "🤖 **Shadow Patch** received the `shadow-fix` label. Shadow Patch is generating an independent regression test and evaluating isolated candidate repairs."
             });
 
       - name: Checkout repository
@@ -72,10 +72,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-patchproof.txt
 
-      - name: Install PatchProof dependencies
+      - name: Install Shadow Patch dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt
 
-      - name: Check PatchProof imports and runtime selection
+      - name: Check Shadow Patch imports and runtime selection
         run: |
           python - <<'PY'
           import proof
@@ -106,7 +106,7 @@ jobs:
           fi
           exit "$missing"
 
-      - name: Run PatchProof verification
+      - name: Run Shadow Patch verification
         id: patchproof
         continue-on-error: true
         run: python proof.py
@@ -141,8 +141,8 @@ jobs:
         id: create-pr
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "PatchProof: verified repair for issue #${{ github.event.issue.number }}"
-          title: "Shadow Engineer: verified repair for #${{ github.event.issue.number }}"
+          commit-message: "Shadow Patch: verified repair for issue #${{ github.event.issue.number }}"
+          title: "Shadow Patch: verified repair for #${{ github.event.issue.number }}"
           body-path: verification-report.md
           add-paths: ${{ steps.delivery.outputs.paths }}
           branch: shadow-fix/issue-${{ github.event.issue.number }}
@@ -161,7 +161,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `✅ **PatchProof verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\nThe verification report is in the pull request description and the Actions artifact. Human merge approval is required.`
+              body: `✅ **Shadow Patch verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\nThe verification report is in the pull request description and the Actions artifact. Human merge approval is required.`
             });
 
       - name: Comment when verification rejects all repairs
@@ -172,14 +172,14 @@ jobs:
             const fs = require('fs');
             const report = fs.existsSync('verification-report.md')
               ? fs.readFileSync('verification-report.md', 'utf8')
-              : 'PatchProof stopped before producing a report. Check the workflow logs.';
+              : 'Shadow Patch stopped before producing a report. Check the workflow logs.';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `❌ **PatchProof rejected the attempted repair.**\n\n${report}`
+              body: `❌ **Shadow Patch rejected the attempted repair.**\n\n${report}`
             });
 
-      - name: Enforce PatchProof verdict
+      - name: Enforce Shadow Patch verdict
         if: steps.patchproof.outcome == 'failure'
         run: exit 1

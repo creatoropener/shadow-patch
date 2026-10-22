@@ -133,7 +133,7 @@ jobs:
               print(f"image_tag={ready.tag}", file=output)
 
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              print("## PatchProof sandbox image prepared", file=summary)
+              print("## Shadow Patch sandbox image prepared", file=summary)
               print(f"- UUID: `{ready.uuid}`", file=summary)
               print(f"- Tag: `{ready.tag}`", file=summary)
               names = {
