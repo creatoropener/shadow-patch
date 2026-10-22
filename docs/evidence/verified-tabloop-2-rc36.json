@@ -1,0 +1,415 @@
+{
+  "agent_mode": "legacy",
+  "app_version": "0.6.0-rc.36",
+  "archive_sha256": "a9f13bcc213bee728bf883bbbc26465e71017e82cc72d1d2ab448e129d204b99",
+  "baseline": {
+    "command": "node /patchproof/static_web_check.mjs index.html && CI=1 npm test",
+    "discovery_probe": {
+      "discovered": true,
+      "exit_code": 1,
+      "path": "test_patchproof_probe.test.mjs"
+    },
+    "existing_suite_passed": true,
+    "image": "97276e59-ca03-463a-8182-f6a42df1b4e7",
+    "jsdom_probe": {
+      "detail": "PATCHPROOF_JSDOM_OK 24.1.3 v20.19.2",
+      "jsdom_version": "24.1.3",
+      "loaded": true,
+      "node_version": "v20.19.2"
+    },
+    "output": "Syntax checked 1 script(s); 0 remote script(s) not checked. No behavior verified by this gate.\n\n> tabloop@1.0.0 test\n> node --test\n\nTAP version 13\n# Subtest: homepage keeps the named contact form and confirmation page\nok 1 - homepage keeps the named contact form and confirmation page\n  ---\n  duration_ms: 1.864548\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 134.06991",
+    "tests_passed": 1
+  },
+  "candidates": [
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "<!DOCTYPE html>\n\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\"/>\n<meta content=\"width=device-width,initial-scale=1\" name=\"viewport\"/>\n<meta content=\"#0b0c10\" name=\"theme-color\"/>\n<meta content=\"Tabloop is an independent software studio building simple, privacy-first web and mobile products.\" name=\"description\"/>\n<meta content=\"Tabloop \u2014 Useful software. Thoughtfully built.\" property=\"og:title\"/>\n<meta content=\"Independent software studio building simple, reliable, privacy-first digital products.\" property=\"og:description\"/>\n<meta content=\"website\" property=\"og:type\"/>\n<meta content=\"https://tabloop.netlify.app/assets/og-image.png\" property=\"og:image\"/>\n<meta content=\"1200\" property=\"og:image:width\"/>\n<meta content=\"630\" property=\"og:image:height\"/>\n<meta content=\"summary_large_image\" name=\"twitter:card\"/>\n<meta content=\"Tabloop \u2014 Useful software. Thoughtfully built.\" name=\"twitter:title\"/>\n<meta content=\"Independent software studio building simple, reliable, privacy-first digital products.\" name=\"twitter:description\"/>\n<meta content=\"https://tabloop.netlify.app/assets/og-image.png\" name=\"twitter:image\"/>\n<title>Tabloop \u2014 Useful software. Thoughtfully built.</title>\n<link href=\"assets/favicon.svg\" rel=\"icon\" type=\"image/svg+xml\"/>\n<link href=\"https://fonts.googleapis.com\" rel=\"preconnect\"/>\n<link crossorigin=\"\" href=\"https://fonts.gstatic.com\" rel=\"preconnect\"/>\n<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Manrope:wght@600;700;800&amp;display=swap\" rel=\"stylesheet\"/>\n<link href=\"styles.css\" rel=\"stylesheet\"/>\n<script defer=\"\" src=\"script.js\"></script>\n<noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>\n<link href=\"https://tabloop.netlify.app/\" rel=\"canonical\"/><meta content=\"https://tabloop.netlify.app/\" property=\"og:url\"/><meta content=\"Tabloop\" property=\"og:site_name\"/><meta content=\"en_IN\" property=\"og:locale\"/><meta content=\"index,follow,max-image-preview:large\" name=\"robots\"/><script type=\"application/ld+json\">{\n  \"@context\": \"https://schema.org\",\n  \"@graph\": [\n    {\n      \"@type\": \"Organization\",\n      \"@id\": \"https://tabloop.netlify.app/#organization\",\n      \"name\": \"Tabloop\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"logo\": {\n        \"@type\": \"ImageObject\",\n        \"url\": \"https://tabloop.netlify.app/assets/favicon.svg\"\n      },\n      \"description\": \"Tabloop is an independent software studio building simple, privacy-first web and mobile products.\",\n      \"foundingLocation\": {\n        \"@type\": \"Country\",\n        \"name\": \"India\"\n      }\n    },\n    {\n      \"@type\": \"WebSite\",\n      \"@id\": \"https://tabloop.netlify.app/#website\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"name\": \"Tabloop\",\n      \"publisher\": {\n        \"@id\": \"https://tabloop.netlify.app/#organization\"\n      },\n      \"inLanguage\": \"en-IN\"\n    },\n    {\n      \"@type\": \"WebPage\",\n      \"@id\": \"https://tabloop.netlify.app/#webpage\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"name\": \"Tabloop \u2014 Useful software. Thoughtfully built.\",\n      \"isPartOf\": {\n        \"@id\": \"https://tabloop.netlify.app/#website\"\n      },\n      \"about\": {\n        \"@id\": \"https://tabloop.netlify.app/#organization\"\n      },\n      \"inLanguage\": \"en-IN\"\n    }\n  ]\n}</script></head>\n<body>\n<a class=\"skip-link\" href=\"#main\">Skip to content</a>\n<header class=\"site-header\" id=\"top\">\n<div class=\"container nav-wrap\">\n<a aria-label=\"Tabloop home\" class=\"brand\" href=\"#top\">\n<span aria-hidden=\"true\" class=\"brand-mark\">\n<svg role=\"img\" viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</span>\n<span>Tabloop</span>\n</a>\n<button aria-expanded=\"false\" aria-label=\"Open navigation\" class=\"menu-toggle\">\n<span></span><span></span><span></span>\n</button>\n<nav aria-label=\"Main navigation\" class=\"nav\">\n<a href=\"#products\">Products</a>\n<a href=\"#about\">About</a>\n<a href=\"#principles\">Principles</a>\n<a href=\"#contact\">Contact</a>\n</nav>\n<a class=\"nav-cta\" href=\"#products\">Explore products</a>\n</div>\n</header>\n<main id=\"main\">\n<section class=\"hero section\">\n<div class=\"container hero-grid\">\n<div class=\"hero-copy reveal\">\n<div class=\"eyebrow\">Independent software studio</div>\n<h1>Useful software.<br/><span>Thoughtfully built.</span></h1>\n<p class=\"hero-lede\">\n            Tabloop builds simple, reliable and privacy-first digital products\n            that solve real everyday problems.\n          </p>\n<div class=\"hero-actions\">\n<a class=\"btn btn-primary\" href=\"#products\">Explore our products</a>\n<a class=\"btn btn-ghost\" href=\"#about\">About Tabloop</a>\n</div>\n<div aria-label=\"Tabloop values\" class=\"trust-row\">\n<span>Privacy first</span>\n<span>Simple by design</span>\n<span>Useful first</span>\n</div>\n</div>\n<div aria-hidden=\"true\" class=\"hero-visual reveal\">\n<div class=\"orbit orbit-a\"></div>\n<div class=\"orbit orbit-b\"></div>\n<div class=\"visual-core\">\n<div class=\"visual-logo\">\n<svg viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</div>\n<span>privacy by design</span>\n</div>\n<div class=\"float-card float-card-a\">\n<small>Principle 01</small>\n<strong>Collect less</strong>\n</div>\n<div class=\"float-card float-card-b\">\n<small>Principle 02</small>\n<strong>Process locally</strong>\n</div>\n<div class=\"float-card float-card-c\">\n<small>Principle 03</small>\n<strong>Keep users in control</strong>\n</div>\n</div>\n</div>\n</section>\n<section class=\"statement-strip\">\n<div class=\"container statement-inner reveal\">\n<p>Software should solve the problem <strong>without becoming another problem.</strong></p>\n</div>\n</section>\n<section class=\"section\" id=\"products\">\n<div class=\"container\">\n<div class=\"section-head reveal\">\n<div>\n<span class=\"eyebrow\">Our products</span>\n<h2>Built around real problems.</h2>\n</div>\n<p>Focused digital products across documents, productivity, personal finance and everyday utilities.</p>\n</div>\n<div class=\"product-grid\">\n<article class=\"product-card comet reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge\">Live</div>\n<span class=\"product-index\">01</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">C</div>\n<h3>CometFile</h3>\n<p class=\"product-tag\">Document tools without the hassle.</p>\n<p>Free browser-based PDF, Word and image tools designed for fast, private everyday document work.</p>\n<div class=\"product-meta\">\n<span>No sign-up</span>\n<span>Browser-based</span>\n<span>Local-first</span>\n</div>\n<a class=\"text-link\" href=\"https://cometfile.com\" rel=\"noopener\" target=\"_blank\">Visit CometFile <span>\u2197</span></a>\n</article>\n<article class=\"product-card xpend reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge muted\">In development</div>\n<span class=\"product-index\">02</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">X</div>\n<h3>Xpendbox</h3>\n<p class=\"product-tag\">Personal finance without unnecessary exposure.</p>\n<p>A privacy-focused expense tracker built around local data, clear budgeting and everyday money awareness.</p>\n<div class=\"product-meta\">\n<span>Privacy-first</span>\n<span>Local data</span>\n<span>Mobile-first</span>\n</div>\n<span aria-disabled=\"true\" class=\"text-link disabled\">Coming soon</span>\n</article>\n<article class=\"product-card future reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge muted\">Next</div>\n<span class=\"product-index\">03+</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">+</div>\n<h3>More ideas are in the loop.</h3>\n<p class=\"product-tag\">Small tools. Practical ideas. Better software.</p>\n<p>We are exploring new products across utilities, SaaS, AI-assisted workflows and mobile applications.</p>\n<div class=\"product-meta\">\n<span>Web</span>\n<span>Mobile</span>\n<span>SaaS</span>\n</div>\n</article>\n</div>\n</div>\n</section>\n<section class=\"section privacy-section\" id=\"about\">\n<div class=\"container privacy-grid\">\n<div class=\"privacy-copy reveal\">\n<span class=\"eyebrow\">About Tabloop</span>\n<h2>Building useful software without unnecessary data collection.</h2>\n<p>\n            Tabloop is an independent software studio focused on building practical,\n            privacy-first web and mobile products.\n          </p>\n<p>\n            We started with a simple belief: useful software should not require\n            people to give up more personal data than necessary.\n          </p>\n<p>\n            Where practical, our products favour browser-based or on-device processing,\n            local storage, minimal account requirements and transparent data practices.\n          </p>\n</div>\n<aside class=\"privacy-panel reveal\">\n<span class=\"panel-kicker\">Our core promise</span>\n<blockquote>\n            Solve the problem.<br/>\n            Keep it simple.<br/>\n            Respect the user's data.\n          </blockquote>\n<div class=\"panel-foot\">\n<span>Built independently in India</span>\n</div>\n</aside>\n</div>\n</section>\n<section class=\"section vision-mission\">\n<div class=\"container vm-grid\">\n<article class=\"vm-card reveal\">\n<span class=\"eyebrow\">Vision</span>\n<h2>Make useful software simpler, more accessible, and more private by design.</h2>\n<p>\n            We envision a future where people do not have to trade privacy for convenience,\n            and where respecting user data is a normal part of good software.\n          </p>\n</article>\n<article class=\"vm-card reveal\">\n<span class=\"eyebrow\">Mission</span>\n<h2>Build simple, reliable, privacy-first digital products that solve real everyday problems.</h2>\n<p>\n            We focus on thoughtful design, useful functionality, transparent data practices\n            and privacy-conscious technology.\n          </p>\n</article>\n</div>\n</section>\n<section class=\"section\" id=\"principles\">\n<div class=\"container\">\n<div class=\"section-head reveal\">\n<div>\n<span class=\"eyebrow\">How we build</span>\n<h2>Privacy isn't an extra feature.</h2>\n</div>\n<p>It is part of the product decisions we make from the beginning.</p>\n</div>\n<div class=\"principle-grid\">\n<article class=\"principle reveal\">\n<span>01</span>\n<h3>Privacy first</h3>\n<p>We aim to minimise unnecessary data collection and favour local processing where practical.</p>\n</article>\n<article class=\"principle reveal\">\n<span>02</span>\n<h3>Simple by design</h3>\n<p>Clear workflows and useful features matter more than complexity for its own sake.</p>\n</article>\n<article class=\"principle reveal\">\n<span>03</span>\n<h3>Useful first</h3>\n<p>We build around real problems instead of adding features simply because we can.</p>\n</article>\n<article class=\"principle reveal\">\n<span>04</span>\n<h3>Transparent</h3>\n<p>People should understand what a product does and how their information is handled.</p>\n</article>\n<article class=\"principle reveal\">\n<span>05</span>\n<h3>User control</h3>\n<p>Where practical, users should remain in control of where their information is stored.</p>\n</article>\n<article class=\"principle reveal\">\n<span>06</span>\n<h3>Always improving</h3>\n<p>We learn from real usage, feedback and changing technology to keep improving our products.</p>\n</article>\n</div>\n</div>\n</section>\n<section class=\"section privacy-banner\">\n<div class=\"container reveal\">\n<div class=\"banner-card\">\n<div>\n<span class=\"eyebrow\">Our privacy philosophy</span>\n<h2>Your data doesn't need to be our business.</h2>\n</div>\n<p>\n            Where practical, Tabloop products are designed to process information locally,\n            minimise data collection and keep users in control of their information.\n          </p>\n</div>\n</div>\n</section>\n<section class=\"section contact-section\" id=\"contact\">\n<div class=\"container contact-grid\">\n<div class=\"contact-copy reveal\">\n<span class=\"eyebrow\">Contact</span>\n<h2>Have something to say?</h2>\n<p>\n            Feedback, product ideas, partnerships, or something we could improve \u2014\n            we'd be glad to hear from you.\n          </p>\n</div>\n<form action=\"thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n<input name=\"form-name\" type=\"hidden\" value=\"tabloop-contact\"/>\n<p class=\"hidden\"><label>Don't fill this out: <input name=\"bot-field\"/></label></p>\n<label>\n<span>Name</span>\n<input autocomplete=\"name\" name=\"name\" required=\"\" type=\"text\"/>\n</label>\n<label>\n<span>Email</span>\n<input autocomplete=\"email\" name=\"email\" required=\"\" type=\"email\"/>\n</label>\n<label>\n<span>Subject</span>\n<input name=\"subject\" required=\"\" type=\"text\"/>\n</label>\n<label>\n<span>Message</span>\n<textarea name=\"message\" required=\"\" rows=\"5\"></textarea>\n</label>\n<button class=\"btn btn-primary\" type=\"submit\">Send message</button>\n</form>\n</div>\n</section>\n</main>\n<footer class=\"site-footer\">\n<div class=\"container footer-grid\">\n<div class=\"footer-brand\">\n<a class=\"brand\" href=\"#top\">\n<span aria-hidden=\"true\" class=\"brand-mark\">\n<svg viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</span>\n<span>Tabloop</span>\n</a>\n<p>Useful software. Thoughtfully built.</p>\n</div>\n<div>\n<h4>Products</h4>\n<a href=\"https://cometfile.com\" rel=\"noopener\" target=\"_blank\">CometFile</a>\n<span class=\"footer-muted\">Xpendbox</span>\n</div>\n<div>\n<h4>Company</h4>\n<a href=\"#about\">About</a>\n<a href=\"#principles\">Principles</a>\n<a href=\"#contact\">Contact</a>\n</div>\n<div>\n<h4>Legal</h4>\n<a href=\"privacy.html\">Privacy Policy</a>\n<a href=\"terms.html\">Terms of Use</a>\n</div>\n</div>\n<div class=\"container footer-bottom\">\n<span>\u00a9 <span id=\"year\">2026</span> Tabloop. All rights reserved.</span>\n<span>Built independently in India.</span>\n</div>\n</footer>\n</body>\n</html>\n",
+              "path": "index.html"
+            }
+          ],
+          "exit_code": 0,
+          "image": "166ed469-9bc6-4fcc-81dd-13bad032246e",
+          "output": "Syntax checked 1 script(s); 0 remote script(s) not checked. No behavior verified by this gate.\n\n> tabloop@1.0.0 test\n> node --test\n\nTAP version 13\n# Subtest: homepage keeps the named contact form and confirmation page\nok 1 - homepage keeps the named contact form and confirmation page\n  ---\n  duration_ms: 1.849976\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 129.241954",
+          "regression_test_present": false,
+          "tests_passed": 1
+        }
+      ],
+      "baseline_command": "node /patchproof/static_web_check.mjs index.html && CI=1 npm test",
+      "baseline_tests_passed": 1,
+      "candidate": 1,
+      "changed_files": [
+        "index.html"
+      ],
+      "changed_lines": 2,
+      "command": "( node --check test_patchproof_issue_2.test.mjs || { echo PATCHPROOF_JS_PARSE=failed >&2; exit 2; } ) && node --test --test-reporter=tap test_patchproof_issue_2.test.mjs",
+      "diff": "--- index.html\n+++ index.html\n@@ -322,7 +322,7 @@\n             we'd be glad to hear from you.\n           </p>\n </div>\n-<form action=\"/thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n+<form action=\"thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n <input name=\"form-name\" type=\"hidden\" value=\"tabloop-contact\"/>\n <p class=\"hidden\"><label>Don't fill this out: <input name=\"bot-field\"/></label></p>\n <label>\n",
+      "duration_seconds": 9.265,
+      "eligibility": {
+        "scope": "unrestricted",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "65edd3e0-354b-4668-8b93-10eb9a2daf3c",
+      "output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 103.331284\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 857.314251\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "minimal targeted correction",
+      "summary": "Changed form action from absolute '/thank-you.html' to relative 'thank-you.html'.",
+      "test_protected": true,
+      "tests_passed": 1
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "<!DOCTYPE html>\n\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\"/>\n<meta content=\"width=device-width,initial-scale=1\" name=\"viewport\"/>\n<meta content=\"#0b0c10\" name=\"theme-color\"/>\n<meta content=\"Tabloop is an independent software studio building simple, privacy-first web and mobile products.\" name=\"description\"/>\n<meta content=\"Tabloop \u2014 Useful software. Thoughtfully built.\" property=\"og:title\"/>\n<meta content=\"Independent software studio building simple, reliable, privacy-first digital products.\" property=\"og:description\"/>\n<meta content=\"website\" property=\"og:type\"/>\n<meta content=\"https://tabloop.netlify.app/assets/og-image.png\" property=\"og:image\"/>\n<meta content=\"1200\" property=\"og:image:width\"/>\n<meta content=\"630\" property=\"og:image:height\"/>\n<meta content=\"summary_large_image\" name=\"twitter:card\"/>\n<meta content=\"Tabloop \u2014 Useful software. Thoughtfully built.\" name=\"twitter:title\"/>\n<meta content=\"Independent software studio building simple, reliable, privacy-first digital products.\" name=\"twitter:description\"/>\n<meta content=\"https://tabloop.netlify.app/assets/og-image.png\" name=\"twitter:image\"/>\n<title>Tabloop \u2014 Useful software. Thoughtfully built.</title>\n<link href=\"assets/favicon.svg\" rel=\"icon\" type=\"image/svg+xml\"/>\n<link href=\"https://fonts.googleapis.com\" rel=\"preconnect\"/>\n<link crossorigin=\"\" href=\"https://fonts.gstatic.com\" rel=\"preconnect\"/>\n<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Manrope:wght@600;700;800&amp;display=swap\" rel=\"stylesheet\"/>\n<link href=\"styles.css\" rel=\"stylesheet\"/>\n<script defer=\"\" src=\"script.js\"></script>\n<noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>\n<link href=\"https://tabloop.netlify.app/\" rel=\"canonical\"/><meta content=\"https://tabloop.netlify.app/\" property=\"og:url\"/><meta content=\"Tabloop\" property=\"og:site_name\"/><meta content=\"en_IN\" property=\"og:locale\"/><meta content=\"index,follow,max-image-preview:large\" name=\"robots\"/><script type=\"application/ld+json\">{\n  \"@context\": \"https://schema.org\",\n  \"@graph\": [\n    {\n      \"@type\": \"Organization\",\n      \"@id\": \"https://tabloop.netlify.app/#organization\",\n      \"name\": \"Tabloop\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"logo\": {\n        \"@type\": \"ImageObject\",\n        \"url\": \"https://tabloop.netlify.app/assets/favicon.svg\"\n      },\n      \"description\": \"Tabloop is an independent software studio building simple, privacy-first web and mobile products.\",\n      \"foundingLocation\": {\n        \"@type\": \"Country\",\n        \"name\": \"India\"\n      }\n    },\n    {\n      \"@type\": \"WebSite\",\n      \"@id\": \"https://tabloop.netlify.app/#website\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"name\": \"Tabloop\",\n      \"publisher\": {\n        \"@id\": \"https://tabloop.netlify.app/#organization\"\n      },\n      \"inLanguage\": \"en-IN\"\n    },\n    {\n      \"@type\": \"WebPage\",\n      \"@id\": \"https://tabloop.netlify.app/#webpage\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"name\": \"Tabloop \u2014 Useful software. Thoughtfully built.\",\n      \"isPartOf\": {\n        \"@id\": \"https://tabloop.netlify.app/#website\"\n      },\n      \"about\": {\n        \"@id\": \"https://tabloop.netlify.app/#organization\"\n      },\n      \"inLanguage\": \"en-IN\"\n    }\n  ]\n}</script></head>\n<body>\n<a class=\"skip-link\" href=\"#main\">Skip to content</a>\n<header class=\"site-header\" id=\"top\">\n<div class=\"container nav-wrap\">\n<a aria-label=\"Tabloop home\" class=\"brand\" href=\"#top\">\n<span aria-hidden=\"true\" class=\"brand-mark\">\n<svg role=\"img\" viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</span>\n<span>Tabloop</span>\n</a>\n<button aria-expanded=\"false\" aria-label=\"Open navigation\" class=\"menu-toggle\">\n<span></span><span></span><span></span>\n</button>\n<nav aria-label=\"Main navigation\" class=\"nav\">\n<a href=\"#products\">Products</a>\n<a href=\"#about\">About</a>\n<a href=\"#principles\">Principles</a>\n<a href=\"#contact\">Contact</a>\n</nav>\n<a class=\"nav-cta\" href=\"#products\">Explore products</a>\n</div>\n</header>\n<main id=\"main\">\n<section class=\"hero section\">\n<div class=\"container hero-grid\">\n<div class=\"hero-copy reveal\">\n<div class=\"eyebrow\">Independent software studio</div>\n<h1>Useful software.<br/><span>Thoughtfully built.</span></h1>\n<p class=\"hero-lede\">\n            Tabloop builds simple, reliable and privacy-first digital products\n            that solve real everyday problems.\n          </p>\n<div class=\"hero-actions\">\n<a class=\"btn btn-primary\" href=\"#products\">Explore our products</a>\n<a class=\"btn btn-ghost\" href=\"#about\">About Tabloop</a>\n</div>\n<div aria-label=\"Tabloop values\" class=\"trust-row\">\n<span>Privacy first</span>\n<span>Simple by design</span>\n<span>Useful first</span>\n</div>\n</div>\n<div aria-hidden=\"true\" class=\"hero-visual reveal\">\n<div class=\"orbit orbit-a\"></div>\n<div class=\"orbit orbit-b\"></div>\n<div class=\"visual-core\">\n<div class=\"visual-logo\">\n<svg viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</div>\n<span>privacy by design</span>\n</div>\n<div class=\"float-card float-card-a\">\n<small>Principle 01</small>\n<strong>Collect less</strong>\n</div>\n<div class=\"float-card float-card-b\">\n<small>Principle 02</small>\n<strong>Process locally</strong>\n</div>\n<div class=\"float-card float-card-c\">\n<small>Principle 03</small>\n<strong>Keep users in control</strong>\n</div>\n</div>\n</div>\n</section>\n<section class=\"statement-strip\">\n<div class=\"container statement-inner reveal\">\n<p>Software should solve the problem <strong>without becoming another problem.</strong></p>\n</div>\n</section>\n<section class=\"section\" id=\"products\">\n<div class=\"container\">\n<div class=\"section-head reveal\">\n<div>\n<span class=\"eyebrow\">Our products</span>\n<h2>Built around real problems.</h2>\n</div>\n<p>Focused digital products across documents, productivity, personal finance and everyday utilities.</p>\n</div>\n<div class=\"product-grid\">\n<article class=\"product-card comet reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge\">Live</div>\n<span class=\"product-index\">01</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">C</div>\n<h3>CometFile</h3>\n<p class=\"product-tag\">Document tools without the hassle.</p>\n<p>Free browser-based PDF, Word and image tools designed for fast, private everyday document work.</p>\n<div class=\"product-meta\">\n<span>No sign-up</span>\n<span>Browser-based</span>\n<span>Local-first</span>\n</div>\n<a class=\"text-link\" href=\"https://cometfile.com\" rel=\"noopener\" target=\"_blank\">Visit CometFile <span>\u2197</span></a>\n</article>\n<article class=\"product-card xpend reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge muted\">In development</div>\n<span class=\"product-index\">02</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">X</div>\n<h3>Xpendbox</h3>\n<p class=\"product-tag\">Personal finance without unnecessary exposure.</p>\n<p>A privacy-focused expense tracker built around local data, clear budgeting and everyday money awareness.</p>\n<div class=\"product-meta\">\n<span>Privacy-first</span>\n<span>Local data</span>\n<span>Mobile-first</span>\n</div>\n<span aria-disabled=\"true\" class=\"text-link disabled\">Coming soon</span>\n</article>\n<article class=\"product-card future reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge muted\">Next</div>\n<span class=\"product-index\">03+</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">+</div>\n<h3>More ideas are in the loop.</h3>\n<p class=\"product-tag\">Small tools. Practical ideas. Better software.</p>\n<p>We are exploring new products across utilities, SaaS, AI-assisted workflows and mobile applications.</p>\n<div class=\"product-meta\">\n<span>Web</span>\n<span>Mobile</span>\n<span>SaaS</span>\n</div>\n</article>\n</div>\n</div>\n</section>\n<section class=\"section privacy-section\" id=\"about\">\n<div class=\"container privacy-grid\">\n<div class=\"privacy-copy reveal\">\n<span class=\"eyebrow\">About Tabloop</span>\n<h2>Building useful software without unnecessary data collection.</h2>\n<p>\n            Tabloop is an independent software studio focused on building practical,\n            privacy-first web and mobile products.\n          </p>\n<p>\n            We started with a simple belief: useful software should not require\n            people to give up more personal data than necessary.\n          </p>\n<p>\n            Where practical, our products favour browser-based or on-device processing,\n            local storage, minimal account requirements and transparent data practices.\n          </p>\n</div>\n<aside class=\"privacy-panel reveal\">\n<span class=\"panel-kicker\">Our core promise</span>\n<blockquote>\n            Solve the problem.<br/>\n            Keep it simple.<br/>\n            Respect the user's data.\n          </blockquote>\n<div class=\"panel-foot\">\n<span>Built independently in India</span>\n</div>\n</aside>\n</div>\n</section>\n<section class=\"section vision-mission\">\n<div class=\"container vm-grid\">\n<article class=\"vm-card reveal\">\n<span class=\"eyebrow\">Vision</span>\n<h2>Make useful software simpler, more accessible, and more private by design.</h2>\n<p>\n            We envision a future where people do not have to trade privacy for convenience,\n            and where respecting user data is a normal part of good software.\n          </p>\n</article>\n<article class=\"vm-card reveal\">\n<span class=\"eyebrow\">Mission</span>\n<h2>Build simple, reliable, privacy-first digital products that solve real everyday problems.</h2>\n<p>\n            We focus on thoughtful design, useful functionality, transparent data practices\n            and privacy-conscious technology.\n          </p>\n</article>\n</div>\n</section>\n<section class=\"section\" id=\"principles\">\n<div class=\"container\">\n<div class=\"section-head reveal\">\n<div>\n<span class=\"eyebrow\">How we build</span>\n<h2>Privacy isn't an extra feature.</h2>\n</div>\n<p>It is part of the product decisions we make from the beginning.</p>\n</div>\n<div class=\"principle-grid\">\n<article class=\"principle reveal\">\n<span>01</span>\n<h3>Privacy first</h3>\n<p>We aim to minimise unnecessary data collection and favour local processing where practical.</p>\n</article>\n<article class=\"principle reveal\">\n<span>02</span>\n<h3>Simple by design</h3>\n<p>Clear workflows and useful features matter more than complexity for its own sake.</p>\n</article>\n<article class=\"principle reveal\">\n<span>03</span>\n<h3>Useful first</h3>\n<p>We build around real problems instead of adding features simply because we can.</p>\n</article>\n<article class=\"principle reveal\">\n<span>04</span>\n<h3>Transparent</h3>\n<p>People should understand what a product does and how their information is handled.</p>\n</article>\n<article class=\"principle reveal\">\n<span>05</span>\n<h3>User control</h3>\n<p>Where practical, users should remain in control of where their information is stored.</p>\n</article>\n<article class=\"principle reveal\">\n<span>06</span>\n<h3>Always improving</h3>\n<p>We learn from real usage, feedback and changing technology to keep improving our products.</p>\n</article>\n</div>\n</div>\n</section>\n<section class=\"section privacy-banner\">\n<div class=\"container reveal\">\n<div class=\"banner-card\">\n<div>\n<span class=\"eyebrow\">Our privacy philosophy</span>\n<h2>Your data doesn't need to be our business.</h2>\n</div>\n<p>\n            Where practical, Tabloop products are designed to process information locally,\n            minimise data collection and keep users in control of their information.\n          </p>\n</div>\n</div>\n</section>\n<section class=\"section contact-section\" id=\"contact\">\n<div class=\"container contact-grid\">\n<div class=\"contact-copy reveal\">\n<span class=\"eyebrow\">Contact</span>\n<h2>Have something to say?</h2>\n<p>\n            Feedback, product ideas, partnerships, or something we could improve \u2014\n            we'd be glad to hear from you.\n          </p>\n</div>\n<form action=\"thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n<input name=\"form-name\" type=\"hidden\" value=\"tabloop-contact\"/>\n<p class=\"hidden\"><label>Don't fill this out: <input name=\"bot-field\"/></label></p>\n<label>\n<span>Name</span>\n<input autocomplete=\"name\" name=\"name\" required=\"\" type=\"text\"/>\n</label>\n<label>\n<span>Email</span>\n<input autocomplete=\"email\" name=\"email\" required=\"\" type=\"email\"/>\n</label>\n<label>\n<span>Subject</span>\n<input name=\"subject\" required=\"\" type=\"text\"/>\n</label>\n<label>\n<span>Message</span>\n<textarea name=\"message\" required=\"\" rows=\"5\"></textarea>\n</label>\n<button class=\"btn btn-primary\" type=\"submit\">Send message</button>\n</form>\n</div>\n</section>\n</main>\n<footer class=\"site-footer\">\n<div class=\"container footer-grid\">\n<div class=\"footer-brand\">\n<a class=\"brand\" href=\"#top\">\n<span aria-hidden=\"true\" class=\"brand-mark\">\n<svg viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</span>\n<span>Tabloop</span>\n</a>\n<p>Useful software. Thoughtfully built.</p>\n</div>\n<div>\n<h4>Products</h4>\n<a href=\"https://cometfile.com\" rel=\"noopener\" target=\"_blank\">CometFile</a>\n<span class=\"footer-muted\">Xpendbox</span>\n</div>\n<div>\n<h4>Company</h4>\n<a href=\"#about\">About</a>\n<a href=\"#principles\">Principles</a>\n<a href=\"#contact\">Contact</a>\n</div>\n<div>\n<h4>Legal</h4>\n<a href=\"privacy.html\">Privacy Policy</a>\n<a href=\"terms.html\">Terms of Use</a>\n</div>\n</div>\n<div class=\"container footer-bottom\">\n<span>\u00a9 <span id=\"year\">2026</span> Tabloop. All rights reserved.</span>\n<span>Built independently in India.</span>\n</div>\n</footer>\n</body>\n</html>\n",
+              "path": "index.html"
+            }
+          ],
+          "exit_code": 0,
+          "image": "23edc46a-dd76-4737-beea-0ee24ac9ed02",
+          "output": "Syntax checked 1 script(s); 0 remote script(s) not checked. No behavior verified by this gate.\n\n> tabloop@1.0.0 test\n> node --test\n\nTAP version 13\n# Subtest: homepage keeps the named contact form and confirmation page\nok 1 - homepage keeps the named contact form and confirmation page\n  ---\n  duration_ms: 1.854163\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 125.196692",
+          "regression_test_present": false,
+          "tests_passed": 1
+        }
+      ],
+      "baseline_command": "node /patchproof/static_web_check.mjs index.html && CI=1 npm test",
+      "baseline_tests_passed": 1,
+      "candidate": 2,
+      "changed_files": [
+        "index.html"
+      ],
+      "changed_lines": 2,
+      "command": "( node --check test_patchproof_issue_2.test.mjs || { echo PATCHPROOF_JS_PARSE=failed >&2; exit 2; } ) && node --test --test-reporter=tap test_patchproof_issue_2.test.mjs",
+      "diff": "--- index.html\n+++ index.html\n@@ -322,7 +322,7 @@\n             we'd be glad to hear from you.\n           </p>\n </div>\n-<form action=\"/thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n+<form action=\"thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n <input name=\"form-name\" type=\"hidden\" value=\"tabloop-contact\"/>\n <p class=\"hidden\"><label>Don't fill this out: <input name=\"bot-field\"/></label></p>\n <label>\n",
+      "duration_seconds": 9.859,
+      "eligibility": {
+        "scope": "unrestricted",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "3b69f5fc-8ecc-43b4-b7a4-99a87ee7ad36",
+      "output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 100.680144\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 845.564255\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "defensive edge-case correction",
+      "summary": "Replace absolute form action with relative path.",
+      "test_protected": true,
+      "tests_passed": 1
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "<!DOCTYPE html>\n\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\"/>\n<meta content=\"width=device-width,initial-scale=1\" name=\"viewport\"/>\n<meta content=\"#0b0c10\" name=\"theme-color\"/>\n<meta content=\"Tabloop is an independent software studio building simple, privacy-first web and mobile products.\" name=\"description\"/>\n<meta content=\"Tabloop \u2014 Useful software. Thoughtfully built.\" property=\"og:title\"/>\n<meta content=\"Independent software studio building simple, reliable, privacy-first digital products.\" property=\"og:description\"/>\n<meta content=\"website\" property=\"og:type\"/>\n<meta content=\"https://tabloop.netlify.app/assets/og-image.png\" property=\"og:image\"/>\n<meta content=\"1200\" property=\"og:image:width\"/>\n<meta content=\"630\" property=\"og:image:height\"/>\n<meta content=\"summary_large_image\" name=\"twitter:card\"/>\n<meta content=\"Tabloop \u2014 Useful software. Thoughtfully built.\" name=\"twitter:title\"/>\n<meta content=\"Independent software studio building simple, reliable, privacy-first digital products.\" name=\"twitter:description\"/>\n<meta content=\"https://tabloop.netlify.app/assets/og-image.png\" name=\"twitter:image\"/>\n<title>Tabloop \u2014 Useful software. Thoughtfully built.</title>\n<link href=\"assets/favicon.svg\" rel=\"icon\" type=\"image/svg+xml\"/>\n<link href=\"https://fonts.googleapis.com\" rel=\"preconnect\"/>\n<link crossorigin=\"\" href=\"https://fonts.gstatic.com\" rel=\"preconnect\"/>\n<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Manrope:wght@600;700;800&amp;display=swap\" rel=\"stylesheet\"/>\n<link href=\"styles.css\" rel=\"stylesheet\"/>\n<script defer=\"\" src=\"script.js\"></script>\n<noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>\n<link href=\"https://tabloop.netlify.app/\" rel=\"canonical\"/><meta content=\"https://tabloop.netlify.app/\" property=\"og:url\"/><meta content=\"Tabloop\" property=\"og:site_name\"/><meta content=\"en_IN\" property=\"og:locale\"/><meta content=\"index,follow,max-image-preview:large\" name=\"robots\"/><script type=\"application/ld+json\">{\n  \"@context\": \"https://schema.org\",\n  \"@graph\": [\n    {\n      \"@type\": \"Organization\",\n      \"@id\": \"https://tabloop.netlify.app/#organization\",\n      \"name\": \"Tabloop\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"logo\": {\n        \"@type\": \"ImageObject\",\n        \"url\": \"https://tabloop.netlify.app/assets/favicon.svg\"\n      },\n      \"description\": \"Tabloop is an independent software studio building simple, privacy-first web and mobile products.\",\n      \"foundingLocation\": {\n        \"@type\": \"Country\",\n        \"name\": \"India\"\n      }\n    },\n    {\n      \"@type\": \"WebSite\",\n      \"@id\": \"https://tabloop.netlify.app/#website\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"name\": \"Tabloop\",\n      \"publisher\": {\n        \"@id\": \"https://tabloop.netlify.app/#organization\"\n      },\n      \"inLanguage\": \"en-IN\"\n    },\n    {\n      \"@type\": \"WebPage\",\n      \"@id\": \"https://tabloop.netlify.app/#webpage\",\n      \"url\": \"https://tabloop.netlify.app/\",\n      \"name\": \"Tabloop \u2014 Useful software. Thoughtfully built.\",\n      \"isPartOf\": {\n        \"@id\": \"https://tabloop.netlify.app/#website\"\n      },\n      \"about\": {\n        \"@id\": \"https://tabloop.netlify.app/#organization\"\n      },\n      \"inLanguage\": \"en-IN\"\n    }\n  ]\n}</script></head>\n<body>\n<a class=\"skip-link\" href=\"#main\">Skip to content</a>\n<header class=\"site-header\" id=\"top\">\n<div class=\"container nav-wrap\">\n<a aria-label=\"Tabloop home\" class=\"brand\" href=\"#top\">\n<span aria-hidden=\"true\" class=\"brand-mark\">\n<svg role=\"img\" viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</span>\n<span>Tabloop</span>\n</a>\n<button aria-expanded=\"false\" aria-label=\"Open navigation\" class=\"menu-toggle\">\n<span></span><span></span><span></span>\n</button>\n<nav aria-label=\"Main navigation\" class=\"nav\">\n<a href=\"#products\">Products</a>\n<a href=\"#about\">About</a>\n<a href=\"#principles\">Principles</a>\n<a href=\"#contact\">Contact</a>\n</nav>\n<a class=\"nav-cta\" href=\"#products\">Explore products</a>\n</div>\n</header>\n<main id=\"main\">\n<section class=\"hero section\">\n<div class=\"container hero-grid\">\n<div class=\"hero-copy reveal\">\n<div class=\"eyebrow\">Independent software studio</div>\n<h1>Useful software.<br/><span>Thoughtfully built.</span></h1>\n<p class=\"hero-lede\">\n            Tabloop builds simple, reliable and privacy-first digital products\n            that solve real everyday problems.\n          </p>\n<div class=\"hero-actions\">\n<a class=\"btn btn-primary\" href=\"#products\">Explore our products</a>\n<a class=\"btn btn-ghost\" href=\"#about\">About Tabloop</a>\n</div>\n<div aria-label=\"Tabloop values\" class=\"trust-row\">\n<span>Privacy first</span>\n<span>Simple by design</span>\n<span>Useful first</span>\n</div>\n</div>\n<div aria-hidden=\"true\" class=\"hero-visual reveal\">\n<div class=\"orbit orbit-a\"></div>\n<div class=\"orbit orbit-b\"></div>\n<div class=\"visual-core\">\n<div class=\"visual-logo\">\n<svg viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</div>\n<span>privacy by design</span>\n</div>\n<div class=\"float-card float-card-a\">\n<small>Principle 01</small>\n<strong>Collect less</strong>\n</div>\n<div class=\"float-card float-card-b\">\n<small>Principle 02</small>\n<strong>Process locally</strong>\n</div>\n<div class=\"float-card float-card-c\">\n<small>Principle 03</small>\n<strong>Keep users in control</strong>\n</div>\n</div>\n</div>\n</section>\n<section class=\"statement-strip\">\n<div class=\"container statement-inner reveal\">\n<p>Software should solve the problem <strong>without becoming another problem.</strong></p>\n</div>\n</section>\n<section class=\"section\" id=\"products\">\n<div class=\"container\">\n<div class=\"section-head reveal\">\n<div>\n<span class=\"eyebrow\">Our products</span>\n<h2>Built around real problems.</h2>\n</div>\n<p>Focused digital products across documents, productivity, personal finance and everyday utilities.</p>\n</div>\n<div class=\"product-grid\">\n<article class=\"product-card comet reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge\">Live</div>\n<span class=\"product-index\">01</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">C</div>\n<h3>CometFile</h3>\n<p class=\"product-tag\">Document tools without the hassle.</p>\n<p>Free browser-based PDF, Word and image tools designed for fast, private everyday document work.</p>\n<div class=\"product-meta\">\n<span>No sign-up</span>\n<span>Browser-based</span>\n<span>Local-first</span>\n</div>\n<a class=\"text-link\" href=\"https://cometfile.com\" rel=\"noopener\" target=\"_blank\">Visit CometFile <span>\u2197</span></a>\n</article>\n<article class=\"product-card xpend reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge muted\">In development</div>\n<span class=\"product-index\">02</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">X</div>\n<h3>Xpendbox</h3>\n<p class=\"product-tag\">Personal finance without unnecessary exposure.</p>\n<p>A privacy-focused expense tracker built around local data, clear budgeting and everyday money awareness.</p>\n<div class=\"product-meta\">\n<span>Privacy-first</span>\n<span>Local data</span>\n<span>Mobile-first</span>\n</div>\n<span aria-disabled=\"true\" class=\"text-link disabled\">Coming soon</span>\n</article>\n<article class=\"product-card future reveal\">\n<div class=\"product-top\">\n<div class=\"product-badge muted\">Next</div>\n<span class=\"product-index\">03+</span>\n</div>\n<div aria-hidden=\"true\" class=\"product-icon\">+</div>\n<h3>More ideas are in the loop.</h3>\n<p class=\"product-tag\">Small tools. Practical ideas. Better software.</p>\n<p>We are exploring new products across utilities, SaaS, AI-assisted workflows and mobile applications.</p>\n<div class=\"product-meta\">\n<span>Web</span>\n<span>Mobile</span>\n<span>SaaS</span>\n</div>\n</article>\n</div>\n</div>\n</section>\n<section class=\"section privacy-section\" id=\"about\">\n<div class=\"container privacy-grid\">\n<div class=\"privacy-copy reveal\">\n<span class=\"eyebrow\">About Tabloop</span>\n<h2>Building useful software without unnecessary data collection.</h2>\n<p>\n            Tabloop is an independent software studio focused on building practical,\n            privacy-first web and mobile products.\n          </p>\n<p>\n            We started with a simple belief: useful software should not require\n            people to give up more personal data than necessary.\n          </p>\n<p>\n            Where practical, our products favour browser-based or on-device processing,\n            local storage, minimal account requirements and transparent data practices.\n          </p>\n</div>\n<aside class=\"privacy-panel reveal\">\n<span class=\"panel-kicker\">Our core promise</span>\n<blockquote>\n            Solve the problem.<br/>\n            Keep it simple.<br/>\n            Respect the user's data.\n          </blockquote>\n<div class=\"panel-foot\">\n<span>Built independently in India</span>\n</div>\n</aside>\n</div>\n</section>\n<section class=\"section vision-mission\">\n<div class=\"container vm-grid\">\n<article class=\"vm-card reveal\">\n<span class=\"eyebrow\">Vision</span>\n<h2>Make useful software simpler, more accessible, and more private by design.</h2>\n<p>\n            We envision a future where people do not have to trade privacy for convenience,\n            and where respecting user data is a normal part of good software.\n          </p>\n</article>\n<article class=\"vm-card reveal\">\n<span class=\"eyebrow\">Mission</span>\n<h2>Build simple, reliable, privacy-first digital products that solve real everyday problems.</h2>\n<p>\n            We focus on thoughtful design, useful functionality, transparent data practices\n            and privacy-conscious technology.\n          </p>\n</article>\n</div>\n</section>\n<section class=\"section\" id=\"principles\">\n<div class=\"container\">\n<div class=\"section-head reveal\">\n<div>\n<span class=\"eyebrow\">How we build</span>\n<h2>Privacy isn't an extra feature.</h2>\n</div>\n<p>It is part of the product decisions we make from the beginning.</p>\n</div>\n<div class=\"principle-grid\">\n<article class=\"principle reveal\">\n<span>01</span>\n<h3>Privacy first</h3>\n<p>We aim to minimise unnecessary data collection and favour local processing where practical.</p>\n</article>\n<article class=\"principle reveal\">\n<span>02</span>\n<h3>Simple by design</h3>\n<p>Clear workflows and useful features matter more than complexity for its own sake.</p>\n</article>\n<article class=\"principle reveal\">\n<span>03</span>\n<h3>Useful first</h3>\n<p>We build around real problems instead of adding features simply because we can.</p>\n</article>\n<article class=\"principle reveal\">\n<span>04</span>\n<h3>Transparent</h3>\n<p>People should understand what a product does and how their information is handled.</p>\n</article>\n<article class=\"principle reveal\">\n<span>05</span>\n<h3>User control</h3>\n<p>Where practical, users should remain in control of where their information is stored.</p>\n</article>\n<article class=\"principle reveal\">\n<span>06</span>\n<h3>Always improving</h3>\n<p>We learn from real usage, feedback and changing technology to keep improving our products.</p>\n</article>\n</div>\n</div>\n</section>\n<section class=\"section privacy-banner\">\n<div class=\"container reveal\">\n<div class=\"banner-card\">\n<div>\n<span class=\"eyebrow\">Our privacy philosophy</span>\n<h2>Your data doesn't need to be our business.</h2>\n</div>\n<p>\n            Where practical, Tabloop products are designed to process information locally,\n            minimise data collection and keep users in control of their information.\n          </p>\n</div>\n</div>\n</section>\n<section class=\"section contact-section\" id=\"contact\">\n<div class=\"container contact-grid\">\n<div class=\"contact-copy reveal\">\n<span class=\"eyebrow\">Contact</span>\n<h2>Have something to say?</h2>\n<p>\n            Feedback, product ideas, partnerships, or something we could improve \u2014\n            we'd be glad to hear from you.\n          </p>\n</div>\n<form action=\"thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n<input name=\"form-name\" type=\"hidden\" value=\"tabloop-contact\"/>\n<p class=\"hidden\"><label>Don't fill this out: <input name=\"bot-field\"/></label></p>\n<label>\n<span>Name</span>\n<input autocomplete=\"name\" name=\"name\" required=\"\" type=\"text\"/>\n</label>\n<label>\n<span>Email</span>\n<input autocomplete=\"email\" name=\"email\" required=\"\" type=\"email\"/>\n</label>\n<label>\n<span>Subject</span>\n<input name=\"subject\" required=\"\" type=\"text\"/>\n</label>\n<label>\n<span>Message</span>\n<textarea name=\"message\" required=\"\" rows=\"5\"></textarea>\n</label>\n<button class=\"btn btn-primary\" type=\"submit\">Send message</button>\n</form>\n</div>\n</section>\n</main>\n<footer class=\"site-footer\">\n<div class=\"container footer-grid\">\n<div class=\"footer-brand\">\n<a class=\"brand\" href=\"#top\">\n<span aria-hidden=\"true\" class=\"brand-mark\">\n<svg viewbox=\"0 0 36 36\">\n<path d=\"M9 11.5c0-3 2.4-5.5 5.5-5.5h7C25.6 6 28 8.4 28 11.5S25.6 17 22.5 17h-9C10.5 17 8 19.5 8 22.5S10.5 28 13.5 28h8C25.1 28 28 25.1 28 21.5\"></path>\n<circle cx=\"28\" cy=\"21.5\" r=\"2.25\"></circle>\n</svg>\n</span>\n<span>Tabloop</span>\n</a>\n<p>Useful software. Thoughtfully built.</p>\n</div>\n<div>\n<h4>Products</h4>\n<a href=\"https://cometfile.com\" rel=\"noopener\" target=\"_blank\">CometFile</a>\n<span class=\"footer-muted\">Xpendbox</span>\n</div>\n<div>\n<h4>Company</h4>\n<a href=\"#about\">About</a>\n<a href=\"#principles\">Principles</a>\n<a href=\"#contact\">Contact</a>\n</div>\n<div>\n<h4>Legal</h4>\n<a href=\"privacy.html\">Privacy Policy</a>\n<a href=\"terms.html\">Terms of Use</a>\n</div>\n</div>\n<div class=\"container footer-bottom\">\n<span>\u00a9 <span id=\"year\">2026</span> Tabloop. All rights reserved.</span>\n<span>Built independently in India.</span>\n</div>\n</footer>\n</body>\n</html>\n",
+              "path": "index.html"
+            }
+          ],
+          "exit_code": 0,
+          "image": "4bbb489b-d728-4bb7-a729-583c2713932b",
+          "output": "Syntax checked 1 script(s); 0 remote script(s) not checked. No behavior verified by this gate.\n\n> tabloop@1.0.0 test\n> node --test\n\nTAP version 13\n# Subtest: homepage keeps the named contact form and confirmation page\nok 1 - homepage keeps the named contact form and confirmation page\n  ---\n  duration_ms: 1.869196\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 128.130926",
+          "regression_test_present": false,
+          "tests_passed": 1
+        }
+      ],
+      "baseline_command": "node /patchproof/static_web_check.mjs index.html && CI=1 npm test",
+      "baseline_tests_passed": 1,
+      "candidate": 3,
+      "changed_files": [
+        "index.html"
+      ],
+      "changed_lines": 2,
+      "command": "( node --check test_patchproof_issue_2.test.mjs || { echo PATCHPROOF_JS_PARSE=failed >&2; exit 2; } ) && node --test --test-reporter=tap test_patchproof_issue_2.test.mjs",
+      "diff": "--- index.html\n+++ index.html\n@@ -322,7 +322,7 @@\n             we'd be glad to hear from you.\n           </p>\n </div>\n-<form action=\"/thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n+<form action=\"thank-you.html\" class=\"contact-form reveal\" data-netlify=\"true\" method=\"POST\" name=\"tabloop-contact\" netlify-honeypot=\"bot-field\">\n <input name=\"form-name\" type=\"hidden\" value=\"tabloop-contact\"/>\n <p class=\"hidden\"><label>Don't fill this out: <input name=\"bot-field\"/></label></p>\n <label>\n",
+      "duration_seconds": 9.687,
+      "eligibility": {
+        "scope": "unrestricted",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "27d594a9-eb2b-4dff-a6e0-585e16030c15",
+      "output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 101.191822\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 861.808418\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "maintainable behavior-preserving correction",
+      "summary": "Changed form action from absolute (/thank-you.html) to relative (thank-you.html) to ensure correct routing when deployed under subpaths.",
+      "test_protected": true,
+      "tests_passed": 1
+    }
+  ],
+  "clean_replay": {
+    "command": "node /patchproof/static_web_check.mjs index.html && CI=1 npm test && echo PATCHPROOF_REGRESSION_START && ( node --check test_patchproof_issue_2.test.mjs || { echo PATCHPROOF_JS_PARSE=failed >&2; exit 2; } ) && node --test --test-reporter=tap test_patchproof_issue_2.test.mjs",
+    "exit_code": 0,
+    "image": "6838e36e-632d-4dbf-a827-ec5d794a20fd",
+    "output": "Syntax checked 1 script(s); 0 remote script(s) not checked. No behavior verified by this gate.\n\n> tabloop@1.0.0 test\n> node --test\n\nTAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 97.799741\n  ...\n# Subtest: homepage keeps the named contact form and confirmation page\nok 2 - homepage keeps the named contact form and confirmation page\n  ---\n  duration_ms: 1.783658\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 768.187178\nPATCHPROOF_REGRESSION_START\nTAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 93.973477\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 617.311503\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+    "passed": true,
+    "test_protected": true,
+    "tests_passed": 1
+  },
+  "engine": {
+    "app_version": "0.6.0-rc.36",
+    "commit": null,
+    "ref": null
+  },
+  "engine_provenance": {
+    "agent_budget.py": "8969f6d11aabd2a4274e8e8c2e2791826db6097c6362cf0015afa4f5a5aff71d",
+    "agent_loop.py": "436fd1b9e3016eb09c7d93b58a4fe893b69d3a31cb2e4609553ffc7c502209ac",
+    "context_tools.py": "ac899526daa1d339359feac313e6b02c131b722b017fb3819f259293d1300e1c",
+    "outcomes.py": "b00f64acd9b3753a02f759b714d3d8173e09e007c4260700907f4ab27d90f32e",
+    "patchproof_runtime/candidate_policy.mjs": "0186061b3fdd831079bfd46e8782e29e972668bc3da35c2f20de39809d941262",
+    "patchproof_runtime/java_check.py": "5f2f257fa7436d1974678b59d375d2ae30f2eec903912515dc47c0143cc63cf8",
+    "patchproof_runtime/jsdom.mjs": "1463a216dffb05dfa8e428b51bf012479d3521ae92336814dd509c41ebc8ef4c",
+    "patchproof_runtime/junit_check.py": "6a0540f30b27fff53b75d6c2dcb20d67f6658041b014a25f3ea58f160f83693f",
+    "patchproof_runtime/known_failures.py": "21324b08ef8cc13e3f0babababc99a4abb56f881a45f96e8706eb843b9abc54f",
+    "patchproof_runtime/pytest_check.py": "a26c0dde8e22f148507354234ffe057586f468fb7a5b8c63ba8f1fee1d279522",
+    "patchproof_runtime/static_web_check.mjs": "3d9f1a72b5b9b758423fef2b1d51aae4939686d939d9585e0b0b4846e8eeed66",
+    "patchproof_runtime/typescript_check.py": "602b8cc16b9fa6bede43637943c6ae9939a0023e04bad65953b13c3dacd646d5",
+    "patchproof_runtime/typescript_config.py": "a0aa93b6f32c47aa621bffeb133bbb232e336c8f1d302b431c27af378c5f2a3f",
+    "patchproof_runtime/typescript_runtime.d.ts": "d48920d450f03e925e8c314259dbfa89772f3fb12f6e60c4c116c6460ab45c66",
+    "patchproof_runtime/typescript_source_check.py": "4fd4662dd716c891a9439cf1ca1f09957c9b44fef948b52e81236a18325d725a",
+    "patchproof_runtime/typescript_test_lint.mjs": "164cd0442a5d27ee4568928d22653a2ec0a81feaddf2c5c063e5e2c30e41bce6",
+    "patchproof_runtime/web_streams.d.mts": "ff766e759387550451e4279190d5addf547fe3eb158333aa9ca7b0b3ef54c2d2",
+    "patchproof_runtime/web_streams.mjs": "8af9a34fa96da5436074c3d822a6007ce241af96b3d7166019b245eec0f49817",
+    "proof.py": "46ac3f0a474ede910b5beee4cabab2aca9daa93f99b3a140c44f080095936500",
+    "requirements-patchproof.txt": "f1e7713ad96ea72af42204e1df4c36895f2ff075a23c49e083eb61f8208c332a",
+    "runtimes.py": "b9faa9e9cc4404e124ec4fa929c0c391c3c34d210ac128de3b752501a9593034",
+    "scope_policy.py": "2dd40cf0197ed6faa470224f6ceb94f5cc2ebb445af95235327ba757c0dd5450",
+    "spec_profile.py": "62029fdd8b9c87e3b1af13f34f02d22194e22fcd2dffb1a62d0a773a26cf77c9"
+  },
+  "issue": {
+    "number": 2,
+    "title": "Root-Absolute Form Action Breaks Subpath / Staging Deploys",
+    "url": "https://github.com/creatoropener/Tabloop/issues/2"
+  },
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "outcome": {
+    "bucket": "verified",
+    "detail": "repair verified and replayed",
+    "evaluated_repair": true,
+    "stage": "completed"
+  },
+  "pr_files": [
+    {
+      "path": "test_patchproof_issue_2.test.mjs",
+      "sha256": "dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4"
+    },
+    {
+      "path": "patchproof_helpers/jsdom.mjs",
+      "sha256": "1463a216dffb05dfa8e428b51bf012479d3521ae92336814dd509c41ebc8ef4c"
+    },
+    {
+      "path": "index.html",
+      "sha256": "e687707694582f76df3c60ce92945e656210bf005b560fc28644e4e509cc36c7"
+    }
+  ],
+  "project_inputs": {
+    "package-lock.json": "7b0302abd6d06743752d1993df6cf3f4fb7d8231cb5092a7c3ddf518def07052",
+    "package.json": "e0c149500b4a93a211c63cf3c75ac94ce39f58f3a3520f514f95611417b88f4e",
+    "patchproof.json": "1a36e6ccd550f61da6334ff311d46d02e37c5660461c1ac3c911792558cf9eac"
+  },
+  "project_root": ".",
+  "race": {
+    "attempted": 3,
+    "evaluated": 3,
+    "passing": 3,
+    "planned": 3,
+    "policy": "any eligible passing candidate may enter clean replay"
+  },
+  "readiness": {
+    "baseline_tests": 1,
+    "before_inference": false,
+    "blockers": [],
+    "checks": [
+      {
+        "check": "runtime",
+        "detail": "static-web (node-test)",
+        "status": "passed"
+      },
+      {
+        "check": "project_root",
+        "detail": "repository root",
+        "status": "passed"
+      },
+      {
+        "check": "package_manager",
+        "detail": "npm",
+        "status": "passed"
+      },
+      {
+        "check": "scope",
+        "detail": "unrestricted source scope",
+        "status": "passed"
+      },
+      {
+        "check": "sandbox_setup",
+        "detail": "workspace unpacked, dependencies installed, toolchain present",
+        "status": "passed"
+      },
+      {
+        "check": "baseline",
+        "detail": "`node /patchproof/static_web_check.mjs index.html && CI=1 npm test`; 1 test(s) passed",
+        "status": "passed"
+      },
+      {
+        "check": "compatibility_coverage",
+        "detail": "1 existing test(s) guard unrelated behavior",
+        "status": "passed"
+      }
+    ],
+    "compatibility_coverage": "present",
+    "status": "ready",
+    "warnings": []
+  },
+  "regression_test": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "classification": "test passed on the unfixed revision",
+        "content": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { JSDOM } from './patchproof_helpers/jsdom.mjs';\nimport { readFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\n\ntest('contact form submission targets correct relative path', async () => {\n  const html = readFileSync(resolve('./index.html'), 'utf8');\n  const dom = new JSDOM(html, { url: 'https://patchproof.invalid/', runScripts: 'outside-only' });\n  const form = dom.window.document.querySelector('form[name=\"tabloop-contact\"]');\n  assert.strictEqual(form.action, 'https://patchproof.invalid/thank-you.html');\n});\n",
+        "counts_toward_limit": true,
+        "exit_code": 0,
+        "image": "31fdda5d-84af-4e7a-b6f2-e2c83e2df15a",
+        "output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 93.08251\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 812.720979\n\nPATCHPROOF_TEST_HASH_BEFORE=24b063ec1ab4eab72685295b225bd194487c580ccd4fb4362124f31ae3b485e0\nPATCHPROOF_TEST_HASH_AFTER=24b063ec1ab4eab72685295b225bd194487c580ccd4fb4362124f31ae3b485e0",
+        "protected": true,
+        "rationale": "The test loads the actual index.html, uses jsdom to parse it, and checks that the contact form's action attribute resolves to the expected relative URL. It fails on the unfixed revision because the form uses an absolute path (/thank-you.html) causing the action to resolve to https://patchproof.invalid/thank-you.html instead of the correct subpath.",
+        "sha256": "24b063ec1ab4eab72685295b225bd194487c580ccd4fb4362124f31ae3b485e0",
+        "static_rejection": false
+      },
+      {
+        "attempt": 2,
+        "classification": "test passed on the unfixed revision",
+        "content": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { JSDOM } from './patchproof_helpers/jsdom.mjs';\nimport { readFileSync } from 'node:fs';\n\ntest('contact form submission targets correct relative path', async () => {\n  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');\n  const dom = new JSDOM(html, { url: 'https://patchproof.invalid/', runScripts: 'outside-only' });\n  const form = dom.window.document.querySelector('form[name=\"tabloop-contact\"]');\n  assert.strictEqual(form.action, 'https://patchproof.invalid/thank-you.html');\n});\n",
+        "counts_toward_limit": true,
+        "exit_code": 0,
+        "image": "e155ae12-0882-42dd-ada4-56c43b5d5e81",
+        "output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 99.599752\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 782.881904\n\nPATCHPROOF_TEST_HASH_BEFORE=d4fb82c6a77984852bd1d6b585aee1275033fb503581d0e2e9b07bb7b4dada44\nPATCHPROOF_TEST_HASH_AFTER=d4fb82c6a77984852bd1d6b585aee1275033fb503581d0e2e9b07bb7b4dada44",
+        "protected": true,
+        "rationale": "The test asserts the form's action resolves to an absolute URL based on the provided base URL, exposing the defect where a root-absolute action breaks subpath deployments. After fixing the form to use a relative action, the test will pass because the resolved URL will correctly include the subpath.",
+        "sha256": "d4fb82c6a77984852bd1d6b585aee1275033fb503581d0e2e9b07bb7b4dada44",
+        "static_rejection": false
+      },
+      {
+        "attempt": 3,
+        "classification": "accepted assertion failure reproduced the issue",
+        "content": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { JSDOM } from './patchproof_helpers/jsdom.mjs';\nimport { readFileSync } from 'node:fs';\n\ntest('contact form submission targets correct relative path', async () => {\n  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');\n  const dom = new JSDOM(html, { url: 'https://patchproof.invalid/', runScripts: 'outside-only' });\n  const form = dom.window.document.querySelector('form[name=\"tabloop-contact\"]');\n  assert.strictEqual(form.getAttribute('action'), 'thank-you.html');\n});\n",
+        "counts_toward_limit": true,
+        "exit_code": 1,
+        "image": "d2697f0d-ffd8-4e36-9954-3fd89f6d19f8",
+        "output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nnot ok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 97.915203\n  location: '/workspace/repo/test_patchproof_issue_2.test.mjs:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + '/thank-you.html'\n    - 'thank-you.html'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'thank-you.html'\n  actual: '/thank-you.html'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_2.test.mjs:10:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 851.759644\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+        "protected": true,
+        "rationale": "The test asserts that the contact form's action attribute contains the relative path 'thank-you.html' as used elsewhere in the project, which will fail on the unfixed revision due to the root-absolute '/thank-you.html' and pass after the repair.",
+        "sha256": "dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+        "static_rejection": false
+      }
+    ],
+    "content": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { JSDOM } from './patchproof_helpers/jsdom.mjs';\nimport { readFileSync } from 'node:fs';\n\ntest('contact form submission targets correct relative path', async () => {\n  const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');\n  const dom = new JSDOM(html, { url: 'https://patchproof.invalid/', runScripts: 'outside-only' });\n  const form = dom.window.document.querySelector('form[name=\"tabloop-contact\"]');\n  assert.strictEqual(form.getAttribute('action'), 'thank-you.html');\n});\n",
+    "created_before_candidates": true,
+    "failed_before_fix": true,
+    "generation_attempts": [
+      {
+        "attempt": 1,
+        "execution_attempt": 1,
+        "sha256": "24b063ec1ab4eab72685295b225bd194487c580ccd4fb4362124f31ae3b485e0",
+        "status": "validated"
+      },
+      {
+        "attempt": 2,
+        "diagnostic": "Verifier response must contain the marker <<<PATCHPROOF_RATIONALE_BEGIN>>> exactly once; found 0. Use the required marker format and nothing else.",
+        "status": "validation_failed"
+      },
+      {
+        "attempt": 3,
+        "execution_attempt": 2,
+        "sha256": "d4fb82c6a77984852bd1d6b585aee1275033fb503581d0e2e9b07bb7b4dada44",
+        "status": "validated"
+      },
+      {
+        "attempt": 4,
+        "execution_attempt": 3,
+        "sha256": "dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+        "status": "validated"
+      }
+    ],
+    "ordinary_ci": {
+      "command": "node /patchproof/static_web_check.mjs index.html && CI=1 npm test",
+      "discovered": true,
+      "exit_code": 1,
+      "output": "Syntax checked 1 script(s); 0 remote script(s) not checked. No behavior verified by this gate.\n\n> tabloop@1.0.0 test\n> node --test\n\nTAP version 13\n# Subtest: contact form submission targets correct relative path\nnot ok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 91.91583\n  location: '/workspace/repo/test_patchproof_issue_2.test.mjs:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + '/thank-you.html'\n    - 'thank-you.html'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'thank-you.html'\n  actual: '/thank-you.html'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_2.test.mjs:10:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: homepage keeps the named contact form and confirmation page\nok 2 - homepage keeps the named contact form and confirmation page\n  ---\n  duration_ms: 1.79882\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 757.101108\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4"
+    },
+    "path": "test_patchproof_issue_2.test.mjs",
+    "pre_fix_exit_code": 1,
+    "pre_fix_image": "d2697f0d-ffd8-4e36-9954-3fd89f6d19f8",
+    "pre_fix_output": "TAP version 13\n# Subtest: contact form submission targets correct relative path\nnot ok 1 - contact form submission targets correct relative path\n  ---\n  duration_ms: 97.915203\n  location: '/workspace/repo/test_patchproof_issue_2.test.mjs:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + '/thank-you.html'\n    - 'thank-you.html'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'thank-you.html'\n  actual: '/thank-you.html'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///workspace/repo/test_patchproof_issue_2.test.mjs:10:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 851.759644\n\nPATCHPROOF_TEST_HASH_BEFORE=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4\nPATCHPROOF_TEST_HASH_AFTER=dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+    "protected": true,
+    "rationale": "The test asserts that the contact form's action attribute contains the relative path 'thank-you.html' as used elsewhere in the project, which will fail on the unfixed revision due to the root-absolute '/thank-you.html' and pass after the repair.",
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "sha256": "dbcff1af0f2b4f9fdb1f354cc17af710b2b5b8f5a8b0250b66ff4f8016f56ee4",
+    "support_files": [
+      {
+        "path": "patchproof_helpers/jsdom.mjs",
+        "sha256": "1463a216dffb05dfa8e428b51bf012479d3521ae92336814dd509c41ebc8ef4c"
+      }
+    ]
+  },
+  "run_id": "8add048e88da48b583038dfec116692c",
+  "runtime": {
+    "application_languages": [
+      "HTML",
+      "CSS",
+      "JavaScript"
+    ],
+    "display_name": "Static HTML / CSS / JavaScript",
+    "id": "static-web",
+    "image_env": "CONTREE_IMAGE",
+    "package_manager": {
+      "bootstrap_command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "name": "npm",
+      "notes": [],
+      "version": null
+    },
+    "preflight_output": "v20.19.2",
+    "test_runtime": "node-test",
+    "toolchain": {
+      "raw": [
+        "v20.19.2"
+      ],
+      "versions": {}
+    }
+  },
+  "sandbox": {
+    "base_image": "70aaee5d-adc9-4b94-b211-1bfdbc7f4e22",
+    "provider": "Nebius Token Factory"
+  },
+  "schema_version": "0.6",
+  "scope": {
+    "limitation": "Declared source boundaries and existing tests; not a proof of all adjacent behavior.",
+    "policy": {},
+    "status": "unrestricted"
+  },
+  "stage": "completed",
+  "verdict": "verified",
+  "verifier": {
+    "fallback": null,
+    "profile_requested": "freeform",
+    "profile_used": "freeform"
+  },
+  "winner": {
+    "candidate": 1,
+    "changed_files": [
+      "index.html"
+    ],
+    "selection": "fewest changed files, then fewest changed lines, then duration",
+    "summary": "Changed form action from absolute '/thank-you.html' to relative 'thank-you.html'."
+  }
+}

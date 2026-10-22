@@ -30,8 +30,8 @@ the number of assertions or whole-application coverage.
 
 ## Later repairs on the v0.6 engine
 
-These two repairs ran on `nvidia/nemotron-3-super-120b-a12b`. Their run and PR links
-are marked below where they still need to be added; none has been invented.
+These four repairs ran on `nvidia/nemotron-3-super-120b-a12b`. Links not yet supplied are
+marked below as needed or to be added; none has been invented.
 
 ### file-sharing-app #3 (v0.6.0-rc.12, `node-typescript`)
 
@@ -56,6 +56,49 @@ are marked below where they still need to be added; none has been invented.
   through the Action was rc.20, which updated [PR #3](https://github.com/creatoropener/QRcrafts/pull/3)
   in place. These runs are the reason the benchmark exists.
 - Links: [rc.15 workflow run URL needed] and [rc.20 workflow run URL needed].
+
+### Tabloop #2 (v0.6.0-rc.36, `static-web`, `freeform`)
+
+- Target: creatoropener/Tabloop, issue [#2](https://github.com/creatoropener/Tabloop/issues/2),
+  "Root-Absolute Form Action Breaks Subpath / Staging Deploys". [PR #3](https://github.com/creatoropener/Tabloop/pull/3).
+- Commits: `34a6cfd30d9c430e5bbb66e1b7e9260919fa8f11` (run source commit) and
+  `2f007b98d3e86d1c1de45124c0e6befcb72a6783` (PR head commit).
+- [Workflow run 39258986618](https://github.com/creatoropener/Tabloop/actions/runs/39258986618): Shadow Fix workflow, triggered by labelling issue #2, success, 1 min 48 s, 2026-10-19. The run page shows the run source commit above.
+- Proof: [verified-tabloop-2-rc36.json](evidence/verified-tabloop-2-rc36.json) (run id
+  `8add048e88da48b583038dfec116692c`, model `nvidia/nemotron-3-super-120b-a12b`, verdict `verified`).
+- Gates recorded: existing suite 1 test passed; jsdom 24.1.3 loaded on Node v20.19.2 before any
+  model request; the planted discovery probe was found by `npm test`. The verifier needed three
+  executions: the first two tests passed on the unfixed page and were refused, the third produced an
+  accepted assertion failure (`'/thank-you.html'` against `'thank-you.html'`). All three candidates
+  passed; candidate 1 won (one file, two lines, 9.265 s). Clean replay passed 1 baseline test plus
+  1 regression test with an unchanged regression hash.
+- Repair: `index.html` form action `/thank-you.html` changed to `thank-you.html`.
+- Caveats: the frozen test asserts `getAttribute('action') === 'thank-you.html'`, which is narrower than
+  the issue (`./thank-you.html` would fail it). The three candidates made the same change, so they are not
+  independent solutions. This is the first live `static-web` success; earlier attempts on rc.34, rc.35 and
+  an earlier rc.36 run did not verify. The repository is owned by the project, so this is a development
+  case, not generalization evidence.
+
+### Aegisscan #3 (v0.6.0-rc.37, `node-typescript`, `freeform`)
+
+- Target: creatoropener/Aegisscan-Bug-Auditor, issue
+  [#3](https://github.com/creatoropener/Aegisscan-Bug-Auditor/issues/3), "SAST dependency scan misses
+  vulnerable Axios versions with normal semver". [PR #4](https://github.com/creatoropener/Aegisscan-Bug-Auditor/pull/4).
+- Commits: `044a3ecbd7b5f4586d7b3193cd403d9ebc657567` (run source commit) and
+  `50805a0b22c1e0e2dc66818b70b16853c21ab83d` (PR head commit).
+- [Workflow run 39312812930](https://github.com/creatoropener/Aegisscan-Bug-Auditor/actions/runs/39312812930): Shadow Fix workflow, triggered by labelling issue #3, success, 2 min 19 s, 2026-10-19, artifact `patchproof-issue-3`. The run page shows the run source commit above.
+- Proof: [verified-aegisscan-3-rc37.json](evidence/verified-aegisscan-3-rc37.json) (run id
+  `5be20ecc786845a9a52cb6309b628b32`, model `nvidia/nemotron-3-super-120b-a12b`, verdict `verified`).
+- Gates recorded: existing suite 5 tests passed; reproduction accepted on attempt 1 (type check and
+  lint passed, then an assertion failure `Expected Axios vulnerability finding`). All three candidates
+  passed, each one file and two lines; candidate 2 won on elapsed time (18.967 s against 19.237 s and
+  19.661 s). Clean replay passed with an unchanged regression hash. Delivered files: `src/server/sastEngine.ts`
+  and `tests/test_patchproof_issue_3.test.ts`.
+- Repair: the Axios version regex in `src/server/sastEngine.ts` now matches versions with a patch
+  component such as `0.19.2`.
+- Caveats: the regression also asserts severity `HIGH` and `cvssScore` 7.4, values the issue does not
+  state; they come from the existing rule metadata and are unverified against the issue. The three
+  candidates are near-identical. Project-owned repository: a development case.
 
 ## Benchmark results
 

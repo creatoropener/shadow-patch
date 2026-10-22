@@ -71,7 +71,7 @@ two repositories it was developed against, and 0 of 6 on two unseen repositories
 verifier never accepted a test. There were no false accepts. We report this gap rather than
 hide it; details are in BENCHMARK.md. We then fixed verifier and static-web problems (rc.22 to
 rc.39) and recorded further verified runs (Tabloop #2, Aegisscan #3 and file-sharing-app #1 on
-rc.39), all on repositories we own, so they are development results. We make no claim that
+rc.39), all on repositories we own, so they are development results. Tabloop #2 (PR #3) and Aegisscan #3 (PR #4) are recorded in EVIDENCE.md with their proof files. We make no claim that
 Shadow Patch generalizes to unseen repositories.
 
 ## Challenges and learning
@@ -129,6 +129,8 @@ come from this project's development, not a benchmark against other platforms.
 - Working demonstration (generated PR and its workflow run): https://github.com/creatoropener/file-sharing-app/pull/2
 - Reusable GitHub Action, pin to a tag: `creatoropener/shadow-patch@v0.6.0-rc.39` (publish the tag before submitting)
 - Later repair: https://github.com/creatoropener/QRcrafts/pull/3
+- Static-web repair: https://github.com/creatoropener/Tabloop/pull/3
+- TypeScript repair: https://github.com/creatoropener/Aegisscan-Bug-Auditor/pull/4
 - Recorded run: https://github.com/creatoropener/file-sharing-app/actions/runs/35464615209
 - Public video URL: add after uploading the final recording to YouTube.
 

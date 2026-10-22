@@ -180,16 +180,17 @@ python3 shadow-patch/proof.py --repo /path/to/target --issue-number 1 \
 
 ## Recorded repairs
 
-Three repairs on two repositories reached a VERIFIED verdict and a pull request. More
-verified runs since rc.34 (Tabloop #2, Aegisscan #3, file-sharing-app #1 on rc.39) are
-on repositories the project owns, so they are development results, not evidence of
-generalization.
+Five repairs on four repositories reached a VERIFIED verdict and a pull request. All four
+repositories are owned by the project, so these are development results, not evidence of
+generalization. A later rc.39 run on file-sharing-app #1 also verified.
 
 | Repair | Engine / adapter | What was wrong |
 | --- | --- | --- |
 | file-sharing-app #1 (PR #2) | v0.5.5, Node | Size and speed formatting printed raw template text |
 | file-sharing-app #3 | v0.6.0-rc.12, `node-typescript` | Every P2P chunk failed its AES-GCM auth-tag check because the per-stream IV seed was never transmitted |
 | QRcrafts #1 (PR #3) | v0.6.0-rc.15 and rc.20, `node-typescript` | WiFi QR codes did not escape the reserved characters `;` `,` `:` `\` and `"` |
+| Tabloop #2 ([PR #3](https://github.com/creatoropener/Tabloop/pull/3)) | v0.6.0-rc.36, `static-web` | The contact form action `/thank-you.html` was root-absolute and broke subpath and staging deploys |
+| Aegisscan #3 ([PR #4](https://github.com/creatoropener/Aegisscan-Bug-Auditor/pull/4)) | v0.6.0-rc.37, `node-typescript` | The SAST dependency scan missed vulnerable Axios versions such as `0.19.2` because its regex expected a quote right after the minor version |
 
 All are recorded in [docs/EVIDENCE.md](docs/EVIDENCE.md). The first green run
 evaluated **three candidates, two passing and one rejected**; the rejected one omitted
@@ -201,9 +202,9 @@ run during release packaging.
 
 | Adapter | Toolchain | Evidence in this release |
 | --- | --- | --- |
-| `node-typescript` | Package baseline + pinned tsx + semantic lint + TypeScript checker + Node test runner | Recorded on the project's own repositories |
+| `node-typescript` | Package baseline + pinned tsx + semantic lint + TypeScript checker + Node test runner | Recorded on the project's own repositories (file-sharing-app, QRcrafts, Aegisscan) |
 | `node-package` | JavaScript package baseline + Node test runner | Recorded for the v0.5.5 repair only |
-| `static-web` | Syntax check + Node/jsdom regression via the project's `node --test` | Experimental; one live success (Tabloop #2) after rc.35 to rc.39 fixes |
+| `static-web` | Syntax check + Node/jsdom regression via the project's `node --test` | Experimental; one live success (Tabloop #2, rc.36, PR linked) after fixes in rc.35 to rc.39 |
 | `python-pytest`, `web-playwright`, `java-junit`, `java-maven`, `java-gradle`, `go`, `rust` | Adapters included | No current-release live evidence; experimental |
 
 One build root is selected per run. Passing a repository baseline does not establish
