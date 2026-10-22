@@ -6,7 +6,7 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 scenes = [
     ("docs/visuals/01-verification.png", 20,
-     "Shadow Engineer turns labelled bugs into PRs backed by test evidence.\nThis walkthrough presents a completed run, not a new live execution."),
+     "Shadow Patch turns labelled bugs into PRs backed by test evidence.\nThis walkthrough presents a completed run, not a new live execution."),
     ("docs/visuals/07-reproduction.png", 25,
      "First, an independent regression reproduces the reported defect.\nThe verifier test is created before any repair candidate is proposed."),
     ("docs/visuals/04-candidates.png", 30,

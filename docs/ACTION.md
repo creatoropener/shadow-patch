@@ -1,6 +1,6 @@
 # Shadow Patch GitHub Action (beta)
 
-Use PatchProof from any repository with **one workflow file**. No engine files are
+Use Shadow Patch from any repository with **one workflow file**. No engine files are
 copied into your repository: the engine runs from the pinned Action version.
 
 > **Beta.** Recorded live evidence exists for `node-typescript` and `node-package`

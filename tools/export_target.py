@@ -49,7 +49,7 @@ def main() -> None:
         for name in FILES:
             archive.write(root / name, name)
         archive.writestr("PATCHPROOF-INSTALL.md", (
-            f"# Install PatchProof v{version}\n\n"
+            f"# Install Shadow Patch v{version}\n\n"
             "Copy the engine files into your target repository, preserving paths.\n"
             "Append __pycache__/ and *.py[cod] to its existing .gitignore.\n"
             "Configure NEBIUS_API_KEY, NEBIUS_PROJECT_ID, NEBIUS_MODEL and a compatible "

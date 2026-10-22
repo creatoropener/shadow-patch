@@ -1,4 +1,4 @@
-# PatchProof v0.6.0-rc.39 — a transient Sandbox API failure is retried and is not reported as a readiness block
+# Shadow Patch v0.6.0-rc.39 — a transient Sandbox API failure is retried and is not reported as a readiness block
 
 A file-sharing-app run on rc.38 stopped at `runtime-preflight` with `ApiStatusCodeError ... GET /sandboxes/v1/files/<sha> ... status=500`: the Nebius Sandbox API failed while the engine uploaded its helper files. Nothing was wrong with the repository, the issue or the engine's logic, but the engine had no retry and the outcome said `readiness_blocked`.
 
@@ -11,7 +11,7 @@ Not covered: later steps (candidate evaluation, clean replay) are not retried, a
 
 ---
 
-# PatchProof v0.6.0-rc.38 — the rc.37 root-URL refusal no longer refuses a test that can fail
+# Shadow Patch v0.6.0-rc.38 — the rc.37 root-URL refusal no longer refuses a test that can fail
 
 Two live runs verified: Tabloop #2 on **rc.36** (`1b9026a3-proof_tabloop__2_.json`, the first live `static-web` success) and Aegisscan #3 on rc.37 (`8cf46a25-proof_Aegis.json`, `node-typescript`, so unaffected by rc.37's static-web changes). Replaying the Tabloop test through rc.37 showed a false positive in the rule rc.37 added: it refused any root-URL test for an issue that mentions a subpath, including the test that verified on rc.36. That test reads the raw attribute (`form.getAttribute('action')`), which fails at the root without any URL path. rc.38 limits the refusal to tests that read a *resolved* address (`.action`, `.href`, `.src`, `location.href`), the only kind a root URL hides. The two tests that failed on rc.36 (`form.action` at the root) are still refused.
 
@@ -19,7 +19,7 @@ Upload and tag steps are as in the sections below, with `RC38-CHANGES.json` and 
 
 ---
 
-## (superseded by rc.38 above) PatchProof v0.6.0-rc.37 — a test that cannot fail on the unfixed page is refused and explained
+## (superseded by rc.38 above) Shadow Patch v0.6.0-rc.37 — a test that cannot fail on the unfixed page is refused and explained
 
 The Tabloop #2 run on rc.36 (`bec7431b-proof.json`) is the first static-web run that got everything right on the setup side: jsdom 24.1.3 loaded on Node v20.19.2 (`baseline.jsdom_probe`), the baseline was green, the probe test was found, and the generated tests ran. It ended `no_reproduction` because every test created the page at `https://patchproof.invalid/`. At the host root a root-absolute action (`/thank-you.html`) and a relative one (`thank-you.html`) resolve to the same address, so no assertion on the resolved action can fail on the unfixed page. That was the engine's doing: the adapter's prompt said to set `url: 'https://patchproof.invalid/'`. On rc.34 the model had happened to use `/Tabloop/` and got a sound test. The retry feedback also told the model to use `doesNotReject`, which means nothing for a DOM test, and it repeated the same test.
 
@@ -35,7 +35,7 @@ No live run covers rc.37. **A new tag is needed.** Upload and tag steps are unch
 
 ---
 
-## (superseded by rc.37 above) PatchProof v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
+## (superseded by rc.37 above) Shadow Patch v0.6.0-rc.36 — a jsdom that cannot load is caught before any model request
 
 The Tabloop #2 run on rc.35 (`eef15ec1-proof.json`) got further than any static-web run before it: tests discovered, baseline green, three generated tests. Then all three died inside the project's own jsdom. The lockfile had resolved **jsdom 30**, whose `undici` 8 dependency reads `zlib.createZstdDecompress` when it loads; the sandbox runs Node 20, which does not have it. The run spent three model requests on a failure that no test could have avoided. The setup instructions in `docs/RUN_GUIDE.md` and this file said `npm install --save-dev jsdom`, which installs the newest jsdom, so the cause was partly the guide. rc.36 fixes the engine and the guide. No live run covers rc.36. **A new tag is needed.** rc.35 stays as published; do not move it.
 
@@ -63,7 +63,7 @@ What rc.36 also changes: a generated test that uses `__dirname`, `__filename` or
 
 ---
 
-## (superseded by rc.36 above) PatchProof v0.6.0-rc.35 — the static-web adapter can complete a run
+## (superseded by rc.36 above) Shadow Patch v0.6.0-rc.35 — the static-web adapter can complete a run
 
 rc.35 is rc.34 plus one fix, for one adapter. Tabloop #2 showed that `static-web` could never finish a run: its prompt required a sandbox-only jsdom path and the engine refused any test containing it, and its baseline never ran a test. Details and the offline evidence are in `CHANGELOG.md`. No live run covers rc.35. **A new tag is needed** (the engine changed), and it is the one the fresh-set run should record.
 
@@ -120,7 +120,7 @@ Send back `proof.json` and `engine-stderr.txt`. If the discovery gate passes, th
 
 ---
 
-# PatchProof v0.6.0-rc.34 — a table's column titles in front of a row are accepted, and refused specifications are logged
+# Shadow Patch v0.6.0-rc.34 — a table's column titles in front of a row are accepted, and refused specifications are logged
 
 rc.34 is rc.33 plus the fix for the fourth live specification run. qrcrafts-1 verified on `spec`. file-sharing-app-1 failed again: the rc.33 feedback named the exact row to quote and the model quoted column titles plus the row anyway, then moved `evidence` to the top level three times. The engine now accepts one or two short title lines in front of a row and grounds every value on the row alone, drops JSON punctuation after the END marker, explains a top-level `evidence`, and logs the model's text for every refused specification.
 
@@ -153,7 +153,7 @@ See docs/evidence/rc34-local/. No live run covers rc.34.
 
 ---
 
-# PatchProof v0.6.0-rc.33 notes (superseded by rc.34 above; its install and run steps no longer apply)
+# Shadow Patch v0.6.0-rc.33 notes (superseded by rc.34 above; its install and run steps no longer apply)
 
 rc.33 is rc.32 plus the fix for the third live specification run (file-sharing-app-1, `verifier=spec`). The rc.32 bracket repair worked on the live blocks. The run then failed because the model quoted every table example as the header line plus its row; only e1 sat directly under the header, so six of seven examples were refused as not being one passage of the issue. The one survivor already passes on the unfixed code, so nothing reproduced. The retry prompt never listed the refusals, so the model repeated itself until the budget ran out.
 
@@ -188,7 +188,7 @@ See docs/evidence/rc33-local/. No live run covers rc.33.
 
 ---
 
-# PatchProof v0.6.0-rc.32 notes (superseded by rc.33 above; its install and run steps no longer apply)
+# Shadow Patch v0.6.0-rc.32 notes (superseded by rc.33 above; its install and run steps no longer apply)
 
 rc.32 is rc.31 plus the fix for the second live specification run. On rc.31, qrcrafts-1 under `verifier=spec` succeeded. file-sharing-app-1 stopped `spec_invalid`: the model's three examples were fine, but it ended the block with `], "` and the END marker, never closing the object, and sent the identical text three times because the error message talked about backslashes. The engine now closes brackets left open at the very end of a block (never adding or changing a value; every example is still grounded in the issue) and records `json_repaired`. Error messages say "not closed" when that is the problem. The manifest error for a malformed `repo` shows the value.
 
@@ -222,7 +222,7 @@ See docs/evidence/rc32-local/. No live run covers rc.32.
 
 ---
 
-# PatchProof v0.6.0-rc.31 notes (superseded by rc.32 above; its install and run steps no longer apply)
+# Shadow Patch v0.6.0-rc.31 notes (superseded by rc.32 above; its install and run steps no longer apply)
 
 rc.31 is rc.30 plus the fix for the first live specification run (qrcrafts-1, `verifier=spec`): the model added a third example with values the issue never gives, and that one example made the engine refuse the whole specification, including the two grounded ones. Examples are now judged one by one: an ungrounded example is left out and recorded in `regression_test.spec.rejected_examples`, and the specification stands if at least one example passes every check. The prompt now says to use only examples written in the issue, JSON parse errors show the text around the failure, and the recorded tool versions are no longer shifted by newer tsx's two-line banner. Nothing else changes; rc.30 is described below.
 
@@ -255,7 +255,7 @@ Send back the trial's `proof.json` and `engine-stderr.txt`. Read `regression_tes
 
 ---
 
-# PatchProof v0.6.0-rc.30 notes (feature description; its install and run steps are superseded by rc.31's above)
+# Shadow Patch v0.6.0-rc.30 notes (feature description; its install and run steps are superseded by rc.31's above)
 
 rc.30 is rc.29 plus the five steps of the test-quality review. Locally validated only: no live run covers it. The free-form verifier is still the default, so an unchanged workflow behaves as it did on rc.29 apart from the new records and the stop rules below.
 
@@ -312,11 +312,11 @@ Not verified: any live model behaviour on the specification path (the prompt, ho
 
 The install and run steps above replace the ones below. The rest is kept as history.
 
-# PatchProof v0.6.0-rc.29 — project support, lockfile fix, edit-shape fix
+# Shadow Patch v0.6.0-rc.29 — project support, lockfile fix, edit-shape fix
 
 rc.29 is rc.28 plus one fix from its first live run (qrcrafts-1, bounded). Setup and the verifier test passed, but the solver put `path` on the edit action instead of inside each edit, was told only "Each edit requires exactly path, old, new", and resent the identical edit 22 times until its 24 steps ran out. Now: the error names the missing or unexpected key and shows the correct shape; a `path` on the action fills an edit that has none (the path is still scope-checked, and the result carries a note); and a solver that resends the same rejected action a third time is stopped as `candidate_invalid` (only that solver session; other sessions and the run continue) instead of burning its allocation as `budget_exhausted`. The verifier is warned on repeats but never stopped by this rule. The rest of this page describes rc.27/rc.28, which rc.29 contains.
 
-# PatchProof v0.6.0-rc.28 — project support, lockfile fix
+# Shadow Patch v0.6.0-rc.28 — project support, lockfile fix
 
 rc.28 is rc.27 plus one fix found by the first live attempt. rc.27 refused any repository with two lockfiles, which blocked QRcrafts (`package-lock.json` plus a Bun lockfile) before any model call; rc.20 to rc.26 installed it with npm. A Bun lockfile beside exactly one supported lockfile (npm, pnpm or Yarn) is now ignored, the supported tool is used, and the proof records a warning in `runtime.package_manager.notes`. Two supported lockfiles (for example npm and Yarn) still stop the run, Bun alone is still refused, and a `packageManager` field still decides. The rest of this page describes rc.27, which rc.28 contains.
 

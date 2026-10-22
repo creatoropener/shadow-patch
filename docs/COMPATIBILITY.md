@@ -1,6 +1,6 @@
 # Compatibility policy
 
-PatchProof does not treat the presence of an adapter as proof that every project
+Shadow Patch does not treat the presence of an adapter as proof that every project
 using that language is supported. A runtime combination moves through three states:
 
 | State | Meaning |

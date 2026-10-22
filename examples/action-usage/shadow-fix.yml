@@ -1,6 +1,6 @@
 # Copy this single file to .github/workflows/shadow-fix.yml in your repository.
 # No engine files are copied: the engine runs from the pinned Action version.
-name: Shadow Fix
+name: Shadow Patch
 
 on:
   issues:

@@ -122,7 +122,7 @@ issue. Do not revert a repaired main branch merely for a demo.
 1. Create an issue describing observable behavior and expected outputs. The
    [demo guide](DEMO.md) supplies the file-sharing case.
 2. Create and apply the exact `shadow-fix` label **after** committing the workflow.
-3. Open Actions → Shadow Fix. Inspect the report artifact and job summary.
+3. Open Actions → Shadow Patch. Inspect the report artifact and job summary.
 4. Review the source diff, frozen regression and report in the PR. Merge manually.
 
 Rerunning the same issue uses `shadow-fix/issue-<number>` and can update its

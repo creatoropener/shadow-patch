@@ -138,7 +138,7 @@ runs:
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
-            body: "🤖 **Shadow Patch** received the `shadow-fix` label. PatchProof is generating an independent regression test and evaluating isolated candidate repairs."
+            body: "🤖 **Shadow Patch** received the `shadow-fix` label. Shadow Patch is generating an independent regression test and evaluating isolated candidate repairs."
           });
 
     - name: Set up Python
@@ -146,7 +146,7 @@ runs:
       with:
         python-version: '3.12'
 
-    - name: Install PatchProof dependencies
+    - name: Install Shadow Patch dependencies
       shell: bash
       run: python -m pip install --disable-pip-version-check -r "${{ github.action_path }}/requirements-patchproof.txt"
 
@@ -163,7 +163,7 @@ runs:
         import proof
         from runtimes import detect_runtime
         adapter = detect_runtime(Path.cwd())
-        print(f"PatchProof {proof.APP_VERSION}; runtime: {adapter.id}; baseline: {adapter.baseline_command}")
+        print(f"Shadow Patch {proof.APP_VERSION}; runtime: {adapter.id}; baseline: {adapter.baseline_command}")
         PY
 
     - name: Validate configuration
@@ -188,7 +188,7 @@ runs:
         fi
         exit "$missing"
 
-    - name: Run PatchProof verification
+    - name: Run Shadow Patch verification
       id: patchproof
       shell: bash
       continue-on-error: true
@@ -257,7 +257,7 @@ runs:
       uses: peter-evans/create-pull-request@v6
       with:
         token: ${{ inputs.github-token }}
-        commit-message: "PatchProof: verified repair for issue #${{ github.event.issue.number }}"
+        commit-message: "Shadow Patch: verified repair for issue #${{ github.event.issue.number }}"
         title: "Shadow Patch: verified repair for #${{ github.event.issue.number }}"
         body-path: verification-report.md
         add-paths: ${{ steps.delivery.outputs.paths }}
@@ -278,7 +278,7 @@ runs:
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
-            body: `✅ **PatchProof verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\nThe verification report is in the pull request description and the Actions artifact. Human merge approval is required.`
+            body: `✅ **Shadow Patch verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\nThe verification report is in the pull request description and the Actions artifact. Human merge approval is required.`
           });
 
     - name: Comment when verification rejects all repairs
@@ -290,15 +290,15 @@ runs:
           const fs = require('fs');
           const report = fs.existsSync('verification-report.md')
             ? fs.readFileSync('verification-report.md', 'utf8')
-            : 'PatchProof stopped before producing a report. Check the workflow logs.';
+            : 'Shadow Patch stopped before producing a report. Check the workflow logs.';
           await github.rest.issues.createComment({
             owner: context.repo.owner,
             repo: context.repo.repo,
             issue_number: context.issue.number,
-            body: `❌ **PatchProof rejected the attempted repair.**\n\n${report}`
+            body: `❌ **Shadow Patch rejected the attempted repair.**\n\n${report}`
           });
 
-    - name: Enforce PatchProof verdict
+    - name: Enforce Shadow Patch verdict
       if: steps.patchproof.outcome == 'failure'
       shell: bash
       run: exit 1

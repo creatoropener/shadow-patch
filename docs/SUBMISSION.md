@@ -1,12 +1,12 @@
-# Submission draft
+# Submission text: Shadow Patch
 
 ## Project name
 
-Shadow Engineer
+Shadow Patch
 
 ## Title
 
-Shadow Engineer — Verified Autonomous PR Resolver
+Shadow Patch: verified autonomous pull requests
 
 ## Tagline
 
@@ -21,12 +21,12 @@ Coding and Agentic Engineering
 
 Code generation is only one step in fixing a bug. Maintainers still need to
 reproduce the problem, check what a patch changes, and decide whether its tests
-are meaningful. We built Shadow Engineer to make that evidence part of the
+are meaningful. We built Shadow Patch to make that evidence part of the
 issue-to-PR workflow rather than leave it as a claim in an agent's summary.
 
 ## What it does
 
-A maintainer applies `shadow-fix` to an issue. PatchProof first checks the selected
+A maintainer applies the `shadow-fix` label to a GitHub issue. Shadow Patch first checks the selected
 sandbox runtime and existing baseline, then generates a regression from the issue
 and original repository and confirms that it fails with an actual assertion on
 the unfixed code. Separate solver calls then produce
@@ -66,10 +66,13 @@ whole-application or universal multi-language correctness.
 
 Two later repairs on the v0.6 engine are recorded in EVIDENCE.md: a cryptographic
 IV-seed bug in file-sharing-app (#3) and WiFi QR escaping in QRcrafts (#1, PR #3).
-We then froze the engine at v0.6.0-rc.21 and benchmarked it. It repaired and accepted
-6 of 6 trials on the two repositories it was developed against, and 0 of 6 on two
-unseen repositories, where the verifier never accepted a test. There were no false
-accepts. We report this gap rather than hide it; details are in BENCHMARK.md.
+We benchmarked the engine at v0.6.0-rc.21. It repaired and accepted 6 of 6 trials on the
+two repositories it was developed against, and 0 of 6 on two unseen repositories, where the
+verifier never accepted a test. There were no false accepts. We report this gap rather than
+hide it; details are in BENCHMARK.md. We then fixed verifier and static-web problems (rc.22 to
+rc.39) and recorded further verified runs (Tabloop #2, Aegisscan #3 and file-sharing-app #1 on
+rc.39), all on repositories we own, so they are development results. We make no claim that
+Shadow Patch generalizes to unseen repositories.
 
 ## Challenges and learning
 
@@ -86,6 +89,23 @@ The contribution is the combination of test-before-repair, withholding the new
 regression from solvers, isolated candidate evaluations, clean replay, and an
 inspectable PR report. We do not claim that competing coding agents lack all
 independent verification, or that these mechanisms are individually novel.
+
+## NVIDIA Nemotron and Nebius tools used
+
+- **NVIDIA Nemotron:** every model call. `nvidia/Nemotron-3_5-Lightning` for the first repair;
+  `nvidia/nemotron-3-super-120b-a12b` for later repairs and all benchmark trials.
+- **Nebius Token Factory:** the inference endpoint for the verifier and for the three solver strategies.
+- **Nebius Sandboxes** (`contree-sdk`): repository setup, baseline tests, the pre-fix failure check,
+  isolated candidate branches and the clean-image replay.
+- **Sandbox images:** built by the Prepare Sandbox Image workflow.
+- GitHub Actions orchestrates the run and opens the PR; it is not a Nebius service.
+- Nothing here measures speed or cost against other platforms, so we claim no speed-up.
+
+## How to run it
+
+The README has the numbered steps: get Nebius credentials, build a sandbox image, prepare the
+repository, add secrets and the workflow file, label an issue, read the verdict. It also has a
+command-line alternative.
 
 ## Next
 
@@ -105,8 +125,9 @@ come from this project's development, not a benchmark against other platforms.
 
 ## Links for the form
 
-- Source repository: https://github.com/creatoropener/shadow-patch
-- Working demonstration: https://github.com/creatoropener/file-sharing-app/pull/2
+- Source repository (public, MIT licence): https://github.com/creatoropener/shadow-patch
+- Working demonstration (generated PR and its workflow run): https://github.com/creatoropener/file-sharing-app/pull/2
+- Reusable GitHub Action, pin to a tag: `creatoropener/shadow-patch@v0.6.0-rc.39` (publish the tag before submitting)
 - Later repair: https://github.com/creatoropener/QRcrafts/pull/3
 - Recorded run: https://github.com/creatoropener/file-sharing-app/actions/runs/35464615209
 - Public video URL: add after uploading the final recording to YouTube.
@@ -128,3 +149,15 @@ Pacific. Recheck before sending. Source: [official rules](https://nebiusglobalai
 The engine's existing MIT license is preserved. Confirm the entrant's own dates
 and eligibility rather than inferring them from this draft. No submission or
 public video upload has been made by this packaging step.
+
+## Requirements checklist
+
+| Requirement | Where it is met |
+| --- | --- |
+| Project built with the required tools | NVIDIA Nemotron on Nebius Token Factory; Nebius Sandboxes (README, "How NVIDIA Nemotron and Nebius are used") |
+| URL to a working demo or test build | Recorded run and PR in file-sharing-app (links above); `docs/demo/index.html`; the README's "Try it" section |
+| Text description of features and functionality | This file, sections "What it does" and "How we built it" |
+| Public repository with all source and instructions | https://github.com/creatoropener/shadow-patch; README "Run Shadow Patch step by step" |
+| Open-source licence visible in the repository About section | `LICENSE` (MIT) at the repository root; check on GitHub that the About box shows "MIT license" |
+| README with setup and run guidance | README, numbered Steps 1 to 8 plus a command-line alternative |
+| Highlight NVIDIA Nemotron, Token Factory and other Nebius tools | README and the section above |

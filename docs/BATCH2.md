@@ -16,7 +16,7 @@ The verifier has a read-only session. It investigates APIs and reports findings 
 
 Each solver starts with a fresh history and source overlay from the original snapshot. The solver can make exact-match edits to allowed existing source files, after reading the current file. Edits are cumulative within that session. File/symbol scope and the existing Node interference policy run before edited source executes. The solver can request named `baseline`, `typecheck`, and declared `build` checks. These execute in branches of the pre-verifier sandbox; their output can inform a correction. Arbitrary shell, dependency installation, new source files and test edits are not model tools.
 
-`finish` requires a nonempty patch plus passing ordinary baseline and TypeScript checks on the latest edit. PatchProof then independently rechecks the submitted candidate and evaluates the frozen hidden regression once. Hidden results never return to a solver. Identical final source patches are deduplicated across solver sessions. An eligible winner must pass clean replay and the existing exact-file delivery checks before the local checkout changes.
+`finish` requires a nonempty patch plus passing ordinary baseline and TypeScript checks on the latest edit. Shadow Patch then independently rechecks the submitted candidate and evaluates the frozen hidden regression once. Hidden results never return to a solver. Identical final source patches are deduplicated across solver sessions. An eligible winner must pass clean replay and the existing exact-file delivery checks before the local checkout changes.
 
 ## Limits
 
