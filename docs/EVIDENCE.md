@@ -30,7 +30,7 @@ the number of assertions or whole-application coverage.
 
 ## Later repairs on the v0.6 engine
 
-These four repairs ran on `nvidia/nemotron-3-super-120b-a12b`. Links not yet supplied are
+These repairs ran on `nvidia/nemotron-3-super-120b-a12b`. Links not yet supplied are
 marked below as needed or to be added; none has been invented.
 
 ### file-sharing-app #3 (v0.6.0-rc.12, `node-typescript`)
@@ -42,7 +42,12 @@ marked below as needed or to be added; none has been invented.
 - Selected repair: embeds the 12-byte seed in every frame and updates all three sites
   (encoder transform, encoder flush, decoder read). Trade-off: the seed is repeated
   per frame. The two rejected candidates patched only `transform()`.
-- Links: [workflow run URL needed] and [PR URL needed].
+- Links: [workflow run 36181596969](https://github.com/creatoropener/file-sharing-app/actions/runs/36181596969)
+  (Shadow Fix workflow, triggered by labelling issue #3, success, 2 min 4 s, 2026-09-25, run source
+  commit `bf93981`, artifact `patchproof-issue-3`) and
+  [PR #4](https://github.com/creatoropener/file-sharing-app/pull/4) (branch `shadow-fix/issue-3`, merged
+  on 2026-09-26; head commit `357ef0b664d3cba60abc99775bd553f6acd4d786`). The PR was opened under the
+  project's earlier name, so its title says "Shadow Engineer".
 
 ### QRcrafts #1 (`node-typescript`)
 
@@ -55,7 +60,27 @@ marked below as needed or to be added; none has been invented.
 - Later Action runs on rc.16, rc.17 and rc.19 were rejected; the first verified run
   through the Action was rc.20, which updated [PR #3](https://github.com/creatoropener/QRcrafts/pull/3)
   in place. These runs are the reason the benchmark exists.
-- Links: [rc.15 workflow run URL needed] and [rc.20 workflow run URL needed].
+- Links: [PR #3](https://github.com/creatoropener/QRcrafts/pull/3), PR head commit
+  `38c102e461db073bee884e45507a147fc14d87a2`. rc.20 run:
+  [workflow run 36553142474](https://github.com/creatoropener/QRcrafts/actions/runs/36553142474)
+  (`shadow-fix-caller.yml`, triggered by labelling issue #1, success, 1 min 59 s, 2026-09-29, run source
+  commit `8d21aa8faca48df31dd9010fb210f6697fff24b8`, artifact `patchproof-issue-1`). The rc.15 workflow
+  run URL is not yet linked.
+
+### file-sharing-app #1 rerun on rc.39 (`node-typescript`, `freeform`, via the Action)
+
+- Target: creatoropener/file-sharing-app, issue #1, the same defect as the primary demonstration above.
+  The run updated [PR #2](https://github.com/creatoropener/file-sharing-app/pull/2) in place, so PR #2 no
+  longer shows the v0.5.5 captured head `355c5464…`; its head commit is now
+  `500e6fbb9e2c23bf407b1aad7bd4c1f5f4aa43bd`.
+- [Workflow run 39594141041](https://github.com/creatoropener/file-sharing-app/actions/runs/39594141041):
+  Shadow Fix workflow, triggered by labelling issue #1, success, 2 min 35 s, 2026-10-21, run source commit
+  `551072c0b39a241e4887499b1ea8bf86393875f9`, artifact `patchproof-issue-1`.
+- Result: verdict `verified`; candidate 1 won with a two-line change in `lib/utils/format.ts`; the PR
+  carries that file plus `tests/test_patchproof_issue_1.test.ts`; clean replay passed.
+- Caveats: `formatEta` is untouched by design (protected scope; the issue covers sizes and speeds only).
+  The spec verifier profile did not work on this case, so the run used `freeform`. The proof file for this
+  run is not bundled here. Project-owned repository: a development case.
 
 ### Tabloop #2 (v0.6.0-rc.36, `static-web`, `freeform`)
 
