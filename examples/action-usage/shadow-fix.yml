@@ -35,7 +35,7 @@ jobs:
           agent-mode: legacy
           # Optional, node-typescript only: the model writes a specification quoted from the issue
           # and the engine compiles the test. It stops with needs_specification when it cannot.
-          # verifier-profile: spec
+          # verifier-profile: freeform
           # Pass only the image(s) your repository's adapter needs:
           image-node-typescript: ${{ secrets.CONTREE_IMAGE_NODE_TYPESCRIPT }}
           # sandbox-image: ${{ secrets.CONTREE_IMAGE }}
