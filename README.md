@@ -16,8 +16,6 @@ Nothing is ever auto-merged.
 [Architecture](docs/ARCHITECTURE.md) · [Demo script](docs/DEMO.md) ·
 [Submission text](docs/SUBMISSION.md)
 
-![Recorded Shadow Patch evidence](docs/visuals/01-verification.png)
-
 ## What it does
 
 1. A maintainer adds the `shadow-fix` label to an issue.
