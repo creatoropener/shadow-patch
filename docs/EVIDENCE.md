@@ -146,10 +146,6 @@ the current PR names candidate 1. Do not mix their counts in a pitch.
 
 - `screenshots/02-github-run.jpg`: unaltered browser capture of the actual successful run.
 - `screenshots/03-github-pr.jpg`: unaltered browser capture of the actual PR report.
-- `visuals/01-verification.png`, `04-candidates.png`, `05-replay.png`,
-  `06-sources.png` and `07-reproduction.png`: evidence cards rendered from the
-  captured green-run proof. They are explicitly labelled recorded evidence;
-  they are not screenshots of GitHub or new executions.
 
 Open [the evidence viewer](demo/index.html) locally. It makes no network requests
 unless you follow a source link, and cannot start a run, modify a PR, or merge it.
