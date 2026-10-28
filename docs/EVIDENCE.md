@@ -66,6 +66,13 @@ marked below as needed or to be added; none has been invented.
   (`shadow-fix-caller.yml`, triggered by labelling issue #1, success, 1 min 59 s, 2026-09-29, run source
   commit `8d21aa8faca48df31dd9010fb210f6697fff24b8`, artifact `patchproof-issue-1`). The rc.15 workflow
   run URL is not yet linked.
+- Proof (rc.20 run): [verified-qrcrafts-1-rc20.json](evidence/verified-qrcrafts-1-rc20.json) (model
+  `nvidia/nemotron-3-super-120b-a12b`, verdict `verified`; this file uses the older proof layout, so it has
+  no run id or PR file list). Existing suite 1 test passed. The regression test has three cases: two failed
+  on the unfixed code and one ordinary-credentials case passed, accepted on attempt 1. All three candidates
+  passed (5, 4 and 5 changed lines); candidate 2 won on fewest lines. This differs from the rc.15 run, where
+  candidate 3 won. Clean replay passed 1 baseline test plus 3 regression tests. The engine version is taken
+  from the proof file; the run page does not state it.
 
 ### file-sharing-app #1 rerun on rc.39 (`node-typescript`, `freeform`, via the Action)
 
@@ -79,8 +86,18 @@ marked below as needed or to be added; none has been invented.
 - Result: verdict `verified`; candidate 1 won with a two-line change in `lib/utils/format.ts`; the PR
   carries that file plus `tests/test_patchproof_issue_1.test.ts`; clean replay passed.
 - Caveats: `formatEta` is untouched by design (protected scope; the issue covers sizes and speeds only).
-  The spec verifier profile did not work on this case, so the run used `freeform`. The proof file for this
-  run is not bundled here. Project-owned repository: a development case.
+  The spec verifier profile did not work on this case, so the run used `freeform`. Project-owned
+  repository: a development case.
+- Proof: [verified-file-sharing-app-1-rc39.json](evidence/verified-file-sharing-app-1-rc39.json) (run id
+  `417af8e847a647139ef4fd0abe614e5e`, model `nvidia/nemotron-3-super-120b-a12b`, verdict `verified`).
+  Existing suite 3 tests passed; the regression test (7 assertions) was accepted on attempt 1, failing on the
+  unfixed code because raw `v.toFixed(...)` text appeared where `1.0 KB` was expected. All three candidates
+  passed (each one file, two lines; 18.3 s, 18.6 s, 18.8 s) and candidate 1 won. Clean replay passed 3
+  baseline tests plus 1 regression test (4 tests run). Scope: allowed path `lib/utils/format.ts`, protected
+  symbol `formatEta` unchanged. Delivered files: `lib/utils/format.ts` and
+  `tests/test_patchproof_issue_1.test.ts`. The three candidates are near-identical, so they are not
+  independent solutions. The earlier v0.5.5 run above and this rc.39 run are separate results; do not mix
+  their counts.
 
 ### Tabloop #2 (v0.6.0-rc.36, `static-web`, `freeform`)
 
@@ -124,6 +141,47 @@ marked below as needed or to be added; none has been invented.
 - Caveats: the regression also asserts severity `HIGH` and `cvssScore` 7.4, values the issue does not
   state; they come from the existing rule metadata and are unverified against the issue. The three
   candidates are near-identical. Project-owned repository: a development case.
+
+### CareerPilot #3 (v0.6.0-rc.39, `node-typescript`, `freeform`)
+
+- Target: creatoropener/CareerPilot, issue [#3](https://github.com/creatoropener/CareerPilot/issues/3),
+  "scoreJob gives no location credit when the preferred location is written as 'City, Country'
+  (e.g. 'Mumbai, India')". [PR #4](https://github.com/creatoropener/CareerPilot/pull/4).
+- Commits: `027af55cc7742ca5bf99ec595b80a8bbeae8e3c2` (PR head commit, as supplied) and `cbd41d7ca6f68940f6b0df871ecea678d140994e` (run source commit shown on the run page).
+- [Workflow run 40124574385](https://github.com/creatoropener/CareerPilot/actions/runs/40124574385): Shadow Patch
+  workflow, triggered by labelling issue #3, success, 2 min 13 s, 2026-10-24, artifact `patchproof-issue-3`.
+- Proof: [verified-careerpilot-3-rc39.json](evidence/verified-careerpilot-3-rc39.json) (run id
+  `b5c0b105dcd343a9a5ea9d35da8d4ac7`, model `nvidia/nemotron-3-super-120b-a12b`, verdict `verified`).
+- Gates recorded: readiness ready; existing suite 2 tests passed; the regression test (four cases) was
+  accepted on attempt 1 as an assertion failure. All three candidates were evaluated and passed, each one
+  file (`src/lib/matcher.ts`) and six changed lines (21.2 s, 17.9 s, 18.5 s); candidate 2 won on elapsed
+  time. Clean replay passed 2 baseline tests plus 4 regression tests. Delivered files: `src/lib/matcher.ts`
+  and `tests/test_patchproof_issue_3.test.ts`.
+- Repair: location scoring now also matches the city part when the preferred location contains a comma.
+- Caveats: the repository needed setup before the first successful run (a `tsconfig.json` fix, a
+  `patchproof.json` scope and a test glob that did not match the baseline tests), so earlier attempts did not
+  reach inference. The three candidates are near-identical. Project-owned repository: a development case.
+
+### CareerPilot #5 (v0.6.0-rc.39, `node-typescript`, `freeform`)
+
+- Target: creatoropener/CareerPilot, issue [#5](https://github.com/creatoropener/CareerPilot/issues/5),
+  `findPostedDate` trusted the provider date over contradicting "Posted N days ago" text.
+  [PR #6](https://github.com/creatoropener/CareerPilot/pull/6).
+- Commits: `080781f9007faf4345474cd3c6837bbe112b9174` (PR head commit, as supplied) and `fd287306991bf0751c1dc2029d65660fba930bcf` (run source commit shown on the run page).
+- [Workflow run 40221260992](https://github.com/creatoropener/CareerPilot/actions/runs/40221260992): Shadow Patch
+  workflow, triggered by labelling issue #5, success, 2 min 6 s, 2026-10-25, artifact `patchproof-issue-5`.
+- Proof: [verified-careerpilot-5-rc39.json](evidence/verified-careerpilot-5-rc39.json) (run id
+  `419b3eea87624093bf98f640df3ba95f`, model `nvidia/nemotron-3-super-120b-a12b`, verdict `verified`).
+- Gates recorded: existing suite 4 tests passed; the regression test was accepted on attempt 1 (unfixed
+  code returned `'api'` where `'text'` was expected). Three candidates were attempted but **only one was
+  evaluated**: candidates 1 and 2 failed at generation (their edits matched no location in the file, twice
+  each) and candidate 3 passed (`lib/recency.ts`, 21 changed lines, 21.7 s) and won. Clean replay passed 4
+  baseline tests plus 1 regression test. Delivered files: `lib/recency.ts` and
+  `tests/test_patchproof_issue_5.test.ts`.
+- Repair: collect all date evidence and return the oldest valid date.
+- Caveats: this is a single-candidate result, so it shows the verification gates, not agreement between
+  strategies. The regression test includes a "30+ days" case whose semantics come from the verifier model's
+  reading of the issue; review it before merging. Project-owned repository: a development case.
 
 ## Benchmark results
 

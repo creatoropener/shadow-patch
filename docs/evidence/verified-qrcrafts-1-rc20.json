@@ -1,0 +1,200 @@
+{
+  "app_version": "0.6.0-rc.20",
+  "baseline": {
+    "command": "CI=1 npm test",
+    "existing_suite_passed": true,
+    "image": "61d73a0a-cf31-4b79-b111-47e6178914c7",
+    "output": "> react-example@0.0.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: buildContent generates valid WiFi QR payload for standard network\nok 1 - buildContent generates valid WiFi QR payload for standard network\n  ---\n  duration_ms: 0.884578\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 352.826228",
+    "tests_passed": 1
+  },
+  "candidates": [
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "import QRCode from 'qrcode';\nimport { QRFormData, QRCustomizeOptions } from '../types';\n\nexport function buildContent(formData: QRFormData): string | null {\n  switch (formData.type) {\n    case 'url':\n      return formData.url.trim() || null;\n\n    case 'text':\n      return formData.text.trim() || null;\n\n    case 'phone': {\n      const p = formData.phone.trim();\n      return p ? `tel:${p}` : null;\n    }\n\n    case 'email': {\n      const addr = formData.email.address.trim();\n      if (!addr) return null;\n      const sub = encodeURIComponent(formData.email.subject.trim());\n      const body = encodeURIComponent(formData.email.body.trim());\n      let m = `mailto:${addr}`;\n      const params: string[] = [];\n      if (sub) params.push(`subject=${sub}`);\n      if (body) params.push(`body=${body}`);\n      if (params.length) m += '?' + params.join('&');\n      return m;\n    }\n\n    case 'wifi': {\n      const ssid = formData.wifi.ssid.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n      if (!ssid) return null;\n      const pass = formData.wifi.pass.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${pass};;`;\n    }\n\n    case 'vcard': {\n      const first = formData.vcard.firstName.trim();\n      const last = formData.vcard.lastName.trim();\n      if (!first && !last) return null;\n      let vc = `BEGIN:VCARD\\nVERSION:3.0\\nN:${last};${first};;;\\nFN:${first} ${last}`.trim();\n      const t = formData.vcard.title.trim();\n      const o = formData.vcard.org.trim();\n      const ph = formData.vcard.phone.trim();\n      const em = formData.vcard.email.trim();\n      const u = formData.vcard.url.trim();\n      if (t) vc += `\\nTITLE:${t}`;\n      if (o) vc += `\\nORG:${o}`;\n      if (ph) vc += `\\nTEL:${ph}`;\n      if (em) vc += `\\nEMAIL:${em}`;\n      if (u) vc += `\\nURL:${u}`;\n      vc += `\\nEND:VCARD`;\n      return vc;\n    }\n\n    default:\n      return null;\n  }\n}\n\nexport async function generateQrCanvas(\n  canvas: HTMLCanvasElement,\n  content: string,\n  options: QRCustomizeOptions\n): Promise<void> {\n  const displaySize = Math.min(options.size, 280);\n  await QRCode.toCanvas(canvas, content, {\n    width: displaySize,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n\nexport async function generateHighResPngDataUrl(\n  content: string,\n  options: QRCustomizeOptions\n): Promise<string> {\n  return await QRCode.toDataURL(content, {\n    width: options.size,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n\nexport async function generateSvgString(\n  content: string,\n  options: QRCustomizeOptions\n): Promise<string> {\n  return await QRCode.toString(content, {\n    type: 'svg',\n    width: options.size,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n",
+              "path": "src/utils/qrBuilder.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "fe8f35f6-0337-4076-8ff6-4c442ecf12c7",
+          "output": "> react-example@0.0.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: buildContent generates valid WiFi QR payload for standard network\nok 1 - buildContent generates valid WiFi QR payload for standard network\n  ---\n  duration_ms: 0.948093\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 340.003863",
+          "regression_test_present": false,
+          "tests_passed": 1
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 1,
+      "candidate": 1,
+      "changed_files": [
+        "src/utils/qrBuilder.ts"
+      ],
+      "changed_lines": 5,
+      "command": "python /patchproof/typescript_check.py tests/.test_patchproof_issue_1.test.ts && /opt/patchproof/node/node_modules/.bin/tsx --test --test-reporter=tap tests/.test_patchproof_issue_1.test.ts",
+      "diff": "--- src/utils/qrBuilder.ts\n+++ src/utils/qrBuilder.ts\n@@ -28,9 +28,10 @@\n     }\n \n     case 'wifi': {\n-      const ssid = formData.wifi.ssid.trim();\n+      const ssid = formData.wifi.ssid.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n       if (!ssid) return null;\n-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;\n+      const pass = formData.wifi.pass.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n+      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${pass};;`;\n     }\n \n     case 'vcard': {\n",
+      "duration_seconds": 13.532,
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "88db4301-00f5-4878-b883-42b13a36ebad",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: buildContent escapes special characters in WiFi SSID and password\nok 1 - buildContent escapes special characters in WiFi SSID and password\n  ---\n  duration_ms: 0.977908\n  ...\n# Subtest: buildContent escapes commas, backslashes, and quotes in WiFi credentials\nok 2 - buildContent escapes commas, backslashes, and quotes in WiFi credentials\n  ---\n  duration_ms: 0.169655\n  ...\n# Subtest: buildContent leaves ordinary credentials unchanged\nok 3 - buildContent leaves ordinary credentials unchanged\n  ---\n  duration_ms: 0.163636\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 357.186063\n\nPATCHPROOF_TEST_HASH_BEFORE=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4\nPATCHPROOF_TEST_HASH_AFTER=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "minimal targeted correction",
+      "summary": "Escape special characters in SSID and password fields for WiFi QR payload.",
+      "test_protected": true,
+      "tests_passed": 3
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "import QRCode from 'qrcode';\nimport { QRFormData, QRCustomizeOptions } from '../types';\n\nexport function buildContent(formData: QRFormData): string | null {\n  switch (formData.type) {\n    case 'url':\n      return formData.url.trim() || null;\n\n    case 'text':\n      return formData.text.trim() || null;\n\n    case 'phone': {\n      const p = formData.phone.trim();\n      return p ? `tel:${p}` : null;\n    }\n\n    case 'email': {\n      const addr = formData.email.address.trim();\n      if (!addr) return null;\n      const sub = encodeURIComponent(formData.email.subject.trim());\n      const body = encodeURIComponent(formData.email.body.trim());\n      let m = `mailto:${addr}`;\n      const params: string[] = [];\n      if (sub) params.push(`subject=${sub}`);\n      if (body) params.push(`body=${body}`);\n      if (params.length) m += '?' + params.join('&');\n      return m;\n    }\n\n    case 'wifi': {\n      const ssid = formData.wifi.ssid.trim();\n      if (!ssid) return null;\n      const escapedSsid = ssid.replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n      const escapedPass = formData.wifi.pass.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n      return `WIFI:T:${formData.wifi.sec};S:${escapedSsid};P:${escapedPass};;`;\n    }\n\n    case 'vcard': {\n      const first = formData.vcard.firstName.trim();\n      const last = formData.vcard.lastName.trim();\n      if (!first && !last) return null;\n      let vc = `BEGIN:VCARD\\nVERSION:3.0\\nN:${last};${first};;;\\nFN:${first} ${last}`.trim();\n      const t = formData.vcard.title.trim();\n      const o = formData.vcard.org.trim();\n      const ph = formData.vcard.phone.trim();\n      const em = formData.vcard.email.trim();\n      const u = formData.vcard.url.trim();\n      if (t) vc += `\\nTITLE:${t}`;\n      if (o) vc += `\\nORG:${o}`;\n      if (ph) vc += `\\nTEL:${ph}`;\n      if (em) vc += `\\nEMAIL:${em}`;\n      if (u) vc += `\\nURL:${u}`;\n      vc += `\\nEND:VCARD`;\n      return vc;\n    }\n\n    default:\n      return null;\n  }\n}\n\nexport async function generateQrCanvas(\n  canvas: HTMLCanvasElement,\n  content: string,\n  options: QRCustomizeOptions\n): Promise<void> {\n  const displaySize = Math.min(options.size, 280);\n  await QRCode.toCanvas(canvas, content, {\n    width: displaySize,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n\nexport async function generateHighResPngDataUrl(\n  content: string,\n  options: QRCustomizeOptions\n): Promise<string> {\n  return await QRCode.toDataURL(content, {\n    width: options.size,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n\nexport async function generateSvgString(\n  content: string,\n  options: QRCustomizeOptions\n): Promise<string> {\n  return await QRCode.toString(content, {\n    type: 'svg',\n    width: options.size,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n",
+              "path": "src/utils/qrBuilder.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "424e7192-e667-4553-96ad-9f64f8bd398a",
+          "output": "> react-example@0.0.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: buildContent generates valid WiFi QR payload for standard network\nok 1 - buildContent generates valid WiFi QR payload for standard network\n  ---\n  duration_ms: 1.173572\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 357.075377",
+          "regression_test_present": false,
+          "tests_passed": 1
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 1,
+      "candidate": 2,
+      "changed_files": [
+        "src/utils/qrBuilder.ts"
+      ],
+      "changed_lines": 4,
+      "command": "python /patchproof/typescript_check.py tests/.test_patchproof_issue_1.test.ts && /opt/patchproof/node/node_modules/.bin/tsx --test --test-reporter=tap tests/.test_patchproof_issue_1.test.ts",
+      "diff": "--- src/utils/qrBuilder.ts\n+++ src/utils/qrBuilder.ts\n@@ -30,7 +30,9 @@\n     case 'wifi': {\n       const ssid = formData.wifi.ssid.trim();\n       if (!ssid) return null;\n-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;\n+      const escapedSsid = ssid.replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n+      const escapedPass = formData.wifi.pass.trim().replace(/([;,:,\\\\\\\"])/g, '\\\\$1');\n+      return `WIFI:T:${formData.wifi.sec};S:${escapedSsid};P:${escapedPass};;`;\n     }\n \n     case 'vcard': {\n",
+      "duration_seconds": 13.091,
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "25c09688-09cb-42d2-86aa-0feafe52873e",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: buildContent escapes special characters in WiFi SSID and password\nok 1 - buildContent escapes special characters in WiFi SSID and password\n  ---\n  duration_ms: 1.017818\n  ...\n# Subtest: buildContent escapes commas, backslashes, and quotes in WiFi credentials\nok 2 - buildContent escapes commas, backslashes, and quotes in WiFi credentials\n  ---\n  duration_ms: 0.163715\n  ...\n# Subtest: buildContent leaves ordinary credentials unchanged\nok 3 - buildContent leaves ordinary credentials unchanged\n  ---\n  duration_ms: 0.163335\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 357.603158\n\nPATCHPROOF_TEST_HASH_BEFORE=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4\nPATCHPROOF_TEST_HASH_AFTER=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "defensive edge-case correction",
+      "summary": "Escape special characters in SSID and password fields of WiFi QR payload.",
+      "test_protected": true,
+      "tests_passed": 3
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "import QRCode from 'qrcode';\nimport { QRFormData, QRCustomizeOptions } from '../types';\n\nexport function buildContent(formData: QRFormData): string | null {\n  switch (formData.type) {\n    case 'url':\n      return formData.url.trim() || null;\n\n    case 'text':\n      return formData.text.trim() || null;\n\n    case 'phone': {\n      const p = formData.phone.trim();\n      return p ? `tel:${p}` : null;\n    }\n\n    case 'email': {\n      const addr = formData.email.address.trim();\n      if (!addr) return null;\n      const sub = encodeURIComponent(formData.email.subject.trim());\n      const body = encodeURIComponent(formData.email.body.trim());\n      let m = `mailto:${addr}`;\n      const params: string[] = [];\n      if (sub) params.push(`subject=${sub}`);\n      if (body) params.push(`body=${body}`);\n      if (params.length) m += '?' + params.join('&');\n      return m;\n    }\n\n    case 'wifi': {\n      const ssid = formData.wifi.ssid.trim().replace(/([;,\\\\\\\\:\\\\\"])/g, '\\\\$1');\n      if (!ssid) return null;\n      const pass = formData.wifi.pass.trim().replace(/([;,\\\\\\\\:\\\\\"])/g, '\\\\$1');\n      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${pass};;`;\n    }\n\n    case 'vcard': {\n      const first = formData.vcard.firstName.trim();\n      const last = formData.vcard.lastName.trim();\n      if (!first && !last) return null;\n      let vc = `BEGIN:VCARD\\nVERSION:3.0\\nN:${last};${first};;;\\nFN:${first} ${last}`.trim();\n      const t = formData.vcard.title.trim();\n      const o = formData.vcard.org.trim();\n      const ph = formData.vcard.phone.trim();\n      const em = formData.vcard.email.trim();\n      const u = formData.vcard.url.trim();\n      if (t) vc += `\\nTITLE:${t}`;\n      if (o) vc += `\\nORG:${o}`;\n      if (ph) vc += `\\nTEL:${ph}`;\n      if (em) vc += `\\nEMAIL:${em}`;\n      if (u) vc += `\\nURL:${u}`;\n      vc += `\\nEND:VCARD`;\n      return vc;\n    }\n\n    default:\n      return null;\n  }\n}\n\nexport async function generateQrCanvas(\n  canvas: HTMLCanvasElement,\n  content: string,\n  options: QRCustomizeOptions\n): Promise<void> {\n  const displaySize = Math.min(options.size, 280);\n  await QRCode.toCanvas(canvas, content, {\n    width: displaySize,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n\nexport async function generateHighResPngDataUrl(\n  content: string,\n  options: QRCustomizeOptions\n): Promise<string> {\n  return await QRCode.toDataURL(content, {\n    width: options.size,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n\nexport async function generateSvgString(\n  content: string,\n  options: QRCustomizeOptions\n): Promise<string> {\n  return await QRCode.toString(content, {\n    type: 'svg',\n    width: options.size,\n    margin: 2,\n    color: {\n      dark: options.fgColor,\n      light: options.bgColor,\n    },\n    errorCorrectionLevel: options.ecLevel,\n  });\n}\n",
+              "path": "src/utils/qrBuilder.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "a93999e6-8209-4d00-8799-5f75aa837c53",
+          "output": "> react-example@0.0.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: buildContent generates valid WiFi QR payload for standard network\nok 1 - buildContent generates valid WiFi QR payload for standard network\n  ---\n  duration_ms: 0.956506\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 337.239765",
+          "regression_test_present": false,
+          "tests_passed": 1
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 1,
+      "candidate": 3,
+      "changed_files": [
+        "src/utils/qrBuilder.ts"
+      ],
+      "changed_lines": 5,
+      "command": "python /patchproof/typescript_check.py tests/.test_patchproof_issue_1.test.ts && /opt/patchproof/node/node_modules/.bin/tsx --test --test-reporter=tap tests/.test_patchproof_issue_1.test.ts",
+      "diff": "--- src/utils/qrBuilder.ts\n+++ src/utils/qrBuilder.ts\n@@ -28,9 +28,10 @@\n     }\n \n     case 'wifi': {\n-      const ssid = formData.wifi.ssid.trim();\n+      const ssid = formData.wifi.ssid.trim().replace(/([;,\\\\\\\\:\\\\\"])/g, '\\\\$1');\n       if (!ssid) return null;\n-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;\n+      const pass = formData.wifi.pass.trim().replace(/([;,\\\\\\\\:\\\\\"])/g, '\\\\$1');\n+      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${pass};;`;\n     }\n \n     case 'vcard': {\n",
+      "duration_seconds": 11.458,
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "7a3be4b0-b284-4f7c-addf-df94d0de71d7",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: buildContent escapes special characters in WiFi SSID and password\nok 1 - buildContent escapes special characters in WiFi SSID and password\n  ---\n  duration_ms: 1.006651\n  ...\n# Subtest: buildContent escapes commas, backslashes, and quotes in WiFi credentials\nok 2 - buildContent escapes commas, backslashes, and quotes in WiFi credentials\n  ---\n  duration_ms: 0.182294\n  ...\n# Subtest: buildContent leaves ordinary credentials unchanged\nok 3 - buildContent leaves ordinary credentials unchanged\n  ---\n  duration_ms: 0.167682\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 357.568806\n\nPATCHPROOF_TEST_HASH_BEFORE=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4\nPATCHPROOF_TEST_HASH_AFTER=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+      "passed": true,
+      "stage": "regression",
+      "strategy": "maintainable behavior-preserving correction",
+      "summary": "Escape special characters ; , : \\ \" in WiFi SSID and password fields.",
+      "test_protected": true,
+      "tests_passed": 3
+    }
+  ],
+  "clean_replay": {
+    "command": "CI=1 npm test && echo PATCHPROOF_REGRESSION_START && python /patchproof/typescript_check.py tests/.test_patchproof_issue_1.test.ts && /opt/patchproof/node/node_modules/.bin/tsx --test --test-reporter=tap tests/.test_patchproof_issue_1.test.ts",
+    "exit_code": 0,
+    "image": "c5ae4495-e468-430a-8d33-89e7bf5dc2a4",
+    "output": "> react-example@0.0.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: buildContent generates valid WiFi QR payload for standard network\nok 1 - buildContent generates valid WiFi QR payload for standard network\n  ---\n  duration_ms: 1.012009\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 353.196054\nPATCHPROOF_REGRESSION_START\nPATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: buildContent escapes special characters in WiFi SSID and password\nok 1 - buildContent escapes special characters in WiFi SSID and password\n  ---\n  duration_ms: 1.043105\n  ...\n# Subtest: buildContent escapes commas, backslashes, and quotes in WiFi credentials\nok 2 - buildContent escapes commas, backslashes, and quotes in WiFi credentials\n  ---\n  duration_ms: 0.167581\n  ...\n# Subtest: buildContent leaves ordinary credentials unchanged\nok 3 - buildContent leaves ordinary credentials unchanged\n  ---\n  duration_ms: 0.165869\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 338.610002\n\nPATCHPROOF_TEST_HASH_BEFORE=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4\nPATCHPROOF_TEST_HASH_AFTER=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+    "passed": true,
+    "test_protected": true,
+    "tests_passed": 3
+  },
+  "issue": {
+    "number": 1,
+    "title": "WiFi QR codes do not escape reserved characters",
+    "url": "https://github.com/creatoropener/QRcrafts/issues/1"
+  },
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "regression_test": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "classification": "accepted assertion failure reproduced the issue",
+        "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { buildContent } from '../src/utils/qrBuilder.ts';\nimport type { QRFormData } from '../src/types.ts';\n\ntest('buildContent escapes special characters in WiFi SSID and password', async () => {\n  const formData: QRFormData = {\n    type: 'wifi',\n    url: '',\n    text: '',\n    phone: '',\n    email: { address: '', subject: '', body: '' },\n    wifi: {\n      ssid: 'Cafe;Guest',\n      pass: 'pass:word',\n      sec: 'WPA',\n    },\n    vcard: {\n      firstName: '',\n      lastName: '',\n      title: '',\n      org: '',\n      phone: '',\n      email: '',\n      url: '',\n    },\n  };\n\n  const payload = buildContent(formData);\n  assert.equal(payload, 'WIFI:T:WPA;S:Cafe\\\\;Guest;P:pass\\\\:word;;');\n});\n\ntest('buildContent escapes commas, backslashes, and quotes in WiFi credentials', async () => {\n  const formData: QRFormData = {\n    type: 'wifi',\n    url: '',\n    text: '',\n    phone: '',\n    email: { address: '', subject: '', body: '' },\n    wifi: {\n      ssid: 'Office,West\\\\Lab',\n      pass: 'say\"hello',\n      sec: 'WPA',\n    },\n    vcard: {\n      firstName: '',\n      lastName: '',\n      title: '',\n      org: '',\n      phone: '',\n      email: '',\n      url: '',\n    },\n  };\n\n  const payload = buildContent(formData);\n  assert.equal(payload, 'WIFI:T:WPA;S:Office\\\\,West\\\\\\\\Lab;P:say\\\\\"hello;;');\n});\n\ntest('buildContent leaves ordinary credentials unchanged', async () => {\n  const formData: QRFormData = {\n    type: 'wifi',\n    url: '',\n    text: '',\n    phone: '',\n    email: { address: '', subject: '', body: '' },\n    wifi: {\n      ssid: 'SimpleNetwork',\n      pass: 'simplepass',\n      sec: 'WPA',\n    },\n    vcard: {\n      firstName: '',\n      lastName: '',\n      title: '',\n      org: '',\n      phone: '',\n      email: '',\n      url: '',\n    },\n  };\n\n  const payload = buildContent(formData);\n  assert.equal(payload, 'WIFI:T:WPA;S:SimpleNetwork;P:simplepass;;');\n});\n",
+        "exit_code": 1,
+        "image": "8120f0ae-7034-4c19-bdcc-e20b3e152fdb",
+        "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: buildContent escapes special characters in WiFi SSID and password\nnot ok 1 - buildContent escapes special characters in WiFi SSID and password\n  ---\n  duration_ms: 2.512812\n  location: '/workspace/repo/tests/.test_patchproof_issue_1.test.ts:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'WIFI:T:WPA;S:Cafe;Guest;P:pass:word;;'\n    - 'WIFI:T:WPA;S:Cafe\\\\;Guest;P:pass\\\\:word;;'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'WIFI:T:WPA;S:Cafe\\\\;Guest;P:pass\\\\:word;;'\n  actual: 'WIFI:T:WPA;S:Cafe;Guest;P:pass:word;;'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/.test_patchproof_issue_1.test.ts:30:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: buildContent escapes commas, backslashes, and quotes in WiFi credentials\nnot ok 2 - buildContent escapes commas, backslashes, and quotes in WiFi credentials\n  ---\n  duration_ms: 0.402544\n  location: '/workspace/repo/tests/.test_patchproof_issue_1.test.ts:33:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'WIFI:T:WPA;S:Office,West\\\\Lab;P:say\"hello;;'\n    - 'WIFI:T:WPA;S:Office\\\\,West\\\\\\\\Lab;P:say\\\\\"hello;;'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'WIFI:T:WPA;S:Office\\\\,West\\\\\\\\Lab;P:say\\\\\"hello;;'\n  actual: 'WIFI:T:WPA;S:Office,West\\\\Lab;P:say\"hello;;'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/.test_patchproof_issue_1.test.ts:57:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n# Subtest: buildContent leaves ordinary credentials unchanged\nok 3 - buildContent leaves ordinary credentials unchanged\n  ---\n  duration_ms: 0.196124\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 1\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 360.140376\n\nPATCHPROOF_TEST_HASH_BEFORE=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4\nPATCHPROOF_TEST_HASH_AFTER=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+        "protected": true,
+        "rationale": "Tests verify that buildContent properly escapes reserved characters (; , : \\ \") in WiFi SSID and password fields while preserving ordinary credentials. Each test asserts the exact escaped payload expected after repair.",
+        "sha256": "dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4"
+      }
+    ],
+    "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { buildContent } from '../src/utils/qrBuilder.ts';\nimport type { QRFormData } from '../src/types.ts';\n\ntest('buildContent escapes special characters in WiFi SSID and password', async () => {\n  const formData: QRFormData = {\n    type: 'wifi',\n    url: '',\n    text: '',\n    phone: '',\n    email: { address: '', subject: '', body: '' },\n    wifi: {\n      ssid: 'Cafe;Guest',\n      pass: 'pass:word',\n      sec: 'WPA',\n    },\n    vcard: {\n      firstName: '',\n      lastName: '',\n      title: '',\n      org: '',\n      phone: '',\n      email: '',\n      url: '',\n    },\n  };\n\n  const payload = buildContent(formData);\n  assert.equal(payload, 'WIFI:T:WPA;S:Cafe\\\\;Guest;P:pass\\\\:word;;');\n});\n\ntest('buildContent escapes commas, backslashes, and quotes in WiFi credentials', async () => {\n  const formData: QRFormData = {\n    type: 'wifi',\n    url: '',\n    text: '',\n    phone: '',\n    email: { address: '', subject: '', body: '' },\n    wifi: {\n      ssid: 'Office,West\\\\Lab',\n      pass: 'say\"hello',\n      sec: 'WPA',\n    },\n    vcard: {\n      firstName: '',\n      lastName: '',\n      title: '',\n      org: '',\n      phone: '',\n      email: '',\n      url: '',\n    },\n  };\n\n  const payload = buildContent(formData);\n  assert.equal(payload, 'WIFI:T:WPA;S:Office\\\\,West\\\\\\\\Lab;P:say\\\\\"hello;;');\n});\n\ntest('buildContent leaves ordinary credentials unchanged', async () => {\n  const formData: QRFormData = {\n    type: 'wifi',\n    url: '',\n    text: '',\n    phone: '',\n    email: { address: '', subject: '', body: '' },\n    wifi: {\n      ssid: 'SimpleNetwork',\n      pass: 'simplepass',\n      sec: 'WPA',\n    },\n    vcard: {\n      firstName: '',\n      lastName: '',\n      title: '',\n      org: '',\n      phone: '',\n      email: '',\n      url: '',\n    },\n  };\n\n  const payload = buildContent(formData);\n  assert.equal(payload, 'WIFI:T:WPA;S:SimpleNetwork;P:simplepass;;');\n});\n",
+    "created_before_candidates": true,
+    "failed_before_fix": true,
+    "generation_attempts": [
+      {
+        "attempt": 1,
+        "execution_attempt": 1,
+        "sha256": "dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+        "status": "validated"
+      }
+    ],
+    "path": "tests/.test_patchproof_issue_1.test.ts",
+    "pre_fix_exit_code": 1,
+    "pre_fix_image": "8120f0ae-7034-4c19-bdcc-e20b3e152fdb",
+    "pre_fix_output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: buildContent escapes special characters in WiFi SSID and password\nnot ok 1 - buildContent escapes special characters in WiFi SSID and password\n  ---\n  duration_ms: 2.512812\n  location: '/workspace/repo/tests/.test_patchproof_issue_1.test.ts:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'WIFI:T:WPA;S:Cafe;Guest;P:pass:word;;'\n    - 'WIFI:T:WPA;S:Cafe\\\\;Guest;P:pass\\\\:word;;'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'WIFI:T:WPA;S:Cafe\\\\;Guest;P:pass\\\\:word;;'\n  actual: 'WIFI:T:WPA;S:Cafe;Guest;P:pass:word;;'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/.test_patchproof_issue_1.test.ts:30:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: buildContent escapes commas, backslashes, and quotes in WiFi credentials\nnot ok 2 - buildContent escapes commas, backslashes, and quotes in WiFi credentials\n  ---\n  duration_ms: 0.402544\n  location: '/workspace/repo/tests/.test_patchproof_issue_1.test.ts:33:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + 'WIFI:T:WPA;S:Office,West\\\\Lab;P:say\"hello;;'\n    - 'WIFI:T:WPA;S:Office\\\\,West\\\\\\\\Lab;P:say\\\\\"hello;;'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'WIFI:T:WPA;S:Office\\\\,West\\\\\\\\Lab;P:say\\\\\"hello;;'\n  actual: 'WIFI:T:WPA;S:Office,West\\\\Lab;P:say\"hello;;'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/.test_patchproof_issue_1.test.ts:57:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    Test.postRun (node:internal/test_runner/test:889:19)\n    Test.run (node:internal/test_runner/test:835:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:526:7)\n  ...\n# Subtest: buildContent leaves ordinary credentials unchanged\nok 3 - buildContent leaves ordinary credentials unchanged\n  ---\n  duration_ms: 0.196124\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 1\n# fail 2\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 360.140376\n\nPATCHPROOF_TEST_HASH_BEFORE=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4\nPATCHPROOF_TEST_HASH_AFTER=dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4",
+    "protected": true,
+    "rationale": "Tests verify that buildContent properly escapes reserved characters (; , : \\ \") in WiFi SSID and password fields while preserving ordinary credentials. Each test asserts the exact escaped payload expected after repair.",
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "sha256": "dd164e22c9a6e72cec5c4630a91beb2b274c7cb653080a25740791ce806139b4"
+  },
+  "runtime": {
+    "application_languages": [
+      "JavaScript",
+      "TypeScript"
+    ],
+    "display_name": "Node.js / TypeScript (tsx)",
+    "id": "node-typescript",
+    "image_env": "CONTREE_IMAGE_NODE_TYPESCRIPT",
+    "test_runtime": "node-test"
+  },
+  "sandbox": {
+    "base_image": "bd36d428-4d86-49f8-a270-635c3d00a4d3",
+    "provider": "Nebius Token Factory"
+  },
+  "schema_version": "0.6",
+  "stage": "completed",
+  "verdict": "verified",
+  "winner": {
+    "candidate": 2,
+    "changed_files": [
+      "src/utils/qrBuilder.ts"
+    ],
+    "selection": "fewest changed files, then fewest changed lines, then duration",
+    "summary": "Escape special characters in SSID and password fields of WiFi QR payload."
+  }
+}

@@ -70,8 +70,8 @@ We benchmarked the engine at v0.6.0-rc.21. It repaired and accepted 6 of 6 trial
 two repositories it was developed against, and 0 of 6 on two unseen repositories, where the
 verifier never accepted a test. There were no false accepts. We report this gap rather than
 hide it; details are in BENCHMARK.md. We then fixed verifier and static-web problems (rc.22 to
-rc.39) and recorded further verified runs (Tabloop #2, Aegisscan #3 and file-sharing-app #1 on
-rc.39), all on repositories we own, so they are development results. Tabloop #2 (PR #3) and Aegisscan #3 (PR #4) are recorded in EVIDENCE.md with their proof files. We make no claim that
+rc.39) and recorded further verified runs (Tabloop #2, Aegisscan #3, CareerPilot #3 and #5, and reruns of file-sharing-app #1 on
+rc.39 and QRcrafts #1 on rc.20), all on repositories we own, so they are development results. Each is recorded in EVIDENCE.md with its proof file and run link; in CareerPilot #5 only one of three candidates was evaluated. We make no claim that
 Shadow Patch generalizes to unseen repositories.
 
 ## Challenges and learning
@@ -123,6 +123,15 @@ authorization, Sandbox access, and image toolchains. Bounded inference diagnosti
 were essential when responses were empty or hit the output limit. These observations
 come from this project's development, not a benchmark against other platforms.
 
+Feedback on the NVIDIA models we used: `nvidia/Nemotron-3_5-Lightning` (small) repeatedly failed the
+same structural rule when asked for the exact-match edit format and the verifier markers.
+`nvidia/Nemotron-3-Ultra-550b` was token-hungry for this workload. `nvidia/nemotron-3-super-120b-a12b`
+was the first to succeed cleanly and was used for every later repair and all benchmark trials. Reasoning
+output that ended without a final answer needed explicit handling, and the model sometimes omitted a
+required marker, which the engine now retries with a diagnostic. We used Token Factory inference and
+Nebius Sandboxes; we did not use AI Cloud compute (Serverless Jobs, Endpoints or DevPods), so we have no
+feedback on those.
+
 ## Links for the form
 
 - Source repository (public, MIT licence): https://github.com/creatoropener/shadow-patch
@@ -131,6 +140,7 @@ come from this project's development, not a benchmark against other platforms.
 - Later repair: https://github.com/creatoropener/QRcrafts/pull/3
 - Static-web repair: https://github.com/creatoropener/Tabloop/pull/3
 - TypeScript repair: https://github.com/creatoropener/Aegisscan-Bug-Auditor/pull/4
+- Latest TypeScript repairs (rc.39): https://github.com/creatoropener/CareerPilot/pull/4 and https://github.com/creatoropener/CareerPilot/pull/6
 - Recorded run: https://github.com/creatoropener/file-sharing-app/actions/runs/35464615209
 - Public video URL: add after uploading the final recording to YouTube.
 
@@ -151,6 +161,17 @@ Pacific. Recheck before sending. Source: [official rules](https://nebiusglobalai
 The engine's existing MIT license is preserved. Confirm the entrant's own dates
 and eligibility rather than inferring them from this draft. No submission or
 public video upload has been made by this packaging step.
+
+## Development during the Submission Period
+
+The rules ask for a written explanation when a project predates the Submission Period (opened 2026-08-26).
+Shadow Patch's earliest prototypes (v0.2 CLI and v0.3 single-file workflow) are kept under `legacy/`.
+The work submitted here is the v0.6 engine and everything around it, built and released as release
+candidates documented in CHANGELOG.md and RELEASE.md: node-typescript, static-web and other runtime
+adapters; the bounded agent mode and the specification-compiled verifier profile; the reusable GitHub
+Action (`action.yml`); the benchmark harness and its results (`bench/`); sandbox retry and outcome
+classification; and the run guide, evidence and submission documents. Recorded live runs in this repository
+run from 2026-09-20 (file-sharing-app #1) to 2026-10-21 (rc.39).
 
 ## Requirements checklist
 

@@ -1,0 +1,329 @@
+{
+  "agent_mode": "legacy",
+  "app_version": "0.6.0-rc.39",
+  "archive_sha256": "ebe436a1f802c78c1137f3d35e23ad717795432baa0153a947133efe71804f2a",
+  "baseline": {
+    "command": "CI=1 npm test",
+    "existing_suite_passed": true,
+    "image": "42affa64-bf5c-48c4-8057-f85ea918316b",
+    "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.368846\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.610226\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.26002\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.197496\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 331.099268",
+    "tests_passed": 4
+  },
+  "candidates": [
+    {
+      "baseline_attempts": [],
+      "candidate": 1,
+      "duration_seconds": 12.269,
+      "error": "Candidate generation failed twice: Edit for lib/recency.ts matched 0 locations; exactly one is required.",
+      "generation_attempts": 2,
+      "generation_errors": [
+        "Edit for lib/recency.ts matched 0 locations; exactly one is required.",
+        "Edit for lib/recency.ts matched 0 locations; exactly one is required."
+      ],
+      "passed": false,
+      "stage": "generation",
+      "strategy": "minimal targeted correction",
+      "test_protected": false
+    },
+    {
+      "baseline_attempts": [],
+      "candidate": 2,
+      "duration_seconds": 12.217,
+      "error": "Candidate generation failed twice: Edit for lib/recency.ts matched 0 locations; exactly one is required.",
+      "generation_attempts": 2,
+      "generation_errors": [
+        "Edit for lib/recency.ts matched 0 locations; exactly one is required.",
+        "Edit for lib/recency.ts matched 0 locations; exactly one is required."
+      ],
+      "passed": false,
+      "stage": "generation",
+      "strategy": "defensive edge-case correction",
+      "test_protected": false
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "// Posting-date logic for the search function. Pure and dependency-free so it is easy to test.\n// Rule: a listing is only shown when we can verify it was posted inside the chosen window.\n// If no date can be found, the listing is excluded (we never guess).\n\nexport type TimeWindowId = '1d' | '1w' | '2w' | '3w' | '4w';\n\nexport const WINDOW_DAYS: Record<TimeWindowId, number> = { '1d': 1, '1w': 7, '2w': 14, '3w': 21, '4w': 28 };\n\nexport const isTimeWindowId = (value: unknown): value is TimeWindowId =>\n  typeof value === 'string' && Object.prototype.hasOwnProperty.call(WINDOW_DAYS, value);\n\nconst DAY_MS = 86_400_000;\nconst UNIT_MS: Record<string, number> = { minute: 60_000, hour: 3_600_000, day: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };\n\nexport interface PostedDate {\n  date: Date;\n  source: 'api' | 'structured-data' | 'text';\n}\n\n// Always interpret dates in UTC so results do not depend on the server's timezone.\nconst parseUtc = (value: string): Date => {\n  const text = value.trim();\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(text)) return new Date(text); // date-only ISO is already UTC\n  if (/^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+$/.test(text)) return new Date(`${text}Z`); // ISO without zone: assume UTC\n  if (/(?:Z|[+-]\\d{2}:?\\d{2}|UTC|GMT)$/i.test(text)) return new Date(text);\n  return new Date(`${text} UTC`);\n};\n\nconst validDate = (value: string, now: Date): Date | null => {\n  const date = parseUtc(value);\n  if (Number.isNaN(date.getTime())) return null;\n  // A \"posted\" date in the future is not credible.\n  if (date.getTime() > now.getTime() + DAY_MS) return null;\n  return date;\n};\n\nconst POSTED_ABSOLUTE = /\\b(?:date\\s+posted|posted|published|listed)(?:\\s+on)?\\s*[:\\-]?\\s*((?:\\d{1,2}\\s+)?[A-Za-z]{3,9}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}|\\d{1,2}(?:st|nd|rd|th)?\\s+[A-Za-z]{3,9}\\.?,?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2}(?:T[\\d:.]+Z?)?)/gi;\nconst RELATIVE = /\\b(\\d{1,3})(\\+)?\\s*(minute|hour|day|week|month)s?\\s+ago\\b/gi;\n\n/**\n * Finds the posting date of a search result. Order of trust:\n * 1. the search provider's published_date, 2. schema.org JobPosting \"datePosted\" in page content,\n * 3. explicit text such as \"Posted 3 days ago\" or \"Posted on 21 Oct 2026\".\n * For relative phrases the OLDEST match wins, so ambiguity can only make us stricter.\n */\nexport function findPostedDate(input: { publishedDate?: string | null; text: string }, now = new Date()): PostedDate | null {\n  const candidates: Date[] = [];\n\n  if (input.publishedDate) {\n    const date = validDate(input.publishedDate, now);\n    if (date) candidates.push(date);\n  }\n\n  const structured = /\"datePosted\"\\s*:\\s*\"([^\"]{6,40})\"/i.exec(input.text);\n  if (structured) {\n    const date = validDate(structured[1], now);\n    if (date) candidates.push(date);\n  }\n\n  const text = input.text;\n  for (const match of text.matchAll(POSTED_ABSOLUTE)) {\n    const date = validDate(match[1].replace(/(\\d)(st|nd|rd|th)\\b/i, '$1'), now);\n    if (date) candidates.push(date);\n  }\n  for (const match of text.matchAll(RELATIVE)) {\n    const amount = Number(match[1]) + (match[2] ? 1 : 0); // \"30+ days ago\" means at least 30 days: be strict\n    candidates.push(new Date(now.getTime() - amount * UNIT_MS[match[3].toLowerCase()]));\n  }\n  if (/\\b(posted|published)\\s+(just\\s+now|today)\\b|\\bjust\\s+posted\\b/i.test(text)) candidates.push(now);\n  if (/\\b(posted|published)\\s+yesterday\\b/i.test(text)) candidates.push(new Date(now.getTime() - DAY_MS));\n\n  if (candidates.length === 0) return null;\n  const oldest = candidates.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));\n  \n  // Determine source of the oldest date\n  let source: 'api' | 'structured-data' | 'text' = 'text';\n  if (input.publishedDate) {\n    const apiDate = validDate(input.publishedDate, now);\n    if (apiDate && apiDate.getTime() === oldest.getTime()) source = 'api';\n  }\n  if (source === 'text' && structured) {\n    const structDate = validDate(structured[1], now);\n    if (structDate && structDate.getTime() === oldest.getTime()) source = 'structured-data';\n  }\n  \n  return { date: oldest, source };\n}\n\nexport function isWithinWindow(date: Date, window: TimeWindowId, now = new Date()): boolean {\n  const age = now.getTime() - date.getTime();\n  return age <= WINDOW_DAYS[window] * DAY_MS && age >= -DAY_MS;\n}\n\nexport const toDateOnly = (date: Date): string => date.toISOString().slice(0, 10);\n\n// ---- portal selection -------------------------------------------------------------------------\n\nexport type SourceId = 'linkedin' | 'indeed' | 'glassdoor' | 'naukri' | 'ats';\n\nexport const SOURCE_DOMAINS: Record<SourceId, string[]> = {\n  linkedin: ['linkedin.com'],\n  indeed: ['indeed.com'],\n  glassdoor: ['glassdoor.com', 'glassdoor.co.in'],\n  naukri: ['naukri.com'],\n  ats: ['greenhouse.io', 'lever.co', 'myworkdayjobs.com', 'ashbyhq.com', 'smartrecruiters.com'],\n};\n\nexport const isSourceId = (value: unknown): value is SourceId =>\n  typeof value === 'string' && Object.prototype.hasOwnProperty.call(SOURCE_DOMAINS, value);\n\nexport function hostMatches(url: string, domains: string[]): boolean {\n  try {\n    const host = new URL(url).hostname.toLowerCase();\n    return domains.some((domain) => host === domain || host.endsWith(`.${domain}`));\n  } catch {\n    return false;\n  }\n}\n",
+              "path": "lib/recency.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "e1318d4a-5f26-4cd2-be94-118081418771",
+          "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.31833\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.623586\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.264377\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.198378\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 286.318845",
+          "regression_test_present": false,
+          "tests_passed": 4
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 4,
+      "candidate": 3,
+      "changed_files": [
+        "lib/recency.ts"
+      ],
+      "changed_lines": 21,
+      "command": "python /patchproof/typescript_check.py tests/test_patchproof_issue_5.test.ts && node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs --test --test-reporter=tap tests/test_patchproof_issue_5.test.ts",
+      "diff": "--- lib/recency.ts\n+++ lib/recency.ts\n@@ -44,18 +44,19 @@\n  * For relative phrases the OLDEST match wins, so ambiguity can only make us stricter.\n  */\n export function findPostedDate(input: { publishedDate?: string | null; text: string }, now = new Date()): PostedDate | null {\n+  const candidates: Date[] = [];\n+\n   if (input.publishedDate) {\n     const date = validDate(input.publishedDate, now);\n-    if (date) return { date, source: 'api' };\n+    if (date) candidates.push(date);\n   }\n \n   const structured = /\"datePosted\"\\s*:\\s*\"([^\"]{6,40})\"/i.exec(input.text);\n   if (structured) {\n     const date = validDate(structured[1], now);\n-    if (date) return { date, source: 'structured-data' };\n+    if (date) candidates.push(date);\n   }\n \n-  const candidates: Date[] = [];\n   const text = input.text;\n   for (const match of text.matchAll(POSTED_ABSOLUTE)) {\n     const date = validDate(match[1].replace(/(\\d)(st|nd|rd|th)\\b/i, '$1'), now);\n@@ -70,7 +71,19 @@\n \n   if (candidates.length === 0) return null;\n   const oldest = candidates.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));\n-  return { date: oldest, source: 'text' };\n+  \n+  // Determine source of the oldest date\n+  let source: 'api' | 'structured-data' | 'text' = 'text';\n+  if (input.publishedDate) {\n+    const apiDate = validDate(input.publishedDate, now);\n+    if (apiDate && apiDate.getTime() === oldest.getTime()) source = 'api';\n+  }\n+  if (source === 'text' && structured) {\n+    const structDate = validDate(structured[1], now);\n+    if (structDate && structDate.getTime() === oldest.getTime()) source = 'structured-data';\n+  }\n+  \n+  return { date: oldest, source };\n }\n \n export function isWithinWindow(date: Date, window: TimeWindowId, now = new Date()): boolean {\n",
+      "duration_seconds": 21.67,
+      "eligibility": {
+        "scope": "explicit",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "6da7fb72-89e6-4fda-bceb-7a62b41b9bf8",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: findPostedDate selects oldest evidence among provider date, structured data, and text\nok 1 - findPostedDate selects oldest evidence among provider date, structured data, and text\n  ---\n  duration_ms: 7.895189\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 291.595215\n\nPATCHPROOF_TEST_HASH_BEFORE=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f\nPATCHPROOF_TEST_HASH_AFTER=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+      "passed": true,
+      "source_check_attempts": [
+        {
+          "attempt": 1,
+          "passed": true,
+          "status": "passed"
+        }
+      ],
+      "stage": "regression",
+      "strategy": "maintainable behavior-preserving correction",
+      "summary": "Collect all date evidence and return the oldest valid date.",
+      "test_protected": true,
+      "tests_passed": 1
+    }
+  ],
+  "clean_replay": {
+    "command": "CI=1 npm test && echo PATCHPROOF_REGRESSION_START && python /patchproof/typescript_check.py tests/test_patchproof_issue_5.test.ts && node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs --test --test-reporter=tap tests/test_patchproof_issue_5.test.ts",
+    "exit_code": 0,
+    "image": "f08f06b1-5bf6-489d-bfdd-d4cda92cf05b",
+    "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.278711\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.608453\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.25943\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.210656\n  ...\n# Subtest: findPostedDate selects oldest evidence among provider date, structured data, and text\nok 5 - findPostedDate selects oldest evidence among provider date, structured data, and text\n  ---\n  duration_ms: 6.846577\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 326.821787\nPATCHPROOF_REGRESSION_START\nPATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: findPostedDate selects oldest evidence among provider date, structured data, and text\nok 1 - findPostedDate selects oldest evidence among provider date, structured data, and text\n  ---\n  duration_ms: 2.642606\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 266.213267\n\nPATCHPROOF_TEST_HASH_BEFORE=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f\nPATCHPROOF_TEST_HASH_AFTER=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+    "passed": true,
+    "test_protected": true,
+    "tests_passed": 1
+  },
+  "engine": {
+    "app_version": "0.6.0-rc.39",
+    "commit": null,
+    "ref": null
+  },
+  "engine_provenance": {
+    "agent_budget.py": "8969f6d11aabd2a4274e8e8c2e2791826db6097c6362cf0015afa4f5a5aff71d",
+    "agent_loop.py": "436fd1b9e3016eb09c7d93b58a4fe893b69d3a31cb2e4609553ffc7c502209ac",
+    "context_tools.py": "ac899526daa1d339359feac313e6b02c131b722b017fb3819f259293d1300e1c",
+    "outcomes.py": "c9dd87d99827335cb1c747bd48d6c60fc22aee836259060048f3e830583b695d",
+    "patchproof_runtime/candidate_policy.mjs": "0186061b3fdd831079bfd46e8782e29e972668bc3da35c2f20de39809d941262",
+    "patchproof_runtime/java_check.py": "5f2f257fa7436d1974678b59d375d2ae30f2eec903912515dc47c0143cc63cf8",
+    "patchproof_runtime/jsdom.mjs": "1463a216dffb05dfa8e428b51bf012479d3521ae92336814dd509c41ebc8ef4c",
+    "patchproof_runtime/junit_check.py": "6a0540f30b27fff53b75d6c2dcb20d67f6658041b014a25f3ea58f160f83693f",
+    "patchproof_runtime/known_failures.py": "21324b08ef8cc13e3f0babababc99a4abb56f881a45f96e8706eb843b9abc54f",
+    "patchproof_runtime/pytest_check.py": "a26c0dde8e22f148507354234ffe057586f468fb7a5b8c63ba8f1fee1d279522",
+    "patchproof_runtime/static_web_check.mjs": "3d9f1a72b5b9b758423fef2b1d51aae4939686d939d9585e0b0b4846e8eeed66",
+    "patchproof_runtime/typescript_check.py": "602b8cc16b9fa6bede43637943c6ae9939a0023e04bad65953b13c3dacd646d5",
+    "patchproof_runtime/typescript_config.py": "a0aa93b6f32c47aa621bffeb133bbb232e336c8f1d302b431c27af378c5f2a3f",
+    "patchproof_runtime/typescript_runtime.d.ts": "d48920d450f03e925e8c314259dbfa89772f3fb12f6e60c4c116c6460ab45c66",
+    "patchproof_runtime/typescript_source_check.py": "4fd4662dd716c891a9439cf1ca1f09957c9b44fef948b52e81236a18325d725a",
+    "patchproof_runtime/typescript_test_lint.mjs": "164cd0442a5d27ee4568928d22653a2ec0a81feaddf2c5c063e5e2c30e41bce6",
+    "patchproof_runtime/web_streams.d.mts": "ff766e759387550451e4279190d5addf547fe3eb158333aa9ca7b0b3ef54c2d2",
+    "patchproof_runtime/web_streams.mjs": "8af9a34fa96da5436074c3d822a6007ce241af96b3d7166019b245eec0f49817",
+    "proof.py": "bf4bf6b304d51c13fd7e13f37de81bf97fc965cfb4b309815e55301a86e7465a",
+    "requirements-patchproof.txt": "f1e7713ad96ea72af42204e1df4c36895f2ff075a23c49e083eb61f8208c332a",
+    "runtimes.py": "172fbd0100d84ff4dfe0aca436289f2def3b5a8937d0913c294d1f6a135dabce",
+    "scope_policy.py": "2dd40cf0197ed6faa470224f6ceb94f5cc2ebb445af95235327ba757c0dd5450",
+    "spec_profile.py": "62029fdd8b9c87e3b1af13f34f02d22194e22fcd2dffb1a62d0a773a26cf77c9"
+  },
+  "issue": {
+    "number": 5,
+    "title": "findPostedDate trusts the provider date over contradicting \u201cPosted N days ago\u201d text, so listings older than the chosen window are shown",
+    "url": "https://github.com/creatoropener/CareerPilot/issues/5"
+  },
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "outcome": {
+    "bucket": "verified",
+    "detail": "repair verified and replayed",
+    "evaluated_repair": true,
+    "stage": "completed"
+  },
+  "pr_files": [
+    {
+      "path": "tests/test_patchproof_issue_5.test.ts",
+      "sha256": "0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f"
+    },
+    {
+      "path": "lib/recency.ts",
+      "sha256": "ebad34556ade3374d502a08ee399947961ea5a8afdf8554eb0755aa66a2699ae"
+    }
+  ],
+  "project_inputs": {
+    "package-lock.json": "d6ff1845882fd9ef32021cb7ad72963761da480194f756cf8b8148b03a51ec76",
+    "package.json": "8a90f356a92bb8696e0eb47c494449f67858347b8d7b0e9c52c96a6091fec9db",
+    "patchproof.json": "a50ac141faffccef4db93d7de65f35db7a1987d53146e15c15c1904b59186710",
+    "tsconfig.json": "ebd7329869659decf10ff154a0743758693c27017a722997740d213d0310e0e2"
+  },
+  "project_root": ".",
+  "race": {
+    "attempted": 3,
+    "evaluated": 1,
+    "passing": 1,
+    "planned": 3,
+    "policy": "any eligible passing candidate may enter clean replay"
+  },
+  "readiness": {
+    "baseline_tests": 4,
+    "before_inference": false,
+    "blockers": [],
+    "checks": [
+      {
+        "check": "runtime",
+        "detail": "node-typescript (node-test)",
+        "status": "passed"
+      },
+      {
+        "check": "project_root",
+        "detail": "repository root",
+        "status": "passed"
+      },
+      {
+        "check": "package_manager",
+        "detail": "npm",
+        "status": "passed"
+      },
+      {
+        "check": "scope",
+        "detail": "explicit source scope",
+        "status": "passed"
+      },
+      {
+        "check": "sandbox_setup",
+        "detail": "workspace unpacked, dependencies installed, toolchain present",
+        "status": "passed"
+      },
+      {
+        "check": "baseline",
+        "detail": "`CI=1 npm test`; 4 test(s) passed",
+        "status": "passed"
+      },
+      {
+        "check": "compatibility_coverage",
+        "detail": "4 existing test(s) guard unrelated behavior",
+        "status": "passed"
+      },
+      {
+        "check": "type_check",
+        "detail": "whole-project check: passed",
+        "status": "passed"
+      }
+    ],
+    "compatibility_coverage": "present",
+    "status": "ready",
+    "warnings": []
+  },
+  "regression_test": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "classification": "accepted assertion failure reproduced the issue",
+        "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { findPostedDate } from '../lib/recency.js';\n\ntest('findPostedDate selects oldest evidence among provider date, structured data, and text', async () => {\n  const fixedNow = new Date('2026-10-24T10:00:00Z');\n\n  // Case 1: provider date recent, text says 30+ days ago \u2192 expect text (oldest)\n  const input1 = { publishedDate: '2026-10-23T12:00:00Z', text: 'Posted 30+ days ago' };\n  const result1 = findPostedDate(input1, fixedNow);\n  assert.strictEqual(result1?.source, 'text');\n  assert.strictEqual(result1?.date.toISOString(), '2026-09-23T10:00:00.000Z');\n\n  // Case 2: structured data recent, text says 2 weeks ago \u2192 expect text (oldest)\n  const input2 = { text: '{\"datePosted\":\"2026-10-23\"} Posted 2 weeks ago' };\n  const result2 = findPostedDate(input2, fixedNow);\n  assert.strictEqual(result2?.source, 'text');\n  assert.strictEqual(result2?.date.toISOString(), '2026-10-10T10:00:00.000Z');\n\n  // Case 3: provider date and text agree \u2192 expect provider date (api)\n  const input3 = { publishedDate: '2026-10-04T10:00:00Z', text: 'Posted 2 days ago' };\n  const result3 = findPostedDate(input3, fixedNow);\n  assert.strictEqual(result3?.source, 'api');\n  assert.strictEqual(result3?.date.toISOString(), '2026-10-04T10:00:00.000Z');\n\n  // Case 4: only provider date present \u2192 expect provider date (api)\n  const input4 = { publishedDate: '2026-10-22T10:00:00Z', text: 'Supply Chain Manager. Apply now.' };\n  const result4 = findPostedDate(input4, fixedNow);\n  assert.strictEqual(result4?.source, 'api');\n  assert.strictEqual(result4?.date.toISOString(), '2026-10-22T10:00:00.000Z');\n});\n",
+        "counts_toward_limit": true,
+        "exit_code": 1,
+        "image": "e97bd78b-9c17-488d-97d9-89cd7fd6cd62",
+        "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: findPostedDate selects oldest evidence among provider date, structured data, and text\nnot ok 1 - findPostedDate selects oldest evidence among provider date, structured data, and text\n  ---\n  duration_ms: 4.137009\n  location: '/workspace/repo/tests/test_patchproof_issue_5.test.ts:1:114'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    'api' !== 'text'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'text'\n  actual: 'api'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/test_patchproof_issue_5.test.ts:11:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 308.130644\n\nPATCHPROOF_TEST_HASH_BEFORE=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f\nPATCHPROOF_TEST_HASH_AFTER=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+        "protected": true,
+        "rationale": "The test verifies that findPostedDate returns the oldest credible date from provider date, structured data, and text evidence, rejecting future dates and treating \u201c30+ days ago\u201d as at least 31 days.",
+        "sha256": "0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+        "static_rejection": false
+      }
+    ],
+    "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { findPostedDate } from '../lib/recency.js';\n\ntest('findPostedDate selects oldest evidence among provider date, structured data, and text', async () => {\n  const fixedNow = new Date('2026-10-24T10:00:00Z');\n\n  // Case 1: provider date recent, text says 30+ days ago \u2192 expect text (oldest)\n  const input1 = { publishedDate: '2026-10-23T12:00:00Z', text: 'Posted 30+ days ago' };\n  const result1 = findPostedDate(input1, fixedNow);\n  assert.strictEqual(result1?.source, 'text');\n  assert.strictEqual(result1?.date.toISOString(), '2026-09-23T10:00:00.000Z');\n\n  // Case 2: structured data recent, text says 2 weeks ago \u2192 expect text (oldest)\n  const input2 = { text: '{\"datePosted\":\"2026-10-23\"} Posted 2 weeks ago' };\n  const result2 = findPostedDate(input2, fixedNow);\n  assert.strictEqual(result2?.source, 'text');\n  assert.strictEqual(result2?.date.toISOString(), '2026-10-10T10:00:00.000Z');\n\n  // Case 3: provider date and text agree \u2192 expect provider date (api)\n  const input3 = { publishedDate: '2026-10-04T10:00:00Z', text: 'Posted 2 days ago' };\n  const result3 = findPostedDate(input3, fixedNow);\n  assert.strictEqual(result3?.source, 'api');\n  assert.strictEqual(result3?.date.toISOString(), '2026-10-04T10:00:00.000Z');\n\n  // Case 4: only provider date present \u2192 expect provider date (api)\n  const input4 = { publishedDate: '2026-10-22T10:00:00Z', text: 'Supply Chain Manager. Apply now.' };\n  const result4 = findPostedDate(input4, fixedNow);\n  assert.strictEqual(result4?.source, 'api');\n  assert.strictEqual(result4?.date.toISOString(), '2026-10-22T10:00:00.000Z');\n});\n",
+    "created_before_candidates": true,
+    "failed_before_fix": true,
+    "generation_attempts": [
+      {
+        "attempt": 1,
+        "execution_attempt": 1,
+        "sha256": "0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+        "status": "validated"
+      }
+    ],
+    "ordinary_ci": {
+      "command": "CI=1 npm test",
+      "discovered": true,
+      "exit_code": 1,
+      "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.255525\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 1.060342\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.265929\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.202705\n  ...\n# Subtest: findPostedDate selects oldest evidence among provider date, structured data, and text\nnot ok 5 - findPostedDate selects oldest evidence among provider date, structured data, and text\n  ---\n  duration_ms: 2.537779\n  location: '/workspace/repo/tests/test_patchproof_issue_5.test.ts:5:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    'api' !== 'text'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'text'\n  actual: 'api'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/test_patchproof_issue_5.test.ts:11:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 4\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 330.304284\n\nPATCHPROOF_TEST_HASH_BEFORE=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f\nPATCHPROOF_TEST_HASH_AFTER=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f"
+    },
+    "path": "tests/test_patchproof_issue_5.test.ts",
+    "pre_fix_exit_code": 1,
+    "pre_fix_image": "e97bd78b-9c17-488d-97d9-89cd7fd6cd62",
+    "pre_fix_output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: findPostedDate selects oldest evidence among provider date, structured data, and text\nnot ok 1 - findPostedDate selects oldest evidence among provider date, structured data, and text\n  ---\n  duration_ms: 4.137009\n  location: '/workspace/repo/tests/test_patchproof_issue_5.test.ts:1:114'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    'api' !== 'text'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'text'\n  actual: 'api'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/test_patchproof_issue_5.test.ts:11:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 308.130644\n\nPATCHPROOF_TEST_HASH_BEFORE=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f\nPATCHPROOF_TEST_HASH_AFTER=0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+    "protected": true,
+    "rationale": "The test verifies that findPostedDate returns the oldest credible date from provider date, structured data, and text evidence, rejecting future dates and treating \u201c30+ days ago\u201d as at least 31 days.",
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "sha256": "0c70c3b8d95a92f10e48a49fffa18603b5e1b9133c9e24169cd389d6585dd09f",
+    "support_files": []
+  },
+  "run_id": "419b3eea87624093bf98f640df3ba95f",
+  "runtime": {
+    "application_languages": [
+      "JavaScript",
+      "TypeScript"
+    ],
+    "display_name": "Node.js / TypeScript (tsx)",
+    "id": "node-typescript",
+    "image_env": "CONTREE_IMAGE_NODE_TYPESCRIPT",
+    "package_manager": {
+      "bootstrap_command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "name": "npm",
+      "notes": [],
+      "version": null
+    },
+    "preflight_output": "v20.19.2\n9.2.0\ntsx v4.23.15\nnode v20.19.2\nVersion 5.6.3",
+    "test_runtime": "node-test",
+    "toolchain": {
+      "raw": [
+        "v20.19.2",
+        "9.2.0",
+        "tsx v4.23.15",
+        "Version 5.6.3"
+      ],
+      "versions": {
+        "node": "20.19.2",
+        "npm": "9.2.0",
+        "tsc": "5.6.3",
+        "tsx": "4.23.15"
+      }
+    }
+  },
+  "sandbox": {
+    "base_image": "48346646-416f-45f5-864e-ee3ba616d14f",
+    "provider": "Nebius Token Factory"
+  },
+  "schema_version": "0.6",
+  "scope": {
+    "limitation": "Declared source boundaries and existing tests; not a proof of all adjacent behavior.",
+    "policy": {
+      "allowed_paths": [
+        "lib/recency.ts"
+      ]
+    },
+    "status": "explicit"
+  },
+  "source_check": {
+    "baseline_exit_code": 0,
+    "baseline_output": "PATCHPROOF_SOURCE_CHECK=passed",
+    "command": "python /patchproof/typescript_source_check.py --project",
+    "enabled": true,
+    "status": "passed"
+  },
+  "stage": "completed",
+  "verdict": "verified",
+  "verifier": {
+    "fallback": null,
+    "profile_requested": "freeform",
+    "profile_used": "freeform"
+  },
+  "winner": {
+    "candidate": 3,
+    "changed_files": [
+      "lib/recency.ts"
+    ],
+    "selection": "fewest changed files, then fewest changed lines, then duration",
+    "summary": "Collect all date evidence and return the oldest valid date."
+  }
+}

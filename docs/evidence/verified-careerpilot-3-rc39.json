@@ -1,0 +1,397 @@
+{
+  "agent_mode": "legacy",
+  "app_version": "0.6.0-rc.39",
+  "archive_sha256": "dd6556560867aa39cc083f9fdb867a7e8f8c7d67bf4fca75173451cff2cc6c06",
+  "baseline": {
+    "command": "CI=1 npm test",
+    "existing_suite_passed": true,
+    "image": "e5b1a4e2-a416-4d64-8351-eb4173798897",
+    "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: a plain city location earns the location points\nok 1 - a plain city location earns the location points\n  ---\n  duration_ms: 2.283858\n  ...\n# Subtest: a different city earns no location points\nok 2 - a different city earns no location points\n  ---\n  duration_ms: 0.681683\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 318.710573",
+    "tests_passed": 2
+  },
+  "candidates": [
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "import type { CareerProfile, JobResult, RawJobResult } from './types';\n\nconst splitList = (value: string): string[] => value\n  .split(/[\\n,;|]/)\n  .map((part) => part.trim())\n  .filter((part) => part.length > 1)\n  .filter((part, index, all) => all.findIndex((x) => x.toLowerCase() === part.toLowerCase()) === index);\n\nconst SUMMARY_STOP_WORDS = new Set([\n  'about', 'above', 'after', 'again', 'against', 'also', 'among', 'and', 'any', 'are', 'because',\n  'been', 'before', 'being', 'below', 'between', 'both', 'could', 'during', 'each', 'experience',\n  'from', 'have', 'having', 'into', 'more', 'most', 'other', 'over', 'same', 'should', 'some',\n  'such', 'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those',\n  'through', 'under', 'very', 'was', 'were', 'what', 'when', 'where', 'which', 'while', 'with',\n  'within', 'would', 'your', 'years', 'worked', 'work', 'responsible', 'including', 'using', 'role',\n  'team', 'teams', 'support', 'supported', 'helped', 'managed', 'management', 'results',\n]);\n\nfunction extractSummaryTerms(value: string): string[] {\n  const tokens = value.match(/[\\p{L}\\p{N}][\\p{L}\\p{N}+#./-]{2,}/gu) ?? [];\n  return tokens\n    .map((token) => token.trim())\n    .filter((token) => token.length >= 3 && !SUMMARY_STOP_WORDS.has(token.toLowerCase()))\n    .filter((token, index, all) => all.findIndex((part) => part.toLowerCase() === token.toLowerCase()) === index)\n    .slice(0, 30);\n}\n\nconst escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n\nfunction includesTerm(haystack: string, term: string): boolean {\n  const normalizedText = haystack.toLocaleLowerCase();\n  const normalizedTerm = term.toLocaleLowerCase().trim();\n  if (!normalizedTerm) return false;\n  if (normalizedTerm.includes(' ') || /[+.#/-]/.test(normalizedTerm)) {\n    return normalizedText.includes(normalizedTerm);\n  }\n  return new RegExp(`(^|[^a-z0-9])${escapeRegex(normalizedTerm)}([^a-z0-9]|$)`, 'i').test(normalizedText);\n}\n\n\nconst RESUME_SKILL_CATALOG = [\n  'SAP S/4HANA', 'SAP MM', 'SAP SD', 'SAP FI', 'SAP TM', 'SAP', 'Excel', 'Advanced Excel',\n  'Power BI', 'Tableau', 'SQL', 'Python', 'JavaScript', 'TypeScript', 'React', 'Node.js',\n  'PostgreSQL', 'HTML', 'CSS', 'Git', 'Docker', 'REST API', 'AWS', 'Azure', 'Salesforce',\n  'Supply Chain', 'Logistics', 'Import/Export', 'Customs Clearance', 'Freight Auditing',\n  'Order Management', 'Customer Service', 'Procurement', 'Inventory Management',\n  'Warehouse Management', 'Transport Management', 'Demand Planning', 'Production Planning',\n  'Team Leadership', 'Vendor Management', 'Data Analysis', 'Business Analysis',\n  'Project Management', 'Stakeholder Management', 'Contract Management', 'Financial Analysis',\n  'Accounting', 'Compliance', 'Risk Management', 'Marketing', 'Sales', 'Human Resources',\n  'Machine Learning', 'Artificial Intelligence', 'Agile', 'Scrum', 'Jira', 'PowerPoint',\n  'Negotiation', 'Lean Six Sigma', 'Process Improvement', 'ERP', 'Budgeting', 'Forecasting',\n];\n\nconst ROLE_WORDS = /\\b(manager|analyst|engineer|specialist|coordinator|team lead|lead|executive|director|consultant|developer|administrator|officer|supervisor|technician|architect|accountant|scientist|designer|planner|buyer|merchandiser|auditor|controller|associate|representative)\\b/i;\nconst EDUCATION_WORDS = /\\b(bachelor|master|mba|bba|b\\.com|b\\.sc|bsc|b\\.tech|m\\.tech|ph\\.?d|diploma|degree|certification|certified|university|college|graduate|postgraduate|pmp|cpa|acca)\\b/i;\n\nexport interface ResumeSuggestions {\n  skills: string[];\n  roles: string[];\n  education: string[];\n}\n\nexport function suggestProfileFromResume(resumeText: string): ResumeSuggestions {\n  const text = resumeText.trim();\n  const lines = text.split(/\\r?\\n/).map((line) => line.replace(/^[-\u2022*\\s]+/, '').trim()).filter(Boolean);\n  const skills = RESUME_SKILL_CATALOG.filter((skill) => includesTerm(text, skill));\n  const roles = lines\n    .filter((line) => line.length >= 4 && line.length <= 90 && ROLE_WORDS.test(line))\n    .filter((line) => !/^(skills|responsibilities|qualifications|summary|profile|experience|education|certifications?)\\b/i.test(line))\n    .filter((line, index, all) => all.findIndex((entry) => entry.toLowerCase() === line.toLowerCase()) === index)\n    .slice(0, 3);\n  const education = lines\n    .filter((line) => line.length <= 140 && EDUCATION_WORDS.test(line))\n    .filter((line, index, all) => all.findIndex((entry) => entry.toLowerCase() === line.toLowerCase()) === index)\n    .slice(0, 4);\n  return { skills, roles, education };\n}\n\nexport function canonicalizeUrl(input: string): string {\n  try {\n    const url = new URL(input);\n    url.hash = '';\n    for (const key of [...url.searchParams.keys()]) {\n      if (/^(utm_.+|ref|refid|source|trk|trackingid|gclid|fbclid)$/i.test(key)) url.searchParams.delete(key);\n    }\n    url.hostname = url.hostname.toLowerCase().replace(/^www\\./, '');\n    return url.toString().replace(/\\/$/, '');\n  } catch {\n    return input.trim();\n  }\n}\n\nexport function domainOf(input: string): string {\n  try {\n    return new URL(input).hostname.replace(/^www\\./, '');\n  } catch {\n    return 'Unknown source';\n  }\n}\n\nexport function scoreJob(raw: RawJobResult, profile: CareerProfile): JobResult {\n  const roles = splitList(profile.targetRoles);\n  const skills = splitList(profile.skills);\n  const location = profile.location.trim();\n  const allText = `${raw.title} ${raw.content} ${raw.url}`.toLocaleLowerCase();\n  const matchedRoles = roles.filter((term) => includesTerm(allText, term));\n  const matchedSkills = skills.filter((term) => includesTerm(allText, term));\n  const matchedEducation = splitList(profile.education).filter((term) => includesTerm(allText, term));\n  const summaryTerms = extractSummaryTerms(profile.experienceSummary);\n  const matchedSummary = summaryTerms.filter((term) => includesTerm(allText, term));\n  const matchedTerms = [...matchedRoles, ...matchedSkills, ...matchedEducation, ...matchedSummary]\n    .filter((term, index, array) => array.findIndex((entry) => entry.toLowerCase() === term.toLowerCase()) === index);\n\n  let score = 0;\n  if (roles.length > 0) score += matchedRoles.length > 0 ? 30 : 0;\n  else score += 12;\n  if (skills.length > 0) score += Math.round((matchedSkills.length / skills.length) * 40);\n  else score += 15;\n  if (location) {\n    const cityPart = location.split(',')[0].trim();\n    score += includesTerm(allText, cityPart) ? 15 : 0;\n  } else score += 8;\n  if (/\\b(job|jobs|career|careers|apply|application|vacancy|vacancies|hiring|position|opening|recruitment)\\b/i.test(allText)) score += 5;\n  if (matchedEducation.length > 0) score += Math.min(5, matchedEducation.length * 2);\n  if (summaryTerms.length > 0) score += Math.min(5, Math.round((matchedSummary.length / Math.min(10, summaryTerms.length)) * 5));\n  score = Math.min(100, score);\n\n  const missingTerms = skills.filter((term) => !matchedSkills.some((match) => match.toLowerCase() === term.toLowerCase()));\n  const url = canonicalizeUrl(raw.url);\n  const id = makeJobId(url);\n  return {\n    ...raw,\n    url,\n    id,\n    domain: domainOf(url),\n    matchScore: score,\n    matchedTerms,\n    missingTerms,\n    status: 'Saved',\n  };\n}\n\nexport function makeJobId(value: string): string {\n  let hash = 2166136261;\n  for (let index = 0; index < value.length; index += 1) {\n    hash ^= value.charCodeAt(index);\n    hash = Math.imul(hash, 16777619);\n  }\n  return `job-${(hash >>> 0).toString(16)}`;\n}\n\nexport function rankJobs(results: RawJobResult[], profile: CareerProfile): JobResult[] {\n  const seen = new Set<string>();\n  const ranked: JobResult[] = [];\n  for (const raw of results) {\n    if (!raw.url || !/^https?:\\/\\//i.test(raw.url)) continue;\n    const canonicalUrl = canonicalizeUrl(raw.url);\n    if (seen.has(canonicalUrl)) continue;\n    seen.add(canonicalUrl);\n    ranked.push(scoreJob({ ...raw, url: canonicalUrl }, profile));\n  }\n  return ranked.sort((a, b) => b.matchScore - a.matchScore);\n}\n\nexport function buildSearchFallbackLinks(profile: CareerProfile): { label: string; url: string }[] {\n  const roles = splitList(profile.targetRoles).slice(0, 2);\n  const skills = splitList(profile.skills).slice(0, 4);\n  const keywords = [...roles, ...skills].filter(Boolean).join(' ');\n  const location = profile.location.trim();\n  const query = [keywords, location, 'jobs apply'].filter(Boolean).join(' ');\n  const q = encodeURIComponent(query || 'jobs near me');\n  const linkedinQuery = encodeURIComponent([roles[0] || keywords || 'jobs', location].filter(Boolean).join(' '));\n  return [\n    { label: 'Google Jobs', url: `https://www.google.com/search?q=${q}&ibp=htl;jobs` },\n    { label: 'Indeed', url: `https://www.indeed.com/jobs?q=${q}&l=${encodeURIComponent(location)}` },\n    { label: 'LinkedIn Jobs', url: `https://www.linkedin.com/jobs/search/?keywords=${linkedinQuery}` },\n    { label: 'Company career pages', url: `https://www.google.com/search?q=${encodeURIComponent(`${keywords} ${location} careers apply`)}` },\n  ];\n}\n",
+              "path": "src/lib/matcher.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "897d1934-4091-4fd6-84ab-dbfe54436b96",
+          "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: a plain city location earns the location points\nok 1 - a plain city location earns the location points\n  ---\n  duration_ms: 2.236757\n  ...\n# Subtest: a different city earns no location points\nok 2 - a different city earns no location points\n  ---\n  duration_ms: 0.671708\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 301.461825",
+          "regression_test_present": false,
+          "tests_passed": 2
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 2,
+      "candidate": 1,
+      "changed_files": [
+        "src/lib/matcher.ts"
+      ],
+      "changed_lines": 6,
+      "command": "python /patchproof/typescript_check.py tests/test_patchproof_issue_3.test.ts && node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs --test --test-reporter=tap tests/test_patchproof_issue_3.test.ts",
+      "diff": "--- src/lib/matcher.ts\n+++ src/lib/matcher.ts\n@@ -117,8 +117,10 @@\n   else score += 12;\n   if (skills.length > 0) score += Math.round((matchedSkills.length / skills.length) * 40);\n   else score += 15;\n-  if (location) score += includesTerm(allText, location) ? 15 : 0;\n-  else score += 8;\n+  if (location) {\n+    const cityPart = location.split(',')[0].trim();\n+    score += includesTerm(allText, cityPart) ? 15 : 0;\n+  } else score += 8;\n   if (/\\b(job|jobs|career|careers|apply|application|vacancy|vacancies|hiring|position|opening|recruitment)\\b/i.test(allText)) score += 5;\n   if (matchedEducation.length > 0) score += Math.min(5, matchedEducation.length * 2);\n   if (summaryTerms.length > 0) score += Math.min(5, Math.round((matchedSummary.length / Math.min(10, summaryTerms.length)) * 5));\n",
+      "duration_seconds": 21.152,
+      "eligibility": {
+        "scope": "explicit",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "63c468a6-47a3-48b3-8e06-a03a01d3e087",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.259002\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.674542\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.263385\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.194172\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 288.224115\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+      "passed": true,
+      "source_check_attempts": [
+        {
+          "attempt": 1,
+          "passed": true,
+          "status": "passed"
+        }
+      ],
+      "stage": "regression",
+      "strategy": "minimal targeted correction",
+      "summary": "Fix location scoring to match city part before comma in 'City, Country' format.",
+      "test_protected": true,
+      "tests_passed": 4
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "import type { CareerProfile, JobResult, RawJobResult } from './types';\n\nconst splitList = (value: string): string[] => value\n  .split(/[\\n,;|]/)\n  .map((part) => part.trim())\n  .filter((part) => part.length > 1)\n  .filter((part, index, all) => all.findIndex((x) => x.toLowerCase() === part.toLowerCase()) === index);\n\nconst SUMMARY_STOP_WORDS = new Set([\n  'about', 'above', 'after', 'again', 'against', 'also', 'among', 'and', 'any', 'are', 'because',\n  'been', 'before', 'being', 'below', 'between', 'both', 'could', 'during', 'each', 'experience',\n  'from', 'have', 'having', 'into', 'more', 'most', 'other', 'over', 'same', 'should', 'some',\n  'such', 'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those',\n  'through', 'under', 'very', 'was', 'were', 'what', 'when', 'where', 'which', 'while', 'with',\n  'within', 'would', 'your', 'years', 'worked', 'work', 'responsible', 'including', 'using', 'role',\n  'team', 'teams', 'support', 'supported', 'helped', 'managed', 'management', 'results',\n]);\n\nfunction extractSummaryTerms(value: string): string[] {\n  const tokens = value.match(/[\\p{L}\\p{N}][\\p{L}\\p{N}+#./-]{2,}/gu) ?? [];\n  return tokens\n    .map((token) => token.trim())\n    .filter((token) => token.length >= 3 && !SUMMARY_STOP_WORDS.has(token.toLowerCase()))\n    .filter((token, index, all) => all.findIndex((part) => part.toLowerCase() === token.toLowerCase()) === index)\n    .slice(0, 30);\n}\n\nconst escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n\nfunction includesTerm(haystack: string, term: string): boolean {\n  const normalizedText = haystack.toLocaleLowerCase();\n  const normalizedTerm = term.toLocaleLowerCase().trim();\n  if (!normalizedTerm) return false;\n  if (normalizedTerm.includes(' ') || /[+.#/-]/.test(normalizedTerm)) {\n    return normalizedText.includes(normalizedTerm);\n  }\n  return new RegExp(`(^|[^a-z0-9])${escapeRegex(normalizedTerm)}([^a-z0-9]|$)`, 'i').test(normalizedText);\n}\n\n\nconst RESUME_SKILL_CATALOG = [\n  'SAP S/4HANA', 'SAP MM', 'SAP SD', 'SAP FI', 'SAP TM', 'SAP', 'Excel', 'Advanced Excel',\n  'Power BI', 'Tableau', 'SQL', 'Python', 'JavaScript', 'TypeScript', 'React', 'Node.js',\n  'PostgreSQL', 'HTML', 'CSS', 'Git', 'Docker', 'REST API', 'AWS', 'Azure', 'Salesforce',\n  'Supply Chain', 'Logistics', 'Import/Export', 'Customs Clearance', 'Freight Auditing',\n  'Order Management', 'Customer Service', 'Procurement', 'Inventory Management',\n  'Warehouse Management', 'Transport Management', 'Demand Planning', 'Production Planning',\n  'Team Leadership', 'Vendor Management', 'Data Analysis', 'Business Analysis',\n  'Project Management', 'Stakeholder Management', 'Contract Management', 'Financial Analysis',\n  'Accounting', 'Compliance', 'Risk Management', 'Marketing', 'Sales', 'Human Resources',\n  'Machine Learning', 'Artificial Intelligence', 'Agile', 'Scrum', 'Jira', 'PowerPoint',\n  'Negotiation', 'Lean Six Sigma', 'Process Improvement', 'ERP', 'Budgeting', 'Forecasting',\n];\n\nconst ROLE_WORDS = /\\b(manager|analyst|engineer|specialist|coordinator|team lead|lead|executive|director|consultant|developer|administrator|officer|supervisor|technician|architect|accountant|scientist|designer|planner|buyer|merchandiser|auditor|controller|associate|representative)\\b/i;\nconst EDUCATION_WORDS = /\\b(bachelor|master|mba|bba|b\\.com|b\\.sc|bsc|b\\.tech|m\\.tech|ph\\.?d|diploma|degree|certification|certified|university|college|graduate|postgraduate|pmp|cpa|acca)\\b/i;\n\nexport interface ResumeSuggestions {\n  skills: string[];\n  roles: string[];\n  education: string[];\n}\n\nexport function suggestProfileFromResume(resumeText: string): ResumeSuggestions {\n  const text = resumeText.trim();\n  const lines = text.split(/\\r?\\n/).map((line) => line.replace(/^[-\u2022*\\s]+/, '').trim()).filter(Boolean);\n  const skills = RESUME_SKILL_CATALOG.filter((skill) => includesTerm(text, skill));\n  const roles = lines\n    .filter((line) => line.length >= 4 && line.length <= 90 && ROLE_WORDS.test(line))\n    .filter((line) => !/^(skills|responsibilities|qualifications|summary|profile|experience|education|certifications?)\\b/i.test(line))\n    .filter((line, index, all) => all.findIndex((entry) => entry.toLowerCase() === line.toLowerCase()) === index)\n    .slice(0, 3);\n  const education = lines\n    .filter((line) => line.length <= 140 && EDUCATION_WORDS.test(line))\n    .filter((line, index, all) => all.findIndex((entry) => entry.toLowerCase() === line.toLowerCase()) === index)\n    .slice(0, 4);\n  return { skills, roles, education };\n}\n\nexport function canonicalizeUrl(input: string): string {\n  try {\n    const url = new URL(input);\n    url.hash = '';\n    for (const key of [...url.searchParams.keys()]) {\n      if (/^(utm_.+|ref|refid|source|trk|trackingid|gclid|fbclid)$/i.test(key)) url.searchParams.delete(key);\n    }\n    url.hostname = url.hostname.toLowerCase().replace(/^www\\./, '');\n    return url.toString().replace(/\\/$/, '');\n  } catch {\n    return input.trim();\n  }\n}\n\nexport function domainOf(input: string): string {\n  try {\n    return new URL(input).hostname.replace(/^www\\./, '');\n  } catch {\n    return 'Unknown source';\n  }\n}\n\nexport function scoreJob(raw: RawJobResult, profile: CareerProfile): JobResult {\n  const roles = splitList(profile.targetRoles);\n  const skills = splitList(profile.skills);\n  const location = profile.location.trim();\n  const allText = `${raw.title} ${raw.content} ${raw.url}`.toLocaleLowerCase();\n  const matchedRoles = roles.filter((term) => includesTerm(allText, term));\n  const matchedSkills = skills.filter((term) => includesTerm(allText, term));\n  const matchedEducation = splitList(profile.education).filter((term) => includesTerm(allText, term));\n  const summaryTerms = extractSummaryTerms(profile.experienceSummary);\n  const matchedSummary = summaryTerms.filter((term) => includesTerm(allText, term));\n  const matchedTerms = [...matchedRoles, ...matchedSkills, ...matchedEducation, ...matchedSummary]\n    .filter((term, index, array) => array.findIndex((entry) => entry.toLowerCase() === term.toLowerCase()) === index);\n\n  let score = 0;\n  if (roles.length > 0) score += matchedRoles.length > 0 ? 30 : 0;\n  else score += 12;\n  if (skills.length > 0) score += Math.round((matchedSkills.length / skills.length) * 40);\n  else score += 15;\n  if (location) {\n    const locationPart = location.split(',')[0].trim();\n    score += includesTerm(allText, locationPart) ? 15 : 0;\n  } else score += 8;\n  if (/\\b(job|jobs|career|careers|apply|application|vacancy|vacancies|hiring|position|opening|recruitment)\\b/i.test(allText)) score += 5;\n  if (matchedEducation.length > 0) score += Math.min(5, matchedEducation.length * 2);\n  if (summaryTerms.length > 0) score += Math.min(5, Math.round((matchedSummary.length / Math.min(10, summaryTerms.length)) * 5));\n  score = Math.min(100, score);\n\n  const missingTerms = skills.filter((term) => !matchedSkills.some((match) => match.toLowerCase() === term.toLowerCase()));\n  const url = canonicalizeUrl(raw.url);\n  const id = makeJobId(url);\n  return {\n    ...raw,\n    url,\n    id,\n    domain: domainOf(url),\n    matchScore: score,\n    matchedTerms,\n    missingTerms,\n    status: 'Saved',\n  };\n}\n\nexport function makeJobId(value: string): string {\n  let hash = 2166136261;\n  for (let index = 0; index < value.length; index += 1) {\n    hash ^= value.charCodeAt(index);\n    hash = Math.imul(hash, 16777619);\n  }\n  return `job-${(hash >>> 0).toString(16)}`;\n}\n\nexport function rankJobs(results: RawJobResult[], profile: CareerProfile): JobResult[] {\n  const seen = new Set<string>();\n  const ranked: JobResult[] = [];\n  for (const raw of results) {\n    if (!raw.url || !/^https?:\\/\\//i.test(raw.url)) continue;\n    const canonicalUrl = canonicalizeUrl(raw.url);\n    if (seen.has(canonicalUrl)) continue;\n    seen.add(canonicalUrl);\n    ranked.push(scoreJob({ ...raw, url: canonicalUrl }, profile));\n  }\n  return ranked.sort((a, b) => b.matchScore - a.matchScore);\n}\n\nexport function buildSearchFallbackLinks(profile: CareerProfile): { label: string; url: string }[] {\n  const roles = splitList(profile.targetRoles).slice(0, 2);\n  const skills = splitList(profile.skills).slice(0, 4);\n  const keywords = [...roles, ...skills].filter(Boolean).join(' ');\n  const location = profile.location.trim();\n  const query = [keywords, location, 'jobs apply'].filter(Boolean).join(' ');\n  const q = encodeURIComponent(query || 'jobs near me');\n  const linkedinQuery = encodeURIComponent([roles[0] || keywords || 'jobs', location].filter(Boolean).join(' '));\n  return [\n    { label: 'Google Jobs', url: `https://www.google.com/search?q=${q}&ibp=htl;jobs` },\n    { label: 'Indeed', url: `https://www.indeed.com/jobs?q=${q}&l=${encodeURIComponent(location)}` },\n    { label: 'LinkedIn Jobs', url: `https://www.linkedin.com/jobs/search/?keywords=${linkedinQuery}` },\n    { label: 'Company career pages', url: `https://www.google.com/search?q=${encodeURIComponent(`${keywords} ${location} careers apply`)}` },\n  ];\n}\n",
+              "path": "src/lib/matcher.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "346c4455-b0f3-425d-8971-1fbf21a96416",
+          "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: a plain city location earns the location points\nok 1 - a plain city location earns the location points\n  ---\n  duration_ms: 2.263657\n  ...\n# Subtest: a different city earns no location points\nok 2 - a different city earns no location points\n  ---\n  duration_ms: 0.669335\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 295.939285",
+          "regression_test_present": false,
+          "tests_passed": 2
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 2,
+      "candidate": 2,
+      "changed_files": [
+        "src/lib/matcher.ts"
+      ],
+      "changed_lines": 6,
+      "command": "python /patchproof/typescript_check.py tests/test_patchproof_issue_3.test.ts && node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs --test --test-reporter=tap tests/test_patchproof_issue_3.test.ts",
+      "diff": "--- src/lib/matcher.ts\n+++ src/lib/matcher.ts\n@@ -117,8 +117,10 @@\n   else score += 12;\n   if (skills.length > 0) score += Math.round((matchedSkills.length / skills.length) * 40);\n   else score += 15;\n-  if (location) score += includesTerm(allText, location) ? 15 : 0;\n-  else score += 8;\n+  if (location) {\n+    const locationPart = location.split(',')[0].trim();\n+    score += includesTerm(allText, locationPart) ? 15 : 0;\n+  } else score += 8;\n   if (/\\b(job|jobs|career|careers|apply|application|vacancy|vacancies|hiring|position|opening|recruitment)\\b/i.test(allText)) score += 5;\n   if (matchedEducation.length > 0) score += Math.min(5, matchedEducation.length * 2);\n   if (summaryTerms.length > 0) score += Math.min(5, Math.round((matchedSummary.length / Math.min(10, summaryTerms.length)) * 5));\n",
+      "duration_seconds": 17.94,
+      "eligibility": {
+        "scope": "explicit",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "5e2eb4f8-ec7f-4d39-886d-462139613fe2",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.290888\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.684057\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.280021\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.202494\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 297.715421\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+      "passed": true,
+      "source_check_attempts": [
+        {
+          "attempt": 1,
+          "passed": true,
+          "status": "passed"
+        }
+      ],
+      "stage": "regression",
+      "strategy": "defensive edge-case correction",
+      "summary": "Fix location scoring to match city part when preferred location contains a comma.",
+      "test_protected": true,
+      "tests_passed": 4
+    },
+    {
+      "baseline_attempts": [
+        {
+          "attempt": 1,
+          "changes": [
+            {
+              "content": "import type { CareerProfile, JobResult, RawJobResult } from './types';\n\nconst splitList = (value: string): string[] => value\n  .split(/[\\n,;|]/)\n  .map((part) => part.trim())\n  .filter((part) => part.length > 1)\n  .filter((part, index, all) => all.findIndex((x) => x.toLowerCase() === part.toLowerCase()) === index);\n\nconst SUMMARY_STOP_WORDS = new Set([\n  'about', 'above', 'after', 'again', 'against', 'also', 'among', 'and', 'any', 'are', 'because',\n  'been', 'before', 'being', 'below', 'between', 'both', 'could', 'during', 'each', 'experience',\n  'from', 'have', 'having', 'into', 'more', 'most', 'other', 'over', 'same', 'should', 'some',\n  'such', 'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those',\n  'through', 'under', 'very', 'was', 'were', 'what', 'when', 'where', 'which', 'while', 'with',\n  'within', 'would', 'your', 'years', 'worked', 'work', 'responsible', 'including', 'using', 'role',\n  'team', 'teams', 'support', 'supported', 'helped', 'managed', 'management', 'results',\n]);\n\nfunction extractSummaryTerms(value: string): string[] {\n  const tokens = value.match(/[\\p{L}\\p{N}][\\p{L}\\p{N}+#./-]{2,}/gu) ?? [];\n  return tokens\n    .map((token) => token.trim())\n    .filter((token) => token.length >= 3 && !SUMMARY_STOP_WORDS.has(token.toLowerCase()))\n    .filter((token, index, all) => all.findIndex((part) => part.toLowerCase() === token.toLowerCase()) === index)\n    .slice(0, 30);\n}\n\nconst escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n\nfunction includesTerm(haystack: string, term: string): boolean {\n  const normalizedText = haystack.toLocaleLowerCase();\n  const normalizedTerm = term.toLocaleLowerCase().trim();\n  if (!normalizedTerm) return false;\n  if (normalizedTerm.includes(' ') || /[+.#/-]/.test(normalizedTerm)) {\n    return normalizedText.includes(normalizedTerm);\n  }\n  return new RegExp(`(^|[^a-z0-9])${escapeRegex(normalizedTerm)}([^a-z0-9]|$)`, 'i').test(normalizedText);\n}\n\n\nconst RESUME_SKILL_CATALOG = [\n  'SAP S/4HANA', 'SAP MM', 'SAP SD', 'SAP FI', 'SAP TM', 'SAP', 'Excel', 'Advanced Excel',\n  'Power BI', 'Tableau', 'SQL', 'Python', 'JavaScript', 'TypeScript', 'React', 'Node.js',\n  'PostgreSQL', 'HTML', 'CSS', 'Git', 'Docker', 'REST API', 'AWS', 'Azure', 'Salesforce',\n  'Supply Chain', 'Logistics', 'Import/Export', 'Customs Clearance', 'Freight Auditing',\n  'Order Management', 'Customer Service', 'Procurement', 'Inventory Management',\n  'Warehouse Management', 'Transport Management', 'Demand Planning', 'Production Planning',\n  'Team Leadership', 'Vendor Management', 'Data Analysis', 'Business Analysis',\n  'Project Management', 'Stakeholder Management', 'Contract Management', 'Financial Analysis',\n  'Accounting', 'Compliance', 'Risk Management', 'Marketing', 'Sales', 'Human Resources',\n  'Machine Learning', 'Artificial Intelligence', 'Agile', 'Scrum', 'Jira', 'PowerPoint',\n  'Negotiation', 'Lean Six Sigma', 'Process Improvement', 'ERP', 'Budgeting', 'Forecasting',\n];\n\nconst ROLE_WORDS = /\\b(manager|analyst|engineer|specialist|coordinator|team lead|lead|executive|director|consultant|developer|administrator|officer|supervisor|technician|architect|accountant|scientist|designer|planner|buyer|merchandiser|auditor|controller|associate|representative)\\b/i;\nconst EDUCATION_WORDS = /\\b(bachelor|master|mba|bba|b\\.com|b\\.sc|bsc|b\\.tech|m\\.tech|ph\\.?d|diploma|degree|certification|certified|university|college|graduate|postgraduate|pmp|cpa|acca)\\b/i;\n\nexport interface ResumeSuggestions {\n  skills: string[];\n  roles: string[];\n  education: string[];\n}\n\nexport function suggestProfileFromResume(resumeText: string): ResumeSuggestions {\n  const text = resumeText.trim();\n  const lines = text.split(/\\r?\\n/).map((line) => line.replace(/^[-\u2022*\\s]+/, '').trim()).filter(Boolean);\n  const skills = RESUME_SKILL_CATALOG.filter((skill) => includesTerm(text, skill));\n  const roles = lines\n    .filter((line) => line.length >= 4 && line.length <= 90 && ROLE_WORDS.test(line))\n    .filter((line) => !/^(skills|responsibilities|qualifications|summary|profile|experience|education|certifications?)\\b/i.test(line))\n    .filter((line, index, all) => all.findIndex((entry) => entry.toLowerCase() === line.toLowerCase()) === index)\n    .slice(0, 3);\n  const education = lines\n    .filter((line) => line.length <= 140 && EDUCATION_WORDS.test(line))\n    .filter((line, index, all) => all.findIndex((entry) => entry.toLowerCase() === line.toLowerCase()) === index)\n    .slice(0, 4);\n  return { skills, roles, education };\n}\n\nexport function canonicalizeUrl(input: string): string {\n  try {\n    const url = new URL(input);\n    url.hash = '';\n    for (const key of [...url.searchParams.keys()]) {\n      if (/^(utm_.+|ref|refid|source|trk|trackingid|gclid|fbclid)$/i.test(key)) url.searchParams.delete(key);\n    }\n    url.hostname = url.hostname.toLowerCase().replace(/^www\\./, '');\n    return url.toString().replace(/\\/$/, '');\n  } catch {\n    return input.trim();\n  }\n}\n\nexport function domainOf(input: string): string {\n  try {\n    return new URL(input).hostname.replace(/^www\\./, '');\n  } catch {\n    return 'Unknown source';\n  }\n}\n\nexport function scoreJob(raw: RawJobResult, profile: CareerProfile): JobResult {\n  const roles = splitList(profile.targetRoles);\n  const skills = splitList(profile.skills);\n  const location = profile.location.trim();\n  const allText = `${raw.title} ${raw.content} ${raw.url}`.toLocaleLowerCase();\n  const matchedRoles = roles.filter((term) => includesTerm(allText, term));\n  const matchedSkills = skills.filter((term) => includesTerm(allText, term));\n  const matchedEducation = splitList(profile.education).filter((term) => includesTerm(allText, term));\n  const summaryTerms = extractSummaryTerms(profile.experienceSummary);\n  const matchedSummary = summaryTerms.filter((term) => includesTerm(allText, term));\n  const matchedTerms = [...matchedRoles, ...matchedSkills, ...matchedEducation, ...matchedSummary]\n    .filter((term, index, array) => array.findIndex((entry) => entry.toLowerCase() === term.toLowerCase()) === index);\n\n  let score = 0;\n  if (roles.length > 0) score += matchedRoles.length > 0 ? 30 : 0;\n  else score += 12;\n  if (skills.length > 0) score += Math.round((matchedSkills.length / skills.length) * 40);\n  else score += 15;\n  if (location) {\n    const locPart = location.split(',')[0].trim();\n    score += includesTerm(allText, locPart) ? 15 : 0;\n  } else score += 8;\n  if (/\\b(job|jobs|career|careers|apply|application|vacancy|vacancies|hiring|position|opening|recruitment)\\b/i.test(allText)) score += 5;\n  if (matchedEducation.length > 0) score += Math.min(5, matchedEducation.length * 2);\n  if (summaryTerms.length > 0) score += Math.min(5, Math.round((matchedSummary.length / Math.min(10, summaryTerms.length)) * 5));\n  score = Math.min(100, score);\n\n  const missingTerms = skills.filter((term) => !matchedSkills.some((match) => match.toLowerCase() === term.toLowerCase()));\n  const url = canonicalizeUrl(raw.url);\n  const id = makeJobId(url);\n  return {\n    ...raw,\n    url,\n    id,\n    domain: domainOf(url),\n    matchScore: score,\n    matchedTerms,\n    missingTerms,\n    status: 'Saved',\n  };\n}\n\nexport function makeJobId(value: string): string {\n  let hash = 2166136261;\n  for (let index = 0; index < value.length; index += 1) {\n    hash ^= value.charCodeAt(index);\n    hash = Math.imul(hash, 16777619);\n  }\n  return `job-${(hash >>> 0).toString(16)}`;\n}\n\nexport function rankJobs(results: RawJobResult[], profile: CareerProfile): JobResult[] {\n  const seen = new Set<string>();\n  const ranked: JobResult[] = [];\n  for (const raw of results) {\n    if (!raw.url || !/^https?:\\/\\//i.test(raw.url)) continue;\n    const canonicalUrl = canonicalizeUrl(raw.url);\n    if (seen.has(canonicalUrl)) continue;\n    seen.add(canonicalUrl);\n    ranked.push(scoreJob({ ...raw, url: canonicalUrl }, profile));\n  }\n  return ranked.sort((a, b) => b.matchScore - a.matchScore);\n}\n\nexport function buildSearchFallbackLinks(profile: CareerProfile): { label: string; url: string }[] {\n  const roles = splitList(profile.targetRoles).slice(0, 2);\n  const skills = splitList(profile.skills).slice(0, 4);\n  const keywords = [...roles, ...skills].filter(Boolean).join(' ');\n  const location = profile.location.trim();\n  const query = [keywords, location, 'jobs apply'].filter(Boolean).join(' ');\n  const q = encodeURIComponent(query || 'jobs near me');\n  const linkedinQuery = encodeURIComponent([roles[0] || keywords || 'jobs', location].filter(Boolean).join(' '));\n  return [\n    { label: 'Google Jobs', url: `https://www.google.com/search?q=${q}&ibp=htl;jobs` },\n    { label: 'Indeed', url: `https://www.indeed.com/jobs?q=${q}&l=${encodeURIComponent(location)}` },\n    { label: 'LinkedIn Jobs', url: `https://www.linkedin.com/jobs/search/?keywords=${linkedinQuery}` },\n    { label: 'Company career pages', url: `https://www.google.com/search?q=${encodeURIComponent(`${keywords} ${location} careers apply`)}` },\n  ];\n}\n",
+              "path": "src/lib/matcher.ts"
+            }
+          ],
+          "exit_code": 0,
+          "image": "6f551102-bca4-4cc0-8b3f-fc7c21232ec6",
+          "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: a plain city location earns the location points\nok 1 - a plain city location earns the location points\n  ---\n  duration_ms: 2.224169\n  ...\n# Subtest: a different city earns no location points\nok 2 - a different city earns no location points\n  ---\n  duration_ms: 0.753601\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 306.485425",
+          "regression_test_present": false,
+          "tests_passed": 2
+        }
+      ],
+      "baseline_command": "CI=1 npm test",
+      "baseline_tests_passed": 2,
+      "candidate": 3,
+      "changed_files": [
+        "src/lib/matcher.ts"
+      ],
+      "changed_lines": 6,
+      "command": "python /patchproof/typescript_check.py tests/test_patchproof_issue_3.test.ts && node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs --test --test-reporter=tap tests/test_patchproof_issue_3.test.ts",
+      "diff": "--- src/lib/matcher.ts\n+++ src/lib/matcher.ts\n@@ -117,8 +117,10 @@\n   else score += 12;\n   if (skills.length > 0) score += Math.round((matchedSkills.length / skills.length) * 40);\n   else score += 15;\n-  if (location) score += includesTerm(allText, location) ? 15 : 0;\n-  else score += 8;\n+  if (location) {\n+    const locPart = location.split(',')[0].trim();\n+    score += includesTerm(allText, locPart) ? 15 : 0;\n+  } else score += 8;\n   if (/\\b(job|jobs|career|careers|apply|application|vacancy|vacancies|hiring|position|opening|recruitment)\\b/i.test(allText)) score += 5;\n   if (matchedEducation.length > 0) score += Math.min(5, matchedEducation.length * 2);\n   if (summaryTerms.length > 0) score += Math.min(5, Math.round((matchedSummary.length / Math.min(10, summaryTerms.length)) * 5));\n",
+      "duration_seconds": 18.491,
+      "eligibility": {
+        "scope": "explicit",
+        "status": "passed"
+      },
+      "exit_code": 0,
+      "generation_attempts": 1,
+      "image": "824c4751-7456-46de-8287-ddb6038380e1",
+      "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.236506\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.674212\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.269695\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.214422\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 285.660406\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+      "passed": true,
+      "source_check_attempts": [
+        {
+          "attempt": 1,
+          "passed": true,
+          "status": "passed"
+        }
+      ],
+      "stage": "regression",
+      "strategy": "maintainable behavior-preserving correction",
+      "summary": "Modify scoreJob to award location points when the prefix before a comma in the profile location matches the listing text.",
+      "test_protected": true,
+      "tests_passed": 4
+    }
+  ],
+  "clean_replay": {
+    "command": "CI=1 npm test && echo PATCHPROOF_REGRESSION_START && python /patchproof/typescript_check.py tests/test_patchproof_issue_3.test.ts && node --import /opt/patchproof/node/node_modules/tsx/dist/loader.mjs --test --test-reporter=tap tests/test_patchproof_issue_3.test.ts",
+    "exit_code": 0,
+    "image": "5f3b5ab8-5b66-423e-8f20-8c24e6652c2d",
+    "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: a plain city location earns the location points\nok 1 - a plain city location earns the location points\n  ---\n  duration_ms: 2.23251\n  ...\n# Subtest: a different city earns no location points\nok 2 - a different city earns no location points\n  ---\n  duration_ms: 0.700342\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 3 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.268154\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 4 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.603656\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 5 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.206189\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 6 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.210486\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 340.045286\nPATCHPROOF_REGRESSION_START\nPATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 2.263397\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.667862\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.2597\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.196996\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 270.395496\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+    "passed": true,
+    "test_protected": true,
+    "tests_passed": 4
+  },
+  "engine": {
+    "app_version": "0.6.0-rc.39",
+    "commit": null,
+    "ref": null
+  },
+  "engine_provenance": {
+    "agent_budget.py": "8969f6d11aabd2a4274e8e8c2e2791826db6097c6362cf0015afa4f5a5aff71d",
+    "agent_loop.py": "436fd1b9e3016eb09c7d93b58a4fe893b69d3a31cb2e4609553ffc7c502209ac",
+    "context_tools.py": "ac899526daa1d339359feac313e6b02c131b722b017fb3819f259293d1300e1c",
+    "outcomes.py": "c9dd87d99827335cb1c747bd48d6c60fc22aee836259060048f3e830583b695d",
+    "patchproof_runtime/candidate_policy.mjs": "0186061b3fdd831079bfd46e8782e29e972668bc3da35c2f20de39809d941262",
+    "patchproof_runtime/java_check.py": "5f2f257fa7436d1974678b59d375d2ae30f2eec903912515dc47c0143cc63cf8",
+    "patchproof_runtime/jsdom.mjs": "1463a216dffb05dfa8e428b51bf012479d3521ae92336814dd509c41ebc8ef4c",
+    "patchproof_runtime/junit_check.py": "6a0540f30b27fff53b75d6c2dcb20d67f6658041b014a25f3ea58f160f83693f",
+    "patchproof_runtime/known_failures.py": "21324b08ef8cc13e3f0babababc99a4abb56f881a45f96e8706eb843b9abc54f",
+    "patchproof_runtime/pytest_check.py": "a26c0dde8e22f148507354234ffe057586f468fb7a5b8c63ba8f1fee1d279522",
+    "patchproof_runtime/static_web_check.mjs": "3d9f1a72b5b9b758423fef2b1d51aae4939686d939d9585e0b0b4846e8eeed66",
+    "patchproof_runtime/typescript_check.py": "602b8cc16b9fa6bede43637943c6ae9939a0023e04bad65953b13c3dacd646d5",
+    "patchproof_runtime/typescript_config.py": "a0aa93b6f32c47aa621bffeb133bbb232e336c8f1d302b431c27af378c5f2a3f",
+    "patchproof_runtime/typescript_runtime.d.ts": "d48920d450f03e925e8c314259dbfa89772f3fb12f6e60c4c116c6460ab45c66",
+    "patchproof_runtime/typescript_source_check.py": "4fd4662dd716c891a9439cf1ca1f09957c9b44fef948b52e81236a18325d725a",
+    "patchproof_runtime/typescript_test_lint.mjs": "164cd0442a5d27ee4568928d22653a2ec0a81feaddf2c5c063e5e2c30e41bce6",
+    "patchproof_runtime/web_streams.d.mts": "ff766e759387550451e4279190d5addf547fe3eb158333aa9ca7b0b3ef54c2d2",
+    "patchproof_runtime/web_streams.mjs": "8af9a34fa96da5436074c3d822a6007ce241af96b3d7166019b245eec0f49817",
+    "proof.py": "bf4bf6b304d51c13fd7e13f37de81bf97fc965cfb4b309815e55301a86e7465a",
+    "requirements-patchproof.txt": "f1e7713ad96ea72af42204e1df4c36895f2ff075a23c49e083eb61f8208c332a",
+    "runtimes.py": "172fbd0100d84ff4dfe0aca436289f2def3b5a8937d0913c294d1f6a135dabce",
+    "scope_policy.py": "2dd40cf0197ed6faa470224f6ceb94f5cc2ebb445af95235327ba757c0dd5450",
+    "spec_profile.py": "62029fdd8b9c87e3b1af13f34f02d22194e22fcd2dffb1a62d0a773a26cf77c9"
+  },
+  "issue": {
+    "number": 3,
+    "title": "scoreJob gives no location credit when the preferred location is written as \u201cCity, Country\u201d (e.g. \u201cMumbai, India\u201d)",
+    "url": "https://github.com/creatoropener/CareerPilot/issues/3"
+  },
+  "model": "nvidia/nemotron-3-super-120b-a12b",
+  "outcome": {
+    "bucket": "verified",
+    "detail": "repair verified and replayed",
+    "evaluated_repair": true,
+    "stage": "completed"
+  },
+  "pr_files": [
+    {
+      "path": "tests/test_patchproof_issue_3.test.ts",
+      "sha256": "86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d"
+    },
+    {
+      "path": "src/lib/matcher.ts",
+      "sha256": "d19a381071cba70cb1945a7e8ef8ca070875e13b0cf78e1d8473cba5dc44c6fb"
+    }
+  ],
+  "project_inputs": {
+    "package-lock.json": "d6ff1845882fd9ef32021cb7ad72963761da480194f756cf8b8148b03a51ec76",
+    "package.json": "50c46d7df231ebd2576e49ca8c48acdf7ae9403917e8495ed6352580ac276bb2",
+    "patchproof.json": "44759316c49023b8fbb3ace64c945c8044d5ab12ba5f281dbe4f7cbd87d60b7c",
+    "tsconfig.json": "ebd7329869659decf10ff154a0743758693c27017a722997740d213d0310e0e2"
+  },
+  "project_root": ".",
+  "race": {
+    "attempted": 3,
+    "evaluated": 3,
+    "passing": 3,
+    "planned": 3,
+    "policy": "any eligible passing candidate may enter clean replay"
+  },
+  "readiness": {
+    "baseline_tests": 2,
+    "before_inference": false,
+    "blockers": [],
+    "checks": [
+      {
+        "check": "runtime",
+        "detail": "node-typescript (node-test)",
+        "status": "passed"
+      },
+      {
+        "check": "project_root",
+        "detail": "repository root",
+        "status": "passed"
+      },
+      {
+        "check": "package_manager",
+        "detail": "npm",
+        "status": "passed"
+      },
+      {
+        "check": "scope",
+        "detail": "explicit source scope",
+        "status": "passed"
+      },
+      {
+        "check": "sandbox_setup",
+        "detail": "workspace unpacked, dependencies installed, toolchain present",
+        "status": "passed"
+      },
+      {
+        "check": "baseline",
+        "detail": "`CI=1 npm test`; 2 test(s) passed",
+        "status": "passed"
+      },
+      {
+        "check": "compatibility_coverage",
+        "detail": "2 existing test(s) guard unrelated behavior",
+        "status": "passed"
+      },
+      {
+        "check": "type_check",
+        "detail": "whole-project check: passed",
+        "status": "passed"
+      }
+    ],
+    "compatibility_coverage": "present",
+    "status": "ready",
+    "warnings": []
+  },
+  "regression_test": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "classification": "accepted assertion failure reproduced the issue",
+        "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { scoreJob } from '../src/lib/matcher';\nimport { DEFAULT_PROFILE } from '../src/lib/types';\n\ntest('preferred location \\\"City, Country\\\" grants location points when listing contains the city', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai, India' };\n  const job = { title: 'Supply Chain Manager \u2014 Mumbai', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 65);\n});\n\ntest('preferred location \\\"City, Country\\\" grants location points when listing contains the full string', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai, India' };\n  const job = { title: 'Supply Chain Manager \u2014 Mumbai, India', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 65);\n});\n\ntest('preferred location \\\"City\\\" continues to work as before', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai' };\n  const job = { title: 'Supply Chain Manager \u2014 Mumbai', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 65);\n});\n\ntest('different city yields no location points for \\\"City, Country\\\" profile', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai, India' };\n  const job = { title: 'Supply Chain Manager \u2014 Pune', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 50);\n});\n",
+        "counts_toward_limit": true,
+        "exit_code": 1,
+        "image": "8324eda2-a918-4b46-94b9-37cee54e0ce9",
+        "output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nnot ok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 3.900745\n  location: '/workspace/repo/tests/test_patchproof_issue_3.test.ts:1:155'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    50 !== 65\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 65\n  actual: 50\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/test_patchproof_issue_3.test.ts:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.675754\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.365238\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.188853\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 3\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 300.149395\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+        "protected": true,
+        "rationale": "The test verifies that the location scoring logic now extracts the city part from a \\\"City, Country\\\" profile location and awards 15 points when that city appears in the job listing text. It ensures backward compatibility for plain city locations and confirms no points are awarded for mismatched cities.",
+        "sha256": "86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+        "static_rejection": false
+      }
+    ],
+    "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { scoreJob } from '../src/lib/matcher';\nimport { DEFAULT_PROFILE } from '../src/lib/types';\n\ntest('preferred location \\\"City, Country\\\" grants location points when listing contains the city', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai, India' };\n  const job = { title: 'Supply Chain Manager \u2014 Mumbai', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 65);\n});\n\ntest('preferred location \\\"City, Country\\\" grants location points when listing contains the full string', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai, India' };\n  const job = { title: 'Supply Chain Manager \u2014 Mumbai, India', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 65);\n});\n\ntest('preferred location \\\"City\\\" continues to work as before', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai' };\n  const job = { title: 'Supply Chain Manager \u2014 Mumbai', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 65);\n});\n\ntest('different city yields no location points for \\\"City, Country\\\" profile', () => {\n  const profile = { ...DEFAULT_PROFILE, targetRoles: 'Supply Chain Manager', location: 'Mumbai, India' };\n  const job = { title: 'Supply Chain Manager \u2014 Pune', url: 'https://jobs.example.com/scm', content: 'Apply now' };\n  assert.equal(scoreJob(job, profile).matchScore, 50);\n});\n",
+    "created_before_candidates": true,
+    "failed_before_fix": true,
+    "generation_attempts": [
+      {
+        "attempt": 1,
+        "execution_attempt": 1,
+        "sha256": "86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+        "status": "validated"
+      }
+    ],
+    "ordinary_ci": {
+      "command": "CI=1 npm test",
+      "discovered": true,
+      "exit_code": 1,
+      "output": "> careerpilot-job-radar@0.1.0 test\n> tsx --test tests/*.test.ts\n\nTAP version 13\n# Subtest: a plain city location earns the location points\nok 1 - a plain city location earns the location points\n  ---\n  duration_ms: 2.597138\n  ...\n# Subtest: a different city earns no location points\nok 2 - a different city earns no location points\n  ---\n  duration_ms: 0.833221\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nnot ok 3 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 3.356959\n  location: '/workspace/repo/tests/test_patchproof_issue_3.test.ts:6:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    50 !== 65\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 65\n  actual: 50\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/test_patchproof_issue_3.test.ts:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 4 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.597687\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 5 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.310235\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 6 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.194132\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 5\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 326.260946\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d"
+    },
+    "path": "tests/test_patchproof_issue_3.test.ts",
+    "pre_fix_exit_code": 1,
+    "pre_fix_image": "8324eda2-a918-4b46-94b9-37cee54e0ce9",
+    "pre_fix_output": "PATCHPROOF_TYPESCRIPT_LINT=passed\nPATCHPROOF_TYPESCRIPT_CHECK=passed\nTAP version 13\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the city\nnot ok 1 - preferred location \"City, Country\" grants location points when listing contains the city\n  ---\n  duration_ms: 3.900745\n  location: '/workspace/repo/tests/test_patchproof_issue_3.test.ts:1:155'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    50 !== 65\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 65\n  actual: 50\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (/workspace/repo/tests/test_patchproof_issue_3.test.ts:9:10)\n    Test.runInAsyncScope (node:async_hooks:206:9)\n    Test.run (node:internal/test_runner/test:796:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:526:18)\n    node:internal/test_runner/harness:255:12\n    node:internal/process/task_queues:140:7\n    AsyncResource.runInAsyncScope (node:async_hooks:206:9)\n    AsyncResource.runMicrotask (node:internal/process/task_queues:137:8)\n  ...\n# Subtest: preferred location \"City, Country\" grants location points when listing contains the full string\nok 2 - preferred location \"City, Country\" grants location points when listing contains the full string\n  ---\n  duration_ms: 0.675754\n  ...\n# Subtest: preferred location \"City\" continues to work as before\nok 3 - preferred location \"City\" continues to work as before\n  ---\n  duration_ms: 0.365238\n  ...\n# Subtest: different city yields no location points for \"City, Country\" profile\nok 4 - different city yields no location points for \"City, Country\" profile\n  ---\n  duration_ms: 0.188853\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 3\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 300.149395\n\nPATCHPROOF_TEST_HASH_BEFORE=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d\nPATCHPROOF_TEST_HASH_AFTER=86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+    "protected": true,
+    "rationale": "The test verifies that the location scoring logic now extracts the city part from a \\\"City, Country\\\" profile location and awards 15 points when that city appears in the job listing text. It ensures backward compatibility for plain city locations and confirms no points are awarded for mismatched cities.",
+    "reproduction_classification": "accepted assertion failure reproduced the issue",
+    "sha256": "86141241e5ca3b1939511f6a38b17c8a0697b602521e12a08f8bc56ed7b8d27d",
+    "support_files": []
+  },
+  "run_id": "b5c0b105dcd343a9a5ea9d35da8d4ac7",
+  "runtime": {
+    "application_languages": [
+      "JavaScript",
+      "TypeScript"
+    ],
+    "display_name": "Node.js / TypeScript (tsx)",
+    "id": "node-typescript",
+    "image_env": "CONTREE_IMAGE_NODE_TYPESCRIPT",
+    "package_manager": {
+      "bootstrap_command": "npm ci --ignore-scripts --no-audit --no-fund",
+      "name": "npm",
+      "notes": [],
+      "version": null
+    },
+    "preflight_output": "v20.19.2\n9.2.0\ntsx v4.23.15\nnode v20.19.2\nVersion 5.6.3",
+    "test_runtime": "node-test",
+    "toolchain": {
+      "raw": [
+        "v20.19.2",
+        "9.2.0",
+        "tsx v4.23.15",
+        "Version 5.6.3"
+      ],
+      "versions": {
+        "node": "20.19.2",
+        "npm": "9.2.0",
+        "tsc": "5.6.3",
+        "tsx": "4.23.15"
+      }
+    }
+  },
+  "sandbox": {
+    "base_image": "48346646-416f-45f5-864e-ee3ba616d14f",
+    "provider": "Nebius Token Factory"
+  },
+  "schema_version": "0.6",
+  "scope": {
+    "limitation": "Declared source boundaries and existing tests; not a proof of all adjacent behavior.",
+    "policy": {
+      "allowed_paths": [
+        "src/lib/matcher.ts"
+      ]
+    },
+    "status": "explicit"
+  },
+  "source_check": {
+    "baseline_exit_code": 0,
+    "baseline_output": "PATCHPROOF_SOURCE_CHECK=passed",
+    "command": "python /patchproof/typescript_source_check.py --project",
+    "enabled": true,
+    "status": "passed"
+  },
+  "stage": "completed",
+  "verdict": "verified",
+  "verifier": {
+    "fallback": null,
+    "profile_requested": "freeform",
+    "profile_used": "freeform"
+  },
+  "winner": {
+    "candidate": 2,
+    "changed_files": [
+      "src/lib/matcher.ts"
+    ],
+    "selection": "fewest changed files, then fewest changed lines, then duration",
+    "summary": "Fix location scoring to match city part when preferred location contains a comma."
+  }
+}
