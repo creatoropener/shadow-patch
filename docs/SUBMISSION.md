@@ -142,7 +142,7 @@ feedback on those.
 - TypeScript repair: https://github.com/creatoropener/Aegisscan-Bug-Auditor/pull/4
 - Latest TypeScript repairs (rc.39): https://github.com/creatoropener/CareerPilot/pull/4 and https://github.com/creatoropener/CareerPilot/pull/6
 - Recorded run: https://github.com/creatoropener/file-sharing-app/actions/runs/35464615209
-- Public video URL: add after uploading the final recording to YouTube.
+- Public video URL: https://youtu.be/p4DGtcIxLXk
 
 The source repository must receive this consolidated release before submission.
 The video included in the delivery is a recorded-evidence walkthrough cut, not a
