@@ -19,40 +19,33 @@ Coding and Agentic Engineering
 
 ## Inspiration
 
-Code generation is only one step in fixing a bug. Maintainers still need to
-reproduce the problem, check what a patch changes, and decide whether its tests
-are meaningful. We built Shadow Patch to make that evidence part of the
-issue-to-PR workflow rather than leave it as a claim in an agent's summary.
+Code generation is only one step in fixing a bug. A proposed patch is not proof that the bug is fixed. Maintainers still need to reproduce the problem, verify that the regression test is meaningful, and ensure that the fix does not break existing behavior.
+
+We built Shadow Patch to make this evidence part of the issue-to-PR workflow. Instead of trusting an agent's explanation, Shadow Patch requires a regression test, isolated candidate evaluation, and a clean replay before presenting a repair for human review.
 
 ## What it does
 
-A maintainer applies the `shadow-fix` label to a GitHub issue. Shadow Patch first checks the selected
-sandbox runtime and existing baseline, then generates a regression from the issue
-and original repository and confirms that it fails with an actual assertion on
-the unfixed code. Separate solver calls then produce
-three candidate repairs. Each runs in an isolated Nebius sandbox branch and must
-pass existing tests plus the frozen regression. The winning patch is replayed
-from a clean image before the workflow opens or updates a PR. Merge remains a
-human decision.
+A maintainer applies the "shadow-fix" label to a GitHub issue. Shadow Patch checks the selected sandbox runtime and existing test baseline before making model calls.
+
+A verifier model generates a regression test using the issue and original repository. Shadow Patch confirms that the test fails on the unfixed code because of an actual assertion failure. The test is then frozen and withheld from the repair models.
+
+Three separate solver strategies propose candidate fixes. Each candidate runs in an isolated Nebius Sandbox and must pass both the existing tests and the frozen regression test. Shadow Patch selects the best passing candidate (fewest changed files, then fewest changed lines, then fastest) and replays it from a clean sandbox image.
+
+After successful verification, the workflow opens or updates a pull request containing the code changes and verification report. If verification fails, the workflow stops without opening a new PR and comments the reason on the issue. A developer always makes the final merge decision.
+
+One Nebius API key covers both Token Factory inference and Sandboxes, so a full run (a verifier plus three solvers) fits inside a single GitHub Actions job.
 
 ## How we built it
 
-The orchestrator is Python running in GitHub Actions. It uses NVIDIA Nemotron
-through Nebius Token Factory inference; the first recorded repair used
-`nvidia/Nemotron-3_5-Lightning` and the later repairs and the benchmark used
-`nvidia/nemotron-3-super-120b-a12b`. Nebius Sandboxes execute repository bootstrap,
-tests, isolated candidate evaluations and clean replay. Runtime adapters separate
-application language, test framework and image selection. The first recorded repair
-used the earlier Node adapter and a loader for a standalone TypeScript utility.
-The v0.6 engine replaces that narrow loader with an explicit pinned `tsx` contract,
-and two further repairs were recorded on it.
+Shadow Patch is orchestrated in Python through GitHub Actions and is packaged as a reusable GitHub Action. It uses NVIDIA Nemotron models through Nebius Token Factory for regression-test generation and candidate repair. Our recorded development runs initially used "nvidia/Nemotron-3_5-Lightning" and later used "nvidia/nemotron-3-super-120b-a12b". We also tried "nvidia/Nemotron-3-Ultra-550b", which used too many tokens for this workload.
 
-The verifier test is created before repair and excluded from solver prompts.
-Source-path restrictions block direct edits to protected files. Hash checks
-compare regression bytes before and after execution. Existing baseline failures
-can inform one bounded correction, but hidden-regression results never feed back
-to a solver. These controls provide specific test evidence, not formal correctness
-or a security guarantee against hostile code.
+Nebius Sandboxes, accessed through "contree-sdk", provide isolated environments for repository setup, baseline tests, regression checks, candidate evaluation, and clean-image replay. Runtime adapters separate repository and toolchain configuration from the verification engine. For Node.js and TypeScript projects, the v0.6 engine uses an explicit, pinned "tsx" test-running contract.
+
+We also implemented safeguards around the verification process:
+
+Test before repair: The regression test is generated and validated against the unfixed code before candidate fixes are attempted. Hidden regression: The regression test is excluded from solver prompts, reducing the opportunity for candidates to tailor their fixes to the test. Isolated evaluation: Each candidate is tested in its own sandbox branch. Source-path restrictions: Designated protected files cannot be edited directly by the repair process. Integrity checks: Hash comparisons help verify that regression-test bytes remain unchanged. Clean replay: The winning patch is reapplied and verified from a fresh sandbox image before pull-request creation.
+
+These controls provide inspectable test evidence. They do not establish formal correctness or guarantee security against hostile code.
 
 ## Demonstrated result
 
@@ -76,12 +69,13 @@ Shadow Patch generalizes to unseen repositories.
 
 ## Challenges and learning
 
-Early runs failed during inference response parsing and test setup. Later, a
-candidate broke existing low-speed formatting; the verifier correctly refused
-the repair. We added actionable validation feedback, protected baseline-only
-corrections, and clearer failure-stage reports. A notification tried to reread a
-report after PR creation; the corrected workflow links the PR directly. Python
-bytecode is now prevented on the runner and ignored by the repository.
+Early runs exposed problems with inference-response parsing and repository-specific test setup. We also encountered a candidate that changed existing low-speed formatting. Although the proposed fix looked plausible, verification rejected it because it did not preserve the required behavior.
+
+We improved validation feedback, failure-stage reporting, bounded corrections for baseline failures, and pull-request notifications. We also refined the TypeScript test contract so regression tests could run more consistently in the sandbox.
+
+Later challenges were environmental rather than model-related. A newer jsdom crashed on load under the sandbox's Node 20, so we pinned a compatible version and now check it before any model request. Tests created at the site root could not fail for subpath bugs, so the engine now refuses them. A transient Nebius Sandbox API error ended a run, so setup steps now retry and are reported as infrastructure errors instead of repair failures. Projects whose tests ran only a named file, or whose tsconfig used project references, were blocked until we made them testable.
+
+We learned to treat these failures as engineering feedback rather than evidence that the system works everywhere.
 
 ## What makes it distinctive
 
@@ -109,11 +103,13 @@ command-line alternative.
 
 ## Next
 
-Fix the verifier failures seen on unseen repositories (nested tests, repository-specific
-alias guidance, API type-checking), re-measure on new held-out issues, demonstrate
-more repositories and runtimes, record stronger commit-bound evidence,
-improve hostile-code defenses and cost reporting, then turn the Actions MVP into
-an installable GitHub App. Candidate evaluation is currently sequential.
+Our next priority is improving regression-test generation on unfamiliar repositories, particularly where nested test layouts, repository-specific module aliases, or API type-checking cause problems.
+
+We plan to:
+
+Evaluate more held-out issues and repositories. Add and improve runtime adapters for different languages and test frameworks. Strengthen the evidence linking each verification result to the exact source revision and test artifact. Improve isolation and defenses against hostile repository code. Add clearer execution-cost reporting and explore parallel candidate evaluation (candidates currently run one after another).
+
+Longer term, we aim to evolve the GitHub Actions implementation into an installable GitHub App, making verification-first repairs easier for maintainers to adopt without sacrificing human review.
 
 ## Platform feedback
 
