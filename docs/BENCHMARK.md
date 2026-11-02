@@ -213,6 +213,10 @@ replaced by the Aegisscan SSRF case before any run and was never run.
 
 The engine was not changed after the held-out cases were written.
 
+## rc.40 repair rounds
+
+rc.40 gives a rejected candidate up to three more proposals using the regression's failure output (`PATCHPROOF_REPAIR_ROUNDS`, default 3, legacy mode only). The benchmark workflow does not set it, so rc.40 trials run with the default. An rc.40 trial and an rc.39 trial are different execution policies: compare `race.repair_rounds_allowed` in each proof, and do not report an rc.40 result as evidence for rc.39.
+
 ## rc.26 bounded profile
 
 Use the workflow's `agent_mode` input (`bounded` or `legacy`). Bounded mode requires rc.26 and the Node/TypeScript adapter. The first smoke defaults to `qrcrafts-1`, one trial and one solver session; file-sharing-app-1 is pinned to `bf93981`, whose `npm test` discovers `.ts` regressions; its later stages have not been run on that pin. Preserve the active manifest and historical protocol snapshots.

@@ -184,6 +184,7 @@ Open `proof.json` and read `outcome.bucket`, `outcome.stage` and `error` before 
 | `needs_specification` | The issue states no expected values for calls. | Section 3. |
 | `spec_invalid` | The values are not quoted in the issue. `rejected_examples` lists each refusal. | Quote the values; one contiguous block per example. |
 | `budget_exhausted` | Usually bounded mode. | `agent-mode: legacy`. |
+| `repair_failed`, candidates show `repair_rounds` | rc.40: each candidate was given the regression's failure output and still did not fix it, or proposed the same patch again (`repair_stopped`). | Check that the model is the one you intended (`proof.json` `model`), that the issue states the expected values, and read the last round's `output`. |
 | `verified`, PR on `shadow-fix/issue-<n>` | Done. | Review the diff, the frozen test and the report. Merge by hand. |
 
 A green workflow is not evidence of a new PR. Check `pull-request-url` and the linked existing PR. Change

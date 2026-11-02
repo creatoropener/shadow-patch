@@ -36,7 +36,9 @@ verifier generation request.
 Repository context is captured before the new regression exists. The verifier
 receives the issue and ordinary source/tests. It returns test code and rationale.
 The solver receives ordinary repository context, including pre-existing tests,
-but not the verifier's generated test or its execution output.
+but not the verifier's generated test. Its execution output on the original source is not
+shown either. From rc.40 the failure output of a candidate's own frozen-regression run can be
+shown to that candidate's next proposal (see below).
 
 An accepted reproduction needs a recognized assertion failure and an unchanged
 test hash. Syntax errors, import errors, skipped tests, zero-test success and a
@@ -95,8 +97,15 @@ cannot be directly patched. Every accepted proposal must have a net source chang
 Invalid proposals get one validation retry with the error. Baseline failures get
 one correction, with a fresh branch for the new proposal. These branches exclude
 the hidden test, so broad test discovery cannot expose its assertions as feedback.
-The frozen test is injected only after baseline success. A hidden-regression
-failure rejects that candidate; it does not trigger a solver correction.
+The frozen test is injected only after baseline success. Through rc.39 a hidden-regression
+failure rejected that candidate and nothing went back to a solver. From rc.40 (legacy mode) the
+failure output of that run, never the test source, is sent with the previous diff for up to
+`PATCHPROOF_REPAIR_ROUNDS` more proposals (default 3; `0` restores the earlier behavior), while no
+candidate has passed and the same patch has not been proposed before. This is a deliberate
+trade: a solver that sees an expected value can fit it. The acceptance gates are unchanged (frozen
+test hash, existing tests, type check, scope and interference policy, clean-room replay, human
+merge), the proof records every round, and the PR report names the candidates that used
+feedback. A pass after feedback shows the regression is satisfied, not that the repair generalizes.
 
 For binary-frame or protocol edits, solver instructions require a private
 consistency audit of buffer allocation, write/read offsets, producer/consumer

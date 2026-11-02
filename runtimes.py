@@ -1755,7 +1755,8 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "import assert from 'node:assert/strict'; "
                 "and every case is declared as test('descriptive name', async () => { ... }); "
                 "never call test() or assert without importing them. Import application "
-                "modules the normal way, exactly as the application itself does. " +
+                "modules the normal way, exactly as the application itself does; a relative import never "
+                "ends in .ts or .tsx (write '../lib/x.js' or no extension). " +
                 _alias_guidance(root) +
                 "When the intended behavior is that an operation must be refused, assert it with "
                 "await assert.rejects(promise) or assert.throws(fn); only match wording stated in the issue; "

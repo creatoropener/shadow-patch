@@ -338,7 +338,7 @@ def classify_outcome(proof: dict[str, Any]) -> dict[str, Any]:
             return result(NO_REPRODUCTION, error)
         return result(VERIFIER_INVALID, error)
     if stage == "candidate-evaluation":
-        if any(c.get("stage") == "regression" for c in candidates):
+        if any(c.get("stage") == "regression" or c.get("repair_rounds") for c in candidates):
             return result(REPAIR_FAILED, error)
         return result(REPAIR_INVALID, error)
     if stage == "clean-replay":
