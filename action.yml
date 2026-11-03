@@ -31,9 +31,9 @@ inputs:
     required: false
     default: 'freeform'
   repair-rounds:
-    description: 'Legacy mode, 0 to 5 (default 3): how many more proposals a candidate may make after the verifier regression rejected one. The failure output, never the test source, goes back to the solver. 0 restores the one-evaluation-per-candidate behavior of rc.39 and earlier.'
+    description: 'Legacy mode, 0 to 8 (default 5): how many more proposals a candidate may make after one was rejected, shared by failures of the existing tests, the type check and the verifier regression. The failure output (and the source lines it names), never the test source, goes back to the solver. 0 restores the rc.39 behavior: one correction for the existing tests or type check, one regression evaluation.'
     required: false
-    default: '3'
+    default: '5'
   agent-candidates:
     description: 'Bounded solver sessions, 1 to 3; all share the same run limits.'
     required: false

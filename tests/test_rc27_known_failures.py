@@ -154,7 +154,13 @@ test('value is two', () => { assert.equal(value(), 2); });
         # 'value is a number' test now fails too, an undeclared failure.
         result, record, error, _ = self.run_case(["legacy: removed feature"], candidate_value="'2'")
         self.assertIsNotNone(error)
-        self.assertEqual(record["candidates"][0]["stage"], "baseline")
+        first = record["candidates"][0]
+        # rc.41: the scripted solver answers feedback with the same patch, so the candidate ends on the repeat
+        # (stage "generation") instead of after the single rc.39 correction (stage "baseline"). What matters
+        # here is that the patch broke an existing test and was never accepted.
+        self.assertFalse(first["passed"])
+        self.assertNotEqual(first["baseline_attempts"][0]["exit_code"], 0)
+        self.assertIn(first["stage"], {"baseline", "generation"})
 
 
 if __name__ == "__main__":

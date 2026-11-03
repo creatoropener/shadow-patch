@@ -100,8 +100,11 @@ the hidden test, so broad test discovery cannot expose its assertions as feedbac
 The frozen test is injected only after baseline success. Through rc.39 a hidden-regression
 failure rejected that candidate and nothing went back to a solver. From rc.40 (legacy mode) the
 failure output of that run, never the test source, is sent with the previous diff for up to
-`PATCHPROOF_REPAIR_ROUNDS` more proposals (default 3; `0` restores the earlier behavior), while no
-candidate has passed and the same patch has not been proposed before. This is a deliberate
+`PATCHPROOF_REPAIR_ROUNDS` more proposals (default 5 from rc.41; `0` restores the earlier behavior),
+while no candidate has passed. From rc.41 that allowance is one budget shared with failures of the
+existing tests and the type check, the feedback shows the failing tests rather than the log's tail
+plus the lines of the candidate's own patched source that a stack trace names, and a patch proposed
+twice in a row ends the candidate. This is a deliberate
 trade: a solver that sees an expected value can fit it. The acceptance gates are unchanged (frozen
 test hash, existing tests, type check, scope and interference policy, clean-room replay, human
 merge), the proof records every round, and the PR report names the candidates that used

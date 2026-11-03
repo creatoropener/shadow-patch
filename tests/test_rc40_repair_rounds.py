@@ -76,11 +76,11 @@ class FeedbackTextTests(unittest.TestCase):
     def test_rounds_setting(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PATCHPROOF_REPAIR_ROUNDS", None)
-            self.assertEqual(proof.repair_rounds_from_env(), 3)
-        for value, expected in (("0", 0), ("5", 5)):
+            self.assertEqual(proof.repair_rounds_from_env(), 5)
+        for value, expected in (("0", 0), ("8", 8)):
             with patch.dict(os.environ, {"PATCHPROOF_REPAIR_ROUNDS": value}):
                 self.assertEqual(proof.repair_rounds_from_env(), expected)
-        for bad in ("6", "-1", "many"):
+        for bad in ("9", "-1", "many"):
             with patch.dict(os.environ, {"PATCHPROOF_REPAIR_ROUNDS": bad}), self.assertRaises(Exception):
                 proof.repair_rounds_from_env()
 
@@ -158,7 +158,7 @@ class RepairRoundPipelineTests(unittest.TestCase):
         self.assertEqual((root / "src/label.ts").read_text(), "export const label = (n: number): string => (n === 1 ? 'one' : 'many');\n")
         first = record["candidates"][0]
         self.assertEqual(first["repair_stopped"], "the same patch was proposed again")
-        self.assertEqual(len(calls), 6)  # two proposals for each of three candidates, not four
+        self.assertEqual(len(calls), 9)  # original, one repeat that is called out, a second repeat that stops
         self.assertEqual(outcomes.classify_outcome(record)["bucket"], "repair_failed")
 
     def test_the_round_limit_is_respected_and_zero_restores_rc39(self):
@@ -189,11 +189,11 @@ class RepairRoundPipelineTests(unittest.TestCase):
 class ActionWiringTests(unittest.TestCase):
     def test_input_is_declared_and_passed_to_the_engine(self):
         text = (ROOT / "action.yml").read_text(encoding="utf-8")
-        self.assertRegex(text, r"(?m)^  repair-rounds:\n(?:    .*\n)*?    default: '3'")
+        self.assertRegex(text, r"(?m)^  repair-rounds:\n(?:    .*\n)*?    default: '5'")
         self.assertIn("PATCHPROOF_REPAIR_ROUNDS: ${{ inputs.repair-rounds }}", text)
         workflow = (ROOT / ".github/workflows/shadow-fix.yml").read_text(encoding="utf-8")
-        self.assertIn("PATCHPROOF_REPAIR_ROUNDS: ${{ vars.PATCHPROOF_REPAIR_ROUNDS || '3' }}", workflow)
-        self.assertTrue(re.search(r'APP_VERSION = "0\.6\.0-rc\.40"', (ROOT / "proof.py").read_text()))
+        self.assertIn("PATCHPROOF_REPAIR_ROUNDS: ${{ vars.PATCHPROOF_REPAIR_ROUNDS || '5' }}", workflow)
+        self.assertTrue(re.search(r'APP_VERSION = "0\.6\.0-rc\.\d+"', (ROOT / "proof.py").read_text()))
 
 
 if __name__ == "__main__":

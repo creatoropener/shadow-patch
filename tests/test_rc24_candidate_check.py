@@ -150,6 +150,7 @@ class CandidateSourceCheckFlowTests(unittest.TestCase):
         environment = {
             "NEBIUS_API_KEY": "key-secret", "NEBIUS_PROJECT_ID": "project-secret",
             "NEBIUS_MODEL": "model", "CONTREE_IMAGE": "image-uuid",
+            "PATCHPROOF_REPAIR_ROUNDS": "0",  # this test documents the rc.24 single correction
         }
         record = {"schema_version": proof.SCHEMA_VERSION, "app_version": proof.APP_VERSION,
                   "verdict": "rejected", "candidates": []}
