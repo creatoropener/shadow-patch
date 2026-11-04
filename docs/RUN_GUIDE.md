@@ -185,7 +185,7 @@ Open `proof.json` and read `outcome.bucket`, `outcome.stage` and `error` before 
 | `spec_invalid` | The values are not quoted in the issue. `rejected_examples` lists each refusal. | Quote the values; one contiguous block per example. |
 | `budget_exhausted` | Usually bounded mode. | `agent-mode: legacy`. |
 | `repair_invalid`, errors such as "still fails the existing baseline after N corrections" | rc.41: the candidate used its whole proposal budget and still broke the repository's own tests or type check. `baseline_attempts[].output` shows each failure. | Check that the existing tests cover the code the issue touches (a test file for that function lets the solver see what it broke), and that the model is the one you intended. |
-| `repair_failed`, candidates show `repair_rounds` | rc.40: each candidate was given the regression's failure output and still did not fix it, or proposed the same patch again (`repair_stopped`). | Check that the model is the one you intended (`proof.json` `model`), that the issue states the expected values, and read the last round's `output`. |
+| `repair_failed`, candidates show `repair_rounds` | rc.40: each candidate was given the regression's failure output and still did not fix it, or proposed the same patch three times in a row (`repair_stopped`, `repeated_patches`; rc.42 asks again at a higher temperature before stopping). | Check that the model is the one you intended (`proof.json` `model`), that the issue states the expected values, and read the last round's `output`. |
 | `verified`, PR on `shadow-fix/issue-<n>` | Done. | Review the diff, the frozen test and the report. Merge by hand. |
 
 A green workflow is not evidence of a new PR. Check `pull-request-url` and the linked existing PR. Change

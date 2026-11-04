@@ -38,7 +38,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.41"
+APP_VERSION = "0.6.0-rc.42"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1541,6 +1541,47 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
     return False, True, f"test infrastructure exited with code {exit_code}"
 
 
+def nearest_source_lines(content: str, old: str, radius: int = 2, limit: int = 1800) -> str:
+    """rc.42: the lines of the file closest to an `old` snippet that matched nothing, numbered.
+
+    CareerPilot #8 (rc.41): two candidates died on "matched 0 locations" for a long regular
+    expression line, and the model was never shown the text it had failed to copy.
+    """
+    rows = content.splitlines()
+    wanted = [line.strip() for line in old.splitlines() if line.strip()]
+    if not rows or not wanted:
+        return ""
+    probe = max(wanted[:3], key=len)[:600]
+    best_line, best_score = 0, 0.0
+    for number, row in enumerate(rows[:8000]):
+        text = row.strip()
+        if not text:
+            continue
+        matcher = difflib.SequenceMatcher(None, probe, text[:600], autojunk=False)
+        if matcher.real_quick_ratio() <= best_score or matcher.quick_ratio() <= best_score:
+            continue
+        score = matcher.ratio()
+        if score > best_score:
+            best_line, best_score = number, score
+    if best_score < 0.5:
+        return ""
+    low, high = max(0, best_line - radius), min(len(rows), best_line + radius + 1)
+    body = "\n".join(f"{n + 1}: {rows[n][:400]}" for n in range(low, high))
+    return body[:limit]
+
+
+def edit_mismatch_help(content: str, old: str, occurrences: int) -> str:
+    """Words that tell the solver how to fix an edit whose `old` snippet did not match exactly once."""
+    if occurrences > 1:
+        return (" Include more of the surrounding lines in `old` so that it identifies one place only.")
+    nearby = nearest_source_lines(content, old)
+    help_text = (" `old` must be copied character for character from the current file, including "
+                 "spaces; in your JSON answer each backslash is written as two backslashes.")
+    if nearby:
+        help_text += "\nTHE CLOSEST TEXT IN THE FILE (line number: text):\n" + nearby
+    return help_text
+
+
 def validate_candidate(
     payload: dict[str, Any],
     allowed_source_paths: set[str],
@@ -1550,7 +1591,9 @@ def validate_candidate(
     raw_edits = payload.get("edits")
     summary = payload.get("summary")
     if not isinstance(raw_edits, list) or not raw_edits:
-        raise PatchProofError("Candidate returned no source edits.")
+        raise PatchProofError(
+            "Candidate returned no source edits. Return the JSON object with a non-empty `edits` list; "
+            "if an earlier edit did not match, copy its `old` text from the closest-text lines you were shown.")
     if not isinstance(summary, str) or not summary.strip():
         summary = "Candidate repair"
 
@@ -1584,7 +1627,7 @@ def validate_candidate(
         if occurrences != 1:
             raise PatchProofError(
                 f"Edit for {normalized} matched {occurrences} locations; "
-                "exactly one is required."
+                "exactly one is required." + edit_mismatch_help(content, old, occurrences)
             )
         # Models sometimes include an unchanged neighbouring function alongside
         # the real correction. Validate its path and match, then omit that edit.
@@ -1702,6 +1745,25 @@ def candidate_retry_feedback(message: str) -> str:
 
 
 DEFAULT_REPAIR_ROUNDS = 5
+DUPLICATE_STOP = 3  # rc.42: the 3rd identical patch in a row ends the candidate (rc.41 stopped at the 2nd)
+
+
+def escalated_temperature(base: float, repeats: int) -> float:
+    """rc.42: a model that answers feedback with the patch it already sent is asked again with more spread."""
+    return round(min(0.9, base + 0.25 * repeats), 2) if repeats else base
+
+
+def repeated_patch_notice(repeats: int) -> str:
+    """Feedback prefix after an identical re-proposal; it names the problem instead of only stopping the run."""
+    notice = (
+        "YOUR LAST PROPOSAL WAS IDENTICAL to one you already made, so its result is unchanged and the "
+        "failing tests below still fail. Do not resend it. Take each failing test in turn, trace how the "
+        "current code handles that exact input, and add the missing handling for every failing test, "
+        "including the lines that read a changed pattern's groups. A change that fixes only one of the "
+        "failing tests is not enough.\n")
+    if repeats >= 2:
+        notice += "This is the second identical answer in a row: use a clearly different approach.\n"
+    return notice
 _PER_ROUND_KEYS = (
     "summary", "changed_files", "changed_lines", "diff", "eligibility", "exit_code", "tests_passed",
     "baseline_tests_passed", "baseline_attempts", "source_check_attempts", "generation_attempts",
@@ -1731,32 +1793,50 @@ CONSUMER_HINT = (
 )
 
 
-def failure_excerpt(output: str, limit: int = 3500) -> str:
+_TAP_METADATA = re.compile(r"\s*(?:duration_ms|failureType|operator|code):")
+_HIDDEN_TEST_FRAME = re.compile(r"test_patchproof_")
+
+
+def failure_excerpt(output: str, limit: int = 4500) -> str:
     """The failing subtests of a TAP log, without passing tests or Node-internal stack frames.
 
     The last 4000 characters of a long TAP log are mostly passing tests, so a failure near the top
-    never reached a solver (CareerPilot #8, rc.40). Falls back to the tail when no TAP failure shows.
+    never reached a solver (CareerPilot #8, rc.40). rc.42 also drops TAP metadata and the frames that
+    only point into the verifier's test file, so that many failing tests fit, and names every failing
+    test first. Falls back to the tail when no TAP failure shows.
     """
     lines = [line for line in output.splitlines() if not line.startswith("PATCHPROOF_")]
     blocks: list[str] = []
+    names: list[str] = []
     current: list[str] | None = None
+
+    def close() -> None:
+        if current is not None:
+            text = re.sub(r"\n\s*stack: \|-(?=\n\s*\.\.\.|\Z)", "", "\n".join(current))
+            blocks.append(text[:1200])
+
     for line in lines:
         if re.match(r"not ok \d+", line):
-            if current is not None:
-                blocks.append("\n".join(current)[:1200])
+            close()
             current = [line]
+            label = re.match(r"not ok \d+\s*-?\s*(.*)", line)
+            names.append((label.group(1) if label else line).strip()[:160])
         elif current is not None:
             if re.match(r"(?:ok \d+|# Subtest|1\.\.\d+|# (?:tests|suites|pass|fail|cancelled|skipped|todo|duration_ms))", line):
-                blocks.append("\n".join(current)[:1200])
+                close()
                 current = None
-            elif not _TRACE_NOISE.search(line):
+            elif not (_TRACE_NOISE.search(line) or _TAP_METADATA.match(line) or _HIDDEN_TEST_FRAME.search(line)):
                 current.append(line)
-    if current is not None:
-        blocks.append("\n".join(current)[:1200])
+    close()
     if not blocks:
         return "\n".join(line for line in lines if line.strip())[-limit:]
-    summary = [line for line in lines if re.match(r"# (?:tests|pass|fail)\b", line)]
-    return "\n".join(blocks + summary)[:limit]
+    summary = "\n".join(line for line in lines if re.match(r"# (?:tests|pass|fail)\b", line))
+    header = ""
+    if len(names) > 1:
+        header = f"FAILING TESTS ({len(names)}):\n" + "\n".join(f"- {name}" for name in names)[:1500] + "\n\n"
+    body = "\n".join(blocks)
+    room = max(0, limit - len(header) - len(summary) - 1)
+    return header + body[:room] + ("\n" if summary else "") + summary
 
 
 def source_excerpts(output: str, changes: list[dict[str, str]] | None, limit: int = 3, radius: int = 4) -> str:
@@ -2968,6 +3048,7 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                     if repair_round:
                         _begin_repair_round(candidate_record, repair_history, repair_round)
                     baseline_feedback = regression_feedback
+                    plain_feedback = regression_feedback
                     candidate_record["baseline_attempts"] = []
                     # A candidate gets one correction using ONLY the ordinary
                     # baseline output; from rc.40 a later round also carries the frozen regression's failure output.
@@ -2989,7 +3070,8 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                                 issue=issue, context=solver_context,
                                 allowed_source_paths=allowed_paths, api_key=api_key,
                                 model=model, root=root, adapter=adapter,
-                                strategy=strategy, temperature=temperature,
+                                strategy=strategy,
+                                temperature=escalated_temperature(temperature, duplicate_streak),
                             )
                         candidate_record["summary"] = summary
                         candidate_record["changed_files"] = [item["path"] for item in changes]
@@ -3001,18 +3083,20 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                             if repair_rounds_limit and proposal_identity in seen_patches:
                                 # (0 keeps the rc.39 flow exactly, so a repeat is evaluated like any other.)
                                 # The model answered feedback with the patch it already tried. Say so once
-                                # without spending a sandbox run; the second repeat ends the candidate.
+                                # without spending a sandbox run; the third identical patch in a row ends the candidate.
                                 duplicate_streak += 1
-                                if duplicate_streak >= 2 or baseline_attempt == baseline_limit:
+                                if duplicate_streak >= DUPLICATE_STOP or baseline_attempt == baseline_limit:
                                     candidate_record["repair_stopped"] = "the same patch was proposed again"
+                                    candidate_record["repeated_patches"] = duplicate_streak
                                     raise PatchProofError(
                                         "Candidate proposed the same patch again after feedback; stopping "
                                         "instead of spending more inference.")
+                                if duplicate_streak == 1:
+                                    plain_feedback = baseline_feedback  # the notice is never stacked on itself
                                 baseline_feedback = candidate_retry_feedback(
-                                    "YOUR LAST PROPOSAL WAS IDENTICAL to one you already made, so its result "
-                                    "is unchanged. Change the code the failure names, not only the pattern.\n"
-                                    + baseline_feedback)
-                                print(f"Candidate {index} repeated an earlier patch; asking again.", file=sys.stderr)
+                                    repeated_patch_notice(duplicate_streak) + plain_feedback)
+                                print(f"Candidate {index} repeated an earlier patch; asking again at temperature "
+                                      f"{escalated_temperature(temperature, duplicate_streak)}.", file=sys.stderr)
                                 continue
                             seen_patches.add(proposal_identity)
                             duplicate_streak = 0

@@ -158,7 +158,7 @@ class RepairRoundPipelineTests(unittest.TestCase):
         self.assertEqual((root / "src/label.ts").read_text(), "export const label = (n: number): string => (n === 1 ? 'one' : 'many');\n")
         first = record["candidates"][0]
         self.assertEqual(first["repair_stopped"], "the same patch was proposed again")
-        self.assertEqual(len(calls), 9)  # original, one repeat that is called out, a second repeat that stops
+        self.assertEqual(len(calls), 12)  # per candidate: original, two repeats that are called out, a third that stops
         self.assertEqual(outcomes.classify_outcome(record)["bucket"], "repair_failed")
 
     def test_the_round_limit_is_respected_and_zero_restores_rc39(self):

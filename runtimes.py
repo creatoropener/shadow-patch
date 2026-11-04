@@ -1754,7 +1754,11 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "written this way: import test from 'node:test'; "
                 "import assert from 'node:assert/strict'; "
                 "and every case is declared as test('descriptive name', async () => { ... }); "
-                "never call test() or assert without importing them. Import application "
+                "never call test() or assert without importing them. When the issue lists several "
+                "inputs, formats or examples, declare a separate test() for each one (a for loop that "
+                "calls test() once per input is fine) and never loop over inputs with assertions inside "
+                "one test(): the run would stop at the first failing input and report only that one. "
+                "Import application "
                 "modules the normal way, exactly as the application itself does; a relative import never "
                 "ends in .ts or .tsx (write '../lib/x.js' or no extension). " +
                 _alias_guidance(root) +

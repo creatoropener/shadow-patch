@@ -103,8 +103,12 @@ failure output of that run, never the test source, is sent with the previous dif
 `PATCHPROOF_REPAIR_ROUNDS` more proposals (default 5 from rc.41; `0` restores the earlier behavior),
 while no candidate has passed. From rc.41 that allowance is one budget shared with failures of the
 existing tests and the type check, the feedback shows the failing tests rather than the log's tail
-plus the lines of the candidate's own patched source that a stack trace names, and a patch proposed
-twice in a row ends the candidate. This is a deliberate
+plus the lines of the candidate's own patched source that a stack trace names. From rc.42 the
+verifier is told to write one test per input the issue lists (so every failing input is reported, not
+only the first), the feedback names every failing test, a patch proposed again is answered with a
+firmer notice and a higher temperature (two repeats are called out, the third identical patch ends
+the candidate), and an edit whose `old` text matches nothing is sent back with the closest lines of
+the real file. This is a deliberate
 trade: a solver that sees an expected value can fit it. The acceptance gates are unchanged (frozen
 test hash, existing tests, type check, scope and interference policy, clean-room replay, human
 merge), the proof records every round, and the PR report names the candidates that used
