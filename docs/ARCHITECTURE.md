@@ -108,7 +108,13 @@ verifier is told to write one test per input the issue lists (so every failing i
 only the first), the feedback names every failing test, a patch proposed again is answered with a
 firmer notice and a higher temperature (two repeats are called out, the third identical patch ends
 the candidate), and an edit whose `old` text matches nothing is sent back with the closest lines of
-the real file. This is a deliberate
+the real file. From rc.43 the verifier's test is linted for date literals that JavaScript cannot parse
+(`new Date('2026-10-24T10:00:00:00Z')` makes every expectation computed from it impossible, so no correct
+repair could pass; the test goes back to the verifier), a patched file that no longer parses is sent back
+to the solver as a correction instead of ending the candidate, an edit whose `old` text matches nothing is
+retried through the usual JSON-escaping slips (a single backslash before b, f or v, doubled backslashes,
+drifting indentation) when exactly one place matches, and a candidate gets a third try at an invalid
+proposal. This is a deliberate
 trade: a solver that sees an expected value can fit it. The acceptance gates are unchanged (frozen
 test hash, existing tests, type check, scope and interference policy, clean-room replay, human
 merge), the proof records every round, and the PR report names the candidates that used

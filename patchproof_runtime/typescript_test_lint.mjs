@@ -128,6 +128,26 @@ if (!targetArg) {
             }
           }
         });
+        // rc.43: a date written as an ISO-looking string that JavaScript cannot parse (CareerPilot #8,
+        // rc.42: new Date('2026-10-24T10:00:00:00Z')) makes every expectation computed from it fail,
+        // so no correct repair could pass the test. Only direct string arguments of `new Date(...)`
+        // and `Date.parse(...)` are checked, and only strings that start like an ISO date.
+        const dateDiagnostics = [];
+        visit(sourceFile, node => {
+          const direct = (ts.isNewExpression(node) && node.expression.getText(sourceFile) === 'Date')
+            || (ts.isCallExpression(node) && node.expression.getText(sourceFile) === 'Date.parse');
+          const argument = direct ? node.arguments?.[0] : undefined;
+          if (!argument || !ts.isStringLiteralLike(argument)) return;
+          if (!/^\s*[+-]?\d{4}-\d{2}-\d{2}/.test(argument.text)) return;
+          if (!Number.isNaN(Date.parse(argument.text))) return;
+          const position = sourceFile.getLineAndCharacterOfPosition(argument.getStart(sourceFile));
+          dateDiagnostics.push(
+            `${targetArg}:${position.line + 1}:${position.character + 1}: the date literal `
+            + `'${argument.text.slice(0, 60)}' is not a valid date (it evaluates to Invalid Date), so no `
+            + `correct repair could satisfy an expectation computed from it. Write it in full ISO form, `
+            + `for example 2026-10-24T10:00:00.000Z, and check every digit group.`,
+          );
+        });
         visit(sourceFile, node => {
           if (!ts.isCallExpression(node) || !['test', 'it'].includes(callName(node))) return;
           const callback = node.arguments.find(arg => ts.isArrowFunction(arg) || ts.isFunctionExpression(arg));
@@ -257,6 +277,14 @@ if (!targetArg) {
           process.exitCode = 2;
         }
 
+        let dateFailed = false;
+        if (dateDiagnostics.length > 0) {
+          dateFailed = true;
+          for (const line of dateDiagnostics.slice(0, 12)) process.stderr.write(`${line}\n`);
+          process.stderr.write('PATCHPROOF_TYPESCRIPT_DATE=failed\n');
+          process.exitCode = 2;
+        }
+
         const unused = [];
         for (const [name, nodes] of declarations) {
           if ((references.get(name) ?? 0) === 0) {
@@ -278,7 +306,7 @@ if (!targetArg) {
           );
         } else if (contractErrors.length) {
           fail(contractErrors.join('\n'), 'PATCHPROOF_TYPESCRIPT_CONTRACT=failed');
-        } else if (!literalFailed) {
+        } else if (!literalFailed && !dateFailed) {
           process.stdout.write('PATCHPROOF_TYPESCRIPT_LINT=passed\n');
         }
       }

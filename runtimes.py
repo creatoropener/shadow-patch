@@ -1758,6 +1758,8 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "inputs, formats or examples, declare a separate test() for each one (a for loop that "
                 "calls test() once per input is fine) and never loop over inputs with assertions inside "
                 "one test(): the run would stop at the first failing input and report only that one. "
+                "Write every date or time in full ISO form such as '2026-10-24T10:00:00.000Z' and check "
+                "each digit group: a malformed date literal makes the whole test impossible to pass. "
                 "Import application "
                 "modules the normal way, exactly as the application itself does; a relative import never "
                 "ends in .ts or .tsx (write '../lib/x.js' or no extension). " +

@@ -8,7 +8,7 @@ candidate repairs in isolated **Nebius Sandbox** branches, replays the winner fr
 a clean image, and only then opens a PR. A human always decides whether to merge.
 Nothing is ever auto-merged.
 
-**Engine: v0.6.0-rc.42 · Track: Coding and Agentic Engineering · Models: NVIDIA Nemotron on Nebius Token Factory · License: [MIT](LICENSE)**
+**Engine: v0.6.0-rc.43 · Track: Coding and Agentic Engineering · Models: NVIDIA Nemotron on Nebius Token Factory · License: [MIT](LICENSE)**
 
 [Run it step by step](#run-shadow-patch-step-by-step) ·
 [How Nebius and NVIDIA are used](#how-nvidia-nemotron-and-nebius-are-used) ·
@@ -21,7 +21,7 @@ Nothing is ever auto-merged.
 1. A maintainer adds the `shadow-fix` label to an issue.
 2. Shadow Patch checks the sandbox image, the runtime and the existing test baseline **before** any model call.
 3. A verifier model drafts a regression test from the issue and shows it fails with a real assertion on the unfixed code.
-4. Three solver strategies propose small, exact-match source edits. The new regression's source is hidden from them. If a proposal fails the existing tests, the type check or the new regression, that candidate gets the failure output (and the source lines it names, never the test's source) and up to five more attempts (rc.40 to rc.42; `repair-rounds: 0` turns this off).
+4. Three solver strategies propose small, exact-match source edits. The new regression's source is hidden from them. If a proposal fails the existing tests, the type check or the new regression, that candidate gets the failure output (and the source lines it names, never the test's source) and up to five more attempts (rc.40 to rc.43; `repair-rounds: 0` turns this off).
 5. Each candidate runs in its own sandbox branch and must pass the existing tests and the frozen regression.
 6. The winner (fewest files, then fewest lines, then fastest) is replayed from a clean sandbox image.
 7. The workflow opens or updates one PR per issue, with a verification report. A human reviews and merges.
@@ -121,7 +121,7 @@ The key part is:
 - uses: actions/checkout@v4
   with:
     fetch-depth: 0
-- uses: creatoropener/shadow-patch@v0.6.0-rc.42   # pin an exact tag, never a branch
+- uses: creatoropener/shadow-patch@v0.6.0-rc.43   # pin an exact tag, never a branch
   with:
     nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
     nebius-project-id: ${{ secrets.NEBIUS_PROJECT_ID }}

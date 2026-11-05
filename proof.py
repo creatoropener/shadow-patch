@@ -38,7 +38,7 @@ from outcomes import (
 )
 
 SCHEMA_VERSION = "0.6"
-APP_VERSION = "0.6.0-rc.42"
+APP_VERSION = "0.6.0-rc.43"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -1492,6 +1492,17 @@ def reproduction_feedback(content: str, classification: str, output: str, runtim
             "assertion strict, and return the complete corrected file; resubmitting identical "
             "content fails again."
         )
+    if "PATCHPROOF_TYPESCRIPT_DATE=failed" in output:
+        feedback += (
+            "\nENGINE DIAGNOSIS: A date in the generated test is written as a string that JavaScript "
+            "cannot parse, so it evaluates to Invalid Date and every expectation computed from it "
+            "fails or throws, however correct the repair is. The diagnostic lines above name the "
+            "literal. Rewrite each such date in full ISO form, for example 2026-10-24T10:00:00.000Z "
+            "(four-digit year, two-digit month, day, hour, minute and second, a dot and three digits, "
+            "then Z), and compare it character by character with the date the issue states. Keep "
+            "every assertion strict, and return the complete corrected file; resubmitting identical "
+            "content fails again."
+        )
     if "PATCHPROOF_TYPESCRIPT_LINT=unavailable" in output:
         feedback += (
             "\nENGINE DIAGNOSIS: The TypeScript linter could not run. This is a tooling/setup "
@@ -1524,6 +1535,8 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
         return False, True, "generated TypeScript regression failed stream contract"
     if "PATCHPROOF_TYPESCRIPT_LITERAL=failed" in output:
         return False, True, "generated TypeScript regression failed string-escape lint"
+    if "PATCHPROOF_TYPESCRIPT_DATE=failed" in output:
+        return False, True, "generated TypeScript regression has an invalid date literal"
     if "PATCHPROOF_TYPESCRIPT_LINT=unavailable" in output:
         return False, True, "generated TypeScript lint tooling unavailable"
     if adapter.is_regression_failure(exit_code, output):
@@ -1539,6 +1552,57 @@ def classify_reproduction(adapter: RuntimeAdapter, exit_code: int, output: str,
     if exit_code == 1:
         return False, True, "test failed without accepted assertion evidence"
     return False, True, f"test infrastructure exited with code {exit_code}"
+
+
+class EditList(list):
+    """The validated edits (a plain list for every caller); `notes` says which tolerance matched each one (rc.43)."""
+    notes: list[str]
+
+
+_CONTROL_ESCAPES = {"\x08": "\\b", "\x0c": "\\f", "\x0b": "\\v"}
+
+
+def tolerant_edit(content: str, old: str, new: str) -> tuple[str, str, str] | None:
+    """Find the one place a mismatched `old` snippet most plausibly meant, or None.
+
+    Only used when `old` matches nothing exactly. CareerPilot #8 (rc.41 and rc.42): edits to long regular
+    expression lines kept matching 0 locations. In a JSON answer a single backslash before b, f or v is a valid
+    escape for a control character, and a doubled backslash decoded once too often leaves two where the file
+    has one; indentation and trailing spaces drift as well. Each variant must match exactly once, and the same
+    change is applied to `new`; the final patch still has to parse, type-check and pass every test.
+    """
+    def restore_controls(text: str) -> str:
+        for char, escape in _CONTROL_ESCAPES.items():
+            text = text.replace(char, escape)
+        return text
+
+    def collapse(text: str) -> str:
+        return text.replace("\\\\", "\\")
+
+    variants = (
+        ("control characters in `old` read as backslash escapes", restore_controls),
+        ("doubled backslashes in `old` read as single ones", collapse),
+        ("both of the above", lambda text: collapse(restore_controls(text))),
+    )
+    for label, transform in variants:
+        fixed = transform(old)
+        if fixed != old and fixed and content.count(fixed) == 1:
+            return fixed, transform(new), label
+    wanted = [line.strip() for line in old.strip("\r\n").splitlines()]
+    if wanted and all(wanted[:1]) and any(wanted):
+        rows = content.splitlines(keepends=True)
+        stripped = [row.strip() for row in rows]
+        size = len(wanted)
+        hits = [start for start in range(len(rows) - size + 1) if stripped[start:start + size] == wanted]
+        if len(hits) == 1:
+            actual = "".join(rows[hits[0]:hits[0] + size])
+            if not old.endswith(("\n", "\r")):
+                actual = actual.rstrip("\r\n")
+            if old[:1] not in (" ", "\t"):
+                actual = actual.lstrip(" \t")  # the file's own indentation stays in front of the replacement
+            if actual and actual != old and content.count(actual) == 1:
+                return actual, new, "whitespace and indentation differences in `old` ignored"
+    return None
 
 
 def nearest_source_lines(content: str, old: str, radius: int = 2, limit: int = 1800) -> str:
@@ -1576,7 +1640,9 @@ def edit_mismatch_help(content: str, old: str, occurrences: int) -> str:
         return (" Include more of the surrounding lines in `old` so that it identifies one place only.")
     nearby = nearest_source_lines(content, old)
     help_text = (" `old` must be copied character for character from the current file, including "
-                 "spaces; in your JSON answer each backslash is written as two backslashes.")
+                 "spaces; in your JSON answer each backslash is written as two backslashes (a single "
+                 "backslash before b, f or n is read as a control character).")
+    help_text += "\nYOUR `old` BEGAN (first 300 characters, JSON-escaped): " + json.dumps(old[:300])
     if nearby:
         help_text += "\nTHE CLOSEST TEXT IN THE FILE (line number: text):\n" + nearby
     return help_text
@@ -1598,7 +1664,8 @@ def validate_candidate(
         summary = "Candidate repair"
 
     updated: dict[str, str] = {}
-    for item in raw_edits:
+    notes: list[str] = []
+    for item_number, item in enumerate(raw_edits, start=1):
         if not isinstance(item, dict):
             raise PatchProofError("Candidate edit must be a JSON object.")
         path_value = item.get("path")
@@ -1624,6 +1691,12 @@ def validate_candidate(
         if content is None:
             content = (root / normalized).read_text(encoding="utf-8")
         occurrences = content.count(old)
+        if occurrences == 0:
+            tolerated = tolerant_edit(content, old, new)
+            if tolerated is not None:
+                old, new, label = tolerated
+                notes.append(f"edit {item_number} for {normalized} matched after treating: {label}")
+                occurrences = 1
         if occurrences != 1:
             raise PatchProofError(
                 f"Edit for {normalized} matched {occurrences} locations; "
@@ -1635,7 +1708,8 @@ def validate_candidate(
             continue
         updated[normalized] = content.replace(old, new, 1)
 
-    changes: list[dict[str, str]] = []
+    changes: list[dict[str, str]] = EditList()
+    changes.notes = notes
     for path, content in sorted(updated.items()):
         if content == (root / path).read_text(encoding="utf-8"):
             continue
@@ -1880,6 +1954,44 @@ def baseline_repair_feedback(output: str, patch: str, changes: list[dict[str, st
     )
 
 
+SYNTAX_ERROR_MARK = "candidate has parser diagnostics"
+
+
+def changed_region_excerpt(root: Path, changes: list[dict[str, str]], context: int = 4,
+                           max_lines: int = 40) -> str:
+    """Numbered lines of each patched file around the lines the patch changed (the candidate's own text)."""
+    parts: list[str] = []
+    for item in changes:
+        try:
+            before = (root / item["path"]).read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        after = item["content"].splitlines()
+        touched = [index for tag, _, _, j1, j2 in difflib.SequenceMatcher(None, before, after, autojunk=False)
+                   .get_opcodes() if tag != "equal" for index in range(j1, max(j2, j1 + 1))]
+        if not touched:
+            continue
+        low, high = max(0, min(touched) - context), min(len(after), max(touched) + context + 1)
+        if high - low > max_lines:
+            high = low + max_lines
+        body = "\n".join(f"{number + 1}: {after[number][:240]}" for number in range(low, high))
+        parts.append(f"{item['path']} as patched, lines {low + 1} to {high}:\n{body}")
+    return "\n".join(parts)
+
+
+def syntax_repair_feedback(message: str, patch: str, root: Path, changes: list[dict[str, str]]) -> str:
+    """Correction request after a patched file stopped parsing (rc.43)."""
+    return candidate_retry_feedback(
+        "The previous proposal left a file that no longer parses, so it was not run. " + message.strip()[:600]
+        + "\nThis usually means an edit removed or added a brace, parenthesis, bracket or quote. An `old` snippet "
+        "must include every closing brace it replaces and its `new` snippet must put each one back; an edit that "
+        "wraps existing code in a new block needs a closing brace of its own. Count the braces in the patched "
+        "lines below and return a corrected proposal against the ORIGINAL source.\n"
+        "YOUR PATCHED FILE AROUND THE CHANGE:\n" + changed_region_excerpt(root, changes) + "\n"
+        f"PREVIOUS PROPOSAL DIFF:\n{patch[:6000]}"
+    )
+
+
 def regression_repair_feedback(output: str, patch: str, round_number: int, limit: int,
                                changes: list[dict[str, str]] | None = None) -> str:
     """Correction request built from the frozen regression's failure output (rc.40).
@@ -1922,20 +2034,25 @@ def _begin_repair_round(candidate_record: dict[str, Any], history: list[dict[str
 def generate_candidate_with_retry(
     *, candidate_record: dict[str, Any], retry_feedback: str = "", **kwargs: Any,
 ) -> tuple[list[dict[str, str]], str]:
-    """Retry invalid proposals once with the actual validation error."""
+    """Retry invalid proposals with the actual validation error (once; twice from rc.43 unless repair rounds are 0)."""
     feedback = retry_feedback
-    for attempt in range(1, 3):
+    attempts = 3 if repair_rounds_from_env() else 2
+    for attempt in range(1, attempts + 1):
         candidate_record["generation_attempts"] = candidate_record.get("generation_attempts", 0) + 1
         try:
-            return generate_candidate(**kwargs, retry_feedback=feedback)
+            changes, summary = generate_candidate(**kwargs, retry_feedback=feedback)
+            for note in getattr(changes, "notes", []):
+                candidate_record.setdefault("edit_notes", []).append(note)
+                print(f"Candidate {candidate_record.get('candidate')}: {note}.", file=sys.stderr)
+            return changes, summary
         except InferenceError:
             raise
         except PatchProofError as error:
             diagnostic = candidate_retry_feedback(str(error))
             candidate_record.setdefault("generation_errors", []).append(diagnostic)
-            if attempt == 2:
+            if attempt == attempts:
                 raise PatchProofError(
-                    f"Candidate generation failed twice: {diagnostic}"
+                    f"Candidate generation failed {'twice' if attempts == 2 else 'three times'}: {diagnostic}"
                 ) from error
             feedback = candidate_retry_feedback(
                 f"VALIDATION ERROR: {diagnostic}\n"
@@ -1944,7 +2061,7 @@ def generate_candidate_with_retry(
             )
             print(
                 f"Candidate {candidate_record['candidate']} proposal rejected: "
-                f"{diagnostic}; retrying once with feedback.", file=sys.stderr,
+                f"{diagnostic}; retrying with feedback.", file=sys.stderr,
             )
     raise AssertionError("Unreachable candidate generation state")
 
@@ -3112,7 +3229,24 @@ def _execute(root: Path, issue: Issue, proof: dict[str, Any], repo_root: Path | 
                         # exposing hidden assertions in the solver's retry feedback.
                         # Every attempt starts from the same original baseline state.
                         candidate_record["stage"] = "scope-check"
-                        candidate_record["eligibility"] = candidate_policy_check(baseline_suite, root, changes, scope)
+                        try:
+                            candidate_record["eligibility"] = candidate_policy_check(baseline_suite, root, changes, scope)
+                        except PatchProofError as policy_error:
+                            # rc.43: a patched file that no longer parses (CareerPilot #8, rc.42: an edit that
+                            # wrapped code in a block and dropped its closing brace) used to end the candidate
+                            # with proposals still unspent. It is a correction request like any other failure.
+                            if (bounded or not repair_rounds_limit or baseline_attempt == baseline_limit
+                                    or SYNTAX_ERROR_MARK not in str(policy_error)):
+                                raise
+                            candidate_record.setdefault("syntax_errors", []).append(
+                                {"proposal": proposals_used, "message": str(policy_error)[:600]})
+                            baseline_feedback = syntax_repair_feedback(
+                                str(policy_error), unified_diff_text(root, changes), root, changes)
+                            if regression_feedback:
+                                baseline_feedback = candidate_retry_feedback(regression_feedback + "\n" + baseline_feedback)
+                            print(f"Candidate {index} left a file that does not parse; requesting a correction "
+                                  f"(proposal {proposals_used} of {max_proposals}).", file=sys.stderr)
+                            continue
                         branch = apply_contents(baseline_suite, changes)
                         baseline_result = branch.run(
                             shell=adapter.baseline_command, cwd="/workspace/repo",
