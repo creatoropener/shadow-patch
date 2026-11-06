@@ -34,6 +34,10 @@ inputs:
     description: 'Legacy mode, 0 to 8 (default 5): how many more proposals a candidate may make after one was rejected, shared by failures of the existing tests, the type check and the verifier regression. The failure output (and the source lines it names), never the test source, goes back to the solver. 0 restores the rc.39 behavior: one correction for the existing tests or type check, one regression evaluation.'
     required: false
     default: '5'
+  cumulative-repair:
+    description: "Legacy mode with repair rounds (default 'true'): a proposal that passes more of the verifier's tests than any before it is kept, and the next proposal edits that patched state instead of the original, so one failing behavior is fixed at a time. 'false' restores the rc.43 behavior, where every proposal starts from the original source."
+    required: false
+    default: 'true'
   agent-candidates:
     description: 'Bounded solver sessions, 1 to 3; all share the same run limits.'
     required: false
@@ -206,6 +210,7 @@ runs:
         PATCHPROOF_AGENT_MODE: ${{ inputs.agent-mode }}
         PATCHPROOF_VERIFIER: ${{ inputs.verifier-profile }}
         PATCHPROOF_REPAIR_ROUNDS: ${{ inputs.repair-rounds }}
+        PATCHPROOF_CUMULATIVE_REPAIR: ${{ inputs.cumulative-repair }}
         PATCHPROOF_AGENT_CANDIDATES: ${{ inputs.agent-candidates }}
         PATCHPROOF_MAX_AGENT_STEPS: ${{ inputs.max-agent-steps }}
         PATCHPROOF_MAX_MODEL_REQUESTS: ${{ inputs.max-model-requests }}

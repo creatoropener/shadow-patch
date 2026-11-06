@@ -58,7 +58,7 @@ Inputs: `nebius-api-key`, `nebius-project-id`, `nebius-model` (required);
 `nebius-max-tokens` (default `12000`); `sandbox-image`; one `image-<adapter>` per
 adapter (`python-pytest`, `node-package`, `node-typescript`, `static-web`,
 `web-playwright`, `java-junit`, `java-maven`, `java-gradle`, `go`, `rust`);
-`github-token` (default `github.token`); `agent-mode` (`legacy` or `bounded`); from rc.40 `repair-rounds` (`0` to `8`, default `5` from rc.41; legacy mode: extra proposals per candidate after one was rejected, shared by the existing tests, the type check and the frozen regression; `0` for the rc.39 behavior); and, from rc.30,
+`github-token` (default `github.token`); `agent-mode` (`legacy` or `bounded`); from rc.40 `repair-rounds` (`0` to `8`, default `5` from rc.41; legacy mode: extra proposals per candidate after one was rejected, shared by the existing tests, the type check and the frozen regression; `0` for the rc.39 behavior); from rc.44 `cumulative-repair` (default `true`; a proposal that passes more of the verifier's tests is kept and the next proposal edits that state; `false` for the rc.43 behavior); and, from rc.30,
 `verifier-profile` (`freeform`, the default, `spec` or `auto`; see [SPEC_PROFILE.md](SPEC_PROFILE.md)).
 
 Outputs: `verdict` (`verified`, `rejected`, `blocked`) and `pull-request-url`.
