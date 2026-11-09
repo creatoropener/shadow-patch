@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: creatoropener/shadow-patch@v0.6.0-rc.44   # publish the reviewed tag first
+      - uses: creatoropener/shadow-patch@v0.6.0-rc.45   # publish the reviewed tag first
         with:
           nebius-api-key: ${{ secrets.NEBIUS_API_KEY }}
           nebius-project-id: ${{ secrets.NEBIUS_PROJECT_ID }}
@@ -33,6 +33,10 @@ jobs:
           # node-typescript only: it has never completed a live run, so leave it off unless you
           # are testing it on purpose.
           agent-mode: legacy
+          # Optional (rc.45), legacy mode. edit-format: auto (default), blocks or json. solver-thinking:
+          # 'true' lets the solver reason before it answers (slower, more tokens, not yet tried live).
+          # edit-format: auto
+          # solver-thinking: 'false'
           # Optional, node-typescript only: the model writes a specification quoted from the issue
           # and the engine compiles the test. It stops with needs_specification when it cannot.
           # verifier-profile: freeform

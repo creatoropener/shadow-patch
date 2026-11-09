@@ -38,6 +38,14 @@ inputs:
     description: "Legacy mode with repair rounds (default 'true'): a proposal that passes more of the verifier's tests than any before it is kept, and the next proposal edits that patched state instead of the original, so one failing behavior is fixed at a time. 'false' restores the rc.43 behavior, where every proposal starts from the original source."
     required: false
     default: 'true'
+  edit-format:
+    description: "Legacy mode, how the solver writes its edits: 'auto' (default: plain-text edit blocks when the repository code the solver sees has many backslashes, such as regular expressions; JSON otherwise), 'blocks' (always plain text; nothing is escaped) or 'json'. rc.45."
+    required: false
+    default: 'auto'
+  solver-thinking:
+    description: "Legacy mode (default 'false'): 'true' lets the solver's Nemotron reason before it answers. The completion limit is raised to at least 24000 tokens and a request may take up to 15 minutes, so a run is slower and uses more tokens. The verifier is not affected. Not yet tried against Token Factory. rc.45."
+    required: false
+    default: 'false'
   agent-candidates:
     description: 'Bounded solver sessions, 1 to 3; all share the same run limits.'
     required: false
@@ -211,6 +219,8 @@ runs:
         PATCHPROOF_VERIFIER: ${{ inputs.verifier-profile }}
         PATCHPROOF_REPAIR_ROUNDS: ${{ inputs.repair-rounds }}
         PATCHPROOF_CUMULATIVE_REPAIR: ${{ inputs.cumulative-repair }}
+        PATCHPROOF_EDIT_FORMAT: ${{ inputs.edit-format }}
+        PATCHPROOF_SOLVER_THINKING: ${{ inputs.solver-thinking }}
         PATCHPROOF_AGENT_CANDIDATES: ${{ inputs.agent-candidates }}
         PATCHPROOF_MAX_AGENT_STEPS: ${{ inputs.max-agent-steps }}
         PATCHPROOF_MAX_MODEL_REQUESTS: ${{ inputs.max-model-requests }}
